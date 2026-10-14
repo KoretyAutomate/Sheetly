@@ -1,0 +1,29 @@
+{
+  "name": "sheetly",
+  "version": "1.0.0",
+  "description": "",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "test": "node test/run.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@univerjs/core": "^1.0.4",
+    "@univerjs/preset-sheets-core": "^1.0.4",
+    "@univerjs/presets": "^1.0.4",
+    "@univerjs/sheets": "^1.0.4",
+    "@univerjs/sheets-ui": "^1.0.4",
+    "@univerjs/ui": "^1.0.4",
+    "electron": "^44.7.2",
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1",
+    "vite": "^8.3.4"
+  },
+  "type": "module"
+}

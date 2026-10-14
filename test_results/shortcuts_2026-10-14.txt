@@ -1,0 +1,13 @@
+SHORTCUTS + XLSX 2026-10-14T22:35:27.144Z
+PASS Ctrl+Down jumps to end of data (A5)
+PASS Ctrl+Home -> A1
+PASS Ctrl+End -> last used cell (A5)
+PASS typing + Enter commits, moves down
+PASS Ctrl+Z undo
+PASS Ctrl+Y redo
+PASS F4 cycles to absolute ref ($A$1)
+PASS F2 edits in-cell (appends)
+PASS Ctrl+Shift+Right extends selection
+PASS Alt+= AutoSum
+PASS Ctrl+; inserts today
+PASS xlsx roundtrip keeps values+formulas
