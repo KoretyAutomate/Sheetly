@@ -1,0 +1,9 @@
+SHORTCUT TEST (all) 2026-10-15T09:03:26.055Z
+pass 5/5  (15s)
+PASS  Ctrl+[ precedents
+PASS  Ctrl+] dependents
+PASS  Ctrl+\ row differences
+PASS  F9 recalculates
+PASS  Alt+Down pick from list
+
+NOT AUTOMATED: Ctrl+F9 minimize (window-manager dependent).

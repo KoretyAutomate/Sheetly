@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webFrame } = require('electron')
 contextBridge.exposeInMainWorld('sheetly', {
   openDialog: () => ipcRenderer.invoke('open'),
   save: (data, saveAs) => ipcRenderer.invoke('save', data, saveAs),
@@ -6,5 +6,11 @@ contextBridge.exposeInMainWorld('sheetly', {
   directory: () => ipcRenderer.sendSync('directory'),
   osversion: () => ipcRenderer.sendSync('osversion'),
   webservice: (url) => ipcRenderer.invoke('webservice', url),
+  typeText: (text) => ipcRenderer.invoke('type-text', text),
+  sendKeys: (keys) => ipcRenderer.invoke('send-keys', keys),
+  print: (html, opts) => ipcRenderer.invoke('print', html, opts),
+  appAction: (name) => ipcRenderer.invoke('app-action', name),
+  // F7 Spelling uses Chromium's spellchecker (en-US).
+  spell: { isMisspelled: (w) => webFrame.isWordMisspelled(w), suggestions: (w) => webFrame.getWordSuggestions(w) },
   onMenu: (cb) => ipcRenderer.on('menu', (_e, cmd) => cb(cmd)),
 })

@@ -33,10 +33,15 @@ import { UniverSheetsThreadCommentPreset } from '@univerjs/preset-sheets-thread-
 import threadCommentEnUS from '@univerjs/preset-sheets-thread-comment/locales/en-US'
 import '@univerjs/preset-sheets-thread-comment/lib/index.css'
 import { IFunctionService } from '@univerjs/engine-formula'
-import { IShortcutService } from '@univerjs/ui'
+import { IContextMenuService, IShortcutService } from '@univerjs/ui'
+import { ICommandService } from '@univerjs/core'
 import { pivotFunctions } from './groupby.js'
 import { excelFunctions } from './excel-functions.js'
 import { installExcelShortcuts } from './excel-shortcuts.js'
+import { createDialogs } from './excel-dialogs.js'
+import { createCharts } from './charts.js'
+import { createExtras } from './excel-extras.js'
+import { setDialogShortcutService } from './ui/dialog.js'
 import { xlsxToSnapshot, snapshotToXlsx } from './xlsx.js'
 
 let univerAPI
@@ -61,13 +66,33 @@ const extra = [pivotFunctions(getApi), excelFunctions(getApi, { directory: () =>
   ],
 }))
 window.univerAPI = univerAPI
+window.__ICommandService = ICommandService
+window.__IShortcutService = IShortcutService
+window.__IContextMenuService = IContextMenuService
 const shortcutSvc = univerAPI._injector.get(IShortcutService)
 window.__shortcuts = () => shortcutSvc.getAllShortcuts().map((x) => ({ id: x.id, b: x.binding, w: x.win, l: x.linux, d: shortcutSvc.getShortcutDisplay(x) }))
 window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExecutors().keys()]
-installExcelShortcuts(univerAPI, shortcutSvc)
+const dialogs = createDialogs(univerAPI)
+dialogs.setShortcutService(shortcutSvc)
+setDialogShortcutService(shortcutSvc)
+const charts = createCharts(univerAPI, dialogs)
+const extras = createExtras(univerAPI)
+installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras)
+window.__sheetly = { dialogs, charts, extras }
+// Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which
+// Univer otherwise creates at 1,000 x 20.
+const commandService = univerAPI._injector.get(ICommandService)
+const fitExcelGrid = () => {
+  for (const s of univerAPI.getActiveWorkbook()?.getSheets() ?? []) {
+    if (s.getMaxRows() < EXCEL_ROWS) s.setRowCount(EXCEL_ROWS)
+    if (s.getMaxColumns() < EXCEL_COLS) s.setColumnCount(EXCEL_COLS)
+  }
+}
+commandService.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.command.insert-sheet' || cmd.id === 'sheet.command.copy-sheet') fitExcelGrid() })
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
-univerAPI.createWorkbook({ id: 'wb1', name: 'Book1', sheetOrder: ['sheet1'],
+// Workbooks carry their own locale for number/date formatting; Univer's default is zh-CN.
+univerAPI.createWorkbook({ id: 'wb1', name: 'Book1', locale: LocaleType.EN_US, sheetOrder: ['sheet1'],
   sheets: { sheet1: { id: 'sheet1', name: 'Sheet1', rowCount: EXCEL_ROWS, columnCount: EXCEL_COLS } } })
 
 async function openFile() {
@@ -75,7 +100,7 @@ async function openFile() {
   if (!f) return
   const snap = await xlsxToSnapshot(f.data)
   univerAPI.disposeUnit(univerAPI.getActiveWorkbook().getId())
-  univerAPI.createWorkbook({ ...snap, name: f.name })
+  univerAPI.createWorkbook({ ...snap, name: f.name, locale: LocaleType.EN_US })
   window.sheetly.setCurrent(f.path)
 }
 async function saveFile(saveAs) {

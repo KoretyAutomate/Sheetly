@@ -1,0 +1,44 @@
+diff --git a/node_modules/@univerjs/sheets-formula-ui/lib/cjs/index.js b/node_modules/@univerjs/sheets-formula-ui/lib/cjs/index.js
+index 4130f64..13c2b75 100644
+--- a/node_modules/@univerjs/sheets-formula-ui/lib/cjs/index.js
++++ b/node_modules/@univerjs/sheets-formula-ui/lib/cjs/index.js
+@@ -4043,7 +4043,7 @@ function MobileSearchFunctionFactory(props, ref) {
+ 		[
+ 			_univerjs_ui.KeyCode.ARROW_UP,
+ 			_univerjs_ui.KeyCode.ARROW_DOWN,
+-			_univerjs_ui.KeyCode.ENTER,
++			// Sheetly: Enter commits the cell as typed (Excel); Tab accepts the suggestion.
+ 			_univerjs_ui.KeyCode.ESC,
+ 			_univerjs_ui.KeyCode.TAB
+ 		].map((keyCode) => {
+@@ -6474,7 +6474,7 @@ function SearchFunctionFactory(props, ref) {
+ 		[
+ 			_univerjs_ui.KeyCode.ARROW_UP,
+ 			_univerjs_ui.KeyCode.ARROW_DOWN,
+-			_univerjs_ui.KeyCode.ENTER,
++			// Sheetly: Enter commits the cell as typed (Excel); Tab accepts the suggestion.
+ 			_univerjs_ui.KeyCode.ESC,
+ 			_univerjs_ui.KeyCode.TAB
+ 		].map((keyCode) => {
+diff --git a/node_modules/@univerjs/sheets-formula-ui/lib/es/index.js b/node_modules/@univerjs/sheets-formula-ui/lib/es/index.js
+index 7be238d..c956f6d 100644
+--- a/node_modules/@univerjs/sheets-formula-ui/lib/es/index.js
++++ b/node_modules/@univerjs/sheets-formula-ui/lib/es/index.js
+@@ -4042,7 +4042,7 @@ function MobileSearchFunctionFactory(props, ref) {
+ 		[
+ 			KeyCode.ARROW_UP,
+ 			KeyCode.ARROW_DOWN,
+-			KeyCode.ENTER,
++			// Sheetly: Enter commits the cell as typed (Excel); Tab accepts the suggestion.
+ 			KeyCode.ESC,
+ 			KeyCode.TAB
+ 		].map((keyCode) => {
+@@ -6473,7 +6473,7 @@ function SearchFunctionFactory(props, ref) {
+ 		[
+ 			KeyCode.ARROW_UP,
+ 			KeyCode.ARROW_DOWN,
+-			KeyCode.ENTER,
++			// Sheetly: Enter commits the cell as typed (Excel); Tab accepts the suggestion.
+ 			KeyCode.ESC,
+ 			KeyCode.TAB
+ 		].map((keyCode) => {

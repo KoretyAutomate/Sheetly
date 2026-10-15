@@ -30,6 +30,7 @@
     "@univerjs/sheets": "^1.0.4",
     "@univerjs/sheets-ui": "^1.0.4",
     "@univerjs/ui": "^1.0.4",
+    "chart.js": "^4.5.1",
     "electron": "^44.7.2",
     "exceljs": "^4.4.0"
   },
