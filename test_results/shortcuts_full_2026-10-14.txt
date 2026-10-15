@@ -1,0 +1,101 @@
+SHORTCUT TEST (all) 2026-10-15T01:17:03.295Z
+pass 64/97  (122s)
+PASS  Arrow Right
+PASS  Arrow Down
+PASS  Tab moves right
+PASS  Shift+Tab moves left
+PASS  Enter moves down
+PASS  Shift+Enter moves up
+PASS  Ctrl+Right to edge of data
+PASS  Ctrl+Down to edge of data
+PASS  Ctrl+Left
+PASS  Ctrl+Up
+PASS  Home -> start of row
+PASS  Ctrl+Home -> A1
+PASS  Ctrl+End -> last used cell
+PASS  PageDown moves down a screen
+PASS  PageUp moves up a screen
+FAIL  Alt+PageDown moves right a screen
+PASS  Ctrl+PageDown next sheet
+PASS  Ctrl+PageUp previous sheet
+FAIL  F5 opens Go To
+FAIL  Ctrl+G opens Go To
+FAIL  Ctrl+F opens Find
+FAIL  Ctrl+H opens Replace
+PASS  Ctrl+A selects current region
+PASS  Ctrl+Space selects column
+PASS  Shift+Space selects row
+PASS  Shift+Right extends
+PASS  Shift+Down extends
+PASS  Ctrl+Shift+Right to edge
+PASS  Ctrl+Shift+Down to edge
+FAIL  Ctrl+Shift+End to last cell
+FAIL  Ctrl+Shift+Home to start
+FAIL  Ctrl+Shift+* current region
+FAIL  Shift+Backspace collapses to active cell
+FAIL  F8 extend mode
+PASS  F2 edit cell
+PASS  Esc cancels edit
+PASS  Typing + Enter commits
+PASS  Typing + Tab commits, moves right
+PASS  Alt+Enter new line in cell
+PASS  Ctrl+Enter fills selection
+FAIL  Ctrl+Shift+Enter array formula
+PASS  Delete clears cell
+PASS  Backspace clears cell
+PASS  Ctrl+Z undo
+PASS  Ctrl+Y redo
+PASS  F4 repeats last action
+PASS  F4 toggles absolute ref while editing
+PASS  Ctrl+D fill down
+PASS  Ctrl+R fill right
+PASS  Ctrl+; inserts date
+PASS  Ctrl+Shift+; inserts time
+FAIL  Ctrl+' copies formula from above
+FAIL  Ctrl+Shift+" copies value from above
+PASS  Ctrl+C / Ctrl+V
+PASS  Ctrl+X / Ctrl+V
+FAIL  Ctrl+Alt+V paste special dialog
+FAIL  Ctrl+Shift+= inserts row
+FAIL  Ctrl+- deletes row
+FAIL  Ctrl+9 hides row
+PASS  Ctrl+0 hides column
+PASS  Ctrl+Shift+9 unhides rows
+FAIL  Ctrl+Shift+0 unhides columns
+PASS  Alt+= AutoSum
+FAIL  Shift+F2 insert comment
+FAIL  Ctrl+Shift+F3 create names
+FAIL  Ctrl+K hyperlink
+FAIL  F11 chart
+FAIL  Ctrl+T create table
+FAIL  Ctrl+Shift+L toggle filter (error: page.evaluate: TypeError: S(...).getFilter is not a function)
+FAIL  Shift+F11 new sheet
+FAIL  Ctrl+P print
+FAIL  F1 help
+PASS  Home in edit
+PASS  Ctrl+Left word jump in edit
+PASS  Ctrl+Backspace deletes word in edit
+FAIL  Ctrl+Delete deletes to word end in edit
+PASS  Ctrl+B bold
+PASS  Ctrl+I italic
+PASS  Ctrl+U underline
+FAIL  Ctrl+5 strikethrough
+PASS  Ctrl+Shift+~ General
+PASS  Ctrl+Shift+! number #,##0.00
+PASS  Ctrl+Shift+@ time
+PASS  Ctrl+Shift+# date
+PASS  Ctrl+Shift+$ currency
+PASS  Ctrl+Shift+% percent
+PASS  Ctrl+Shift+^ scientific
+FAIL  Ctrl+Shift+& outline border
+PASS  Ctrl+Shift+_ remove border
+FAIL  Ctrl+1 Format Cells
+PASS  Ctrl+Shift+> font size up
+PASS  Ctrl+Shift+< font size down
+PASS  Ctrl+O open (menu accelerator present; dialog not pressed in test)
+PASS  Ctrl+S save (menu accelerator present; dialog not pressed in test)
+PASS  F12 save as (menu accelerator present; dialog not pressed in test)
+FAIL  Ctrl+N new workbook (menu accelerator present; dialog not pressed in test)
+FAIL  Ctrl+W close workbook (menu accelerator present; dialog not pressed in test)
+
+NOT AUTOMATED (no observable state to assert): Ctrl+` show formulas, F9 recalc, Ctrl+Backspace scroll-to-active, Ctrl+E flash fill, Alt+H ribbon key tips, F7 spelling, Alt+Down dropdown.
