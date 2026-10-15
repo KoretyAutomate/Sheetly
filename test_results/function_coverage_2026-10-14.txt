@@ -1,0 +1,18 @@
+FUNCTION COVERAGE vs Excel list: 448/455
+Math: 81/82 implemented
+  MISSING: ISO.CEILING
+Statistical: 107/107 implemented
+Logical: 12/12 implemented
+Text: 43/44 implemented
+  MISSING: PHONETIC
+DateTime: 25/25 implemented
+Lookup: 34/35 implemented
+  MISSING: GETPIVOTDATA
+Financial: 54/55 implemented
+  MISSING: AMORDEGRC
+Information: 19/21 implemented
+  MISSING: INFO ISOMITTED
+Engineering: 54/54 implemented
+Database: 12/12 implemented
+Array/Modern: 7/8 implemented
+  MISSING: PIVOTBY

@@ -32,7 +32,7 @@ export async function xlsxToSnapshot(buf) {
       mergeData.push({ startRow: m.top - 1, endRow: m.bottom - 1, startColumn: m.left - 1, endColumn: m.right - 1 })
     })
     sheets[id] = { id, name: ws.name, cellData, columnData, mergeData,
-      rowCount: Math.max(1000, ws.rowCount + 100), columnCount: Math.max(26, ws.columnCount + 10) }
+      rowCount: 1048576, columnCount: 16384 }
     order.push(id)
   })
   return { id: 'wb', sheetOrder: order, sheets }
