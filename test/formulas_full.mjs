@@ -11,6 +11,7 @@ const res = await win.evaluate(async (cases) => {
   put(9, [[1], [2], [3], [4]]); put(10, [[10], [20], [30], [40]]); put(11, [['a'], ['b'], ['c'], ['d']])
   put(13, [[2], [4], [4], [4], [5], [5], [7], [9]]); put(15, [[3], [1], [4], [1]])
   put(17, [['k', 'v'], ['a', 5], ['b', 9], ['c', 1]]); put(19, [['k'], ['a']]); put(20, [['v'], ['>0']])
+  put(26, [['East','A',10],['West','A',20],['East','B',30],['West','B',40],['East','A',5]])
   cases.forEach((c, i) => ws.getRange(i, 0).setFormula(c.f))
   await new Promise((r) => setTimeout(r, 12000))
   ws.getRange(0, 0, cases.length, 1).setNumberFormat('General')

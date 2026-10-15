@@ -34,15 +34,19 @@ import threadCommentEnUS from '@univerjs/preset-sheets-thread-comment/locales/en
 import '@univerjs/preset-sheets-thread-comment/lib/index.css'
 import { IFunctionService } from '@univerjs/engine-formula'
 import { IShortcutService } from '@univerjs/ui'
-import { installExcelFunctions } from './excel-functions.js'
+import { pivotFunctions } from './groupby.js'
+import { excelFunctions } from './excel-functions.js'
 import { installExcelShortcuts } from './excel-shortcuts.js'
 import { xlsxToSnapshot, snapshotToXlsx } from './xlsx.js'
 
-const { univerAPI } = createUniver({
+let univerAPI
+const getApi = () => univerAPI
+const extra = [pivotFunctions(getApi), excelFunctions(getApi, { directory: () => window.sheetly.directory(), osversion: () => window.sheetly.osversion() })]
+;({ univerAPI } = createUniver({
   locale: LocaleType.EN_US,
   locales: { [LocaleType.EN_US]: mergeLocales(enUS, findReplaceEnUS, filterEnUS, hyperLinkEnUS, noteEnUS, sortEnUS, dataValidationEnUS, conditionalFormattingEnUS, drawingEnUS, tableEnUS, threadCommentEnUS) },
   presets: [
-    UniverSheetsCorePreset({ container: 'app' }),
+    UniverSheetsCorePreset({ container: 'app', formula: { function: extra.flatMap((x) => x.functions), description: extra.flatMap((x) => x.descriptions) } }),
     UniverSheetsFindReplacePreset(),
     UniverSheetsFilterPreset(),
     UniverSheetsHyperLinkPreset(),
@@ -54,13 +58,12 @@ const { univerAPI } = createUniver({
     UniverSheetsTablePreset(),
     UniverSheetsThreadCommentPreset(),
   ],
-})
+}))
 window.univerAPI = univerAPI
 const shortcutSvc = univerAPI._injector.get(IShortcutService)
 window.__shortcuts = () => shortcutSvc.getAllShortcuts().map((x) => ({ id: x.id, b: x.binding, w: x.win, l: x.linux, d: shortcutSvc.getShortcutDisplay(x) }))
 window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExecutors().keys()]
 installExcelShortcuts(univerAPI, shortcutSvc)
-installExcelFunctions(univerAPI, { directory: () => window.sheetly.directory(), osversion: () => window.sheetly.osversion() })
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
 univerAPI.createWorkbook({ id: 'wb1', name: 'Book1', sheetOrder: ['sheet1'],

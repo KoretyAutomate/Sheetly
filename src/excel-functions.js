@@ -24,20 +24,22 @@ const num = (v) => {
 }
 const isErr = (x) => typeof x === 'object' && x?.isError?.()
 
-class Fn extends BaseFunction {
-  constructor(name, min, max, impl, flags = {}) {
+// The engine constructs each function as `new Class(name)`, so every definition gets its own class.
+const fnClass = (min, max, impl, flags = {}) => class extends BaseFunction {
+  constructor(name) {
     super(name)
     this.minParams = min
     this.maxParams = max
-    this._impl = impl
     Object.assign(this, flags)
   }
-  calculate(...args) { return this._impl.apply(this, args) }
+  calculate(...args) { return impl.apply(this, args) }
 }
 
-export function installExcelFunctions(api, env = {}) {
-  const fns = api._injector.get(IFunctionService)
-  const call = (name, ...args) => fns.getExecutor(name).calculate(...args)
+// [Class, name] pairs and descriptions for the engine's `formula.function` config.
+export function excelFunctions(getApi, env = {}) {
+  const fns = () => getApi()._injector.get(IFunctionService)
+  const call = (name, ...args) => fns().getExecutor(name).calculate(...args)
+  const api = { getActiveWorkbook: () => getApi().getActiveWorkbook() }
 
   const defs = [
     // ISO.CEILING is defined by Excel as identical to CEILING.PRECISE.
@@ -144,10 +146,10 @@ export function installExcelFunctions(api, env = {}) {
   for (const n of ['CUBEKPIMEMBER', 'CUBEMEMBER', 'CUBEMEMBERPROPERTY', 'CUBERANKEDMEMBER', 'CUBESET', 'CUBESETCOUNT', 'CUBEVALUE'])
     defs.push([n, FunctionType.Cube ?? FunctionType.Lookup, 1, 255, () => err('#NAME?'), `Cube function ${n} (requires a Data Model connection).`])
 
-  for (const [name, type, min, max, impl, description, flags] of defs) {
-    fns.registerExecutors(new Fn(name, min, max, impl, flags))
-    fns.registerDescriptions({ functionName: name, functionType: type, description, abstract: description,
-      functionParameter: [] })
+  return {
+    functions: defs.map(([name, , min, max, impl, , flags]) => [fnClass(min, max, impl, flags), name]),
+    descriptions: defs.map(([name, type, , , , description]) => ({ functionName: name, functionType: type, description,
+      abstract: description, functionParameter: [] })),
   }
 }
 
