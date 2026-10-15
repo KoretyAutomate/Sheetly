@@ -36,6 +36,7 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras) {
 
   // Modes: F8 Extend Selection, End mode.
   const mode = { extend: false, end: false }
+  window.__sheetlyModes = mode
   const status = document.createElement('div')
   Object.assign(status.style, { position: 'fixed', left: '8px', bottom: '4px', font: '12px system-ui, sans-serif', color: '#605e5c', pointerEvents: 'none', zIndex: 5 })
   status.setAttribute('aria-live', 'polite')
@@ -272,6 +273,16 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras) {
     commands.registerCommand({ id, type: CommandType.COMMAND, handler: async () => (await handler()) !== false })
     shortcuts.registerShortcut({ id, binding, priority: PRIORITY, preconditions: whenSheetEditorActivated })
   }
+
+  // Esc closes the Insert Hyperlink popup (Excel's dialog closes on Esc); Univer's popup ignores it.
+  let linkPopupOpen = false
+  commands.onCommandExecuted((cmd) => {
+    if (cmd.id === 'sheet.operation.open-hyper-link-edit-panel') linkPopupOpen = true
+    else if (cmd.id === 'sheet.operation.close-hyper-link-popup') linkPopupOpen = false
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && linkPopupOpen) { e.preventDefault(); commands.executeCommand('sheet.operation.close-hyper-link-popup') }
+  }, true)
 
   // In-cell editing: Ctrl+Delete deletes to the end of the line (Excel), not just the next word.
   commands.registerCommand({ id: 'sheetly.delete-to-line-end', type: CommandType.COMMAND, handler: () => { window.sheetly?.sendKeys?.([['End', ['shift']], ['Delete', []]]); return true } })

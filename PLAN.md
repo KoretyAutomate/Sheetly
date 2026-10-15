@@ -30,7 +30,8 @@ Formulas: all 517 functions in test/excel-functions.txt are registered (coverage
 - Workbook locale is en-US (Univer default zh-CN made dates/times render in Chinese).
 - Every sheet has Excel's grid: 1,048,576 rows x 16,384 columns.
 
-Shortcuts: test/shortcuts_full.mjs drives real key presses and asserts each effect (see test_results/).
+Shortcuts: test/shortcuts_full.mjs drives real key presses and asserts each effect: 139/139 (see test_results/).
+Flash Fill learner: test/flashfill.test.mjs 11/11.
 
 Known gaps (not aligned yet):
 - Row/column grouping & outline (Alt+Shift+Right/Left, Ctrl+8): Univer has no outline feature.

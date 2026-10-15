@@ -110,7 +110,8 @@ T('Ctrl+Shift+0 unhides columns', `S().hideColumns(1,1); S().getRange('A1:C1').a
 T('Alt+= AutoSum', `act('A5')`, ['Alt+='], `/SUM/i.test(f('A5'))`)
 T('Shift+F2 insert note', `act('A1')`, ['Shift+F2'], `[...document.querySelectorAll('section textarea')].length>0`)
 T('Ctrl+Shift+F3 create names', `S().getRange('A1').setValue('qty'); S().getRange('B1').setValue('cost'); S().getRange('A1:B4').activate()`, ['Control+Shift+F3','Enter'], `!!wb().getDefinedName('qty')&&!!wb().getDefinedName('cost')`)
-T('Ctrl+K hyperlink', `act('A1')`, ['Control+k'], `[...document.querySelectorAll('section input')].length>0`)
+T('Ctrl+K hyperlink', `act('A1')`, ['Control+k'], `[...document.querySelectorAll('section input')].length>2`)
+T('Esc closes hyperlink popup', `act('A1')`, ['Control+k','W:500','Escape'], `[...document.querySelectorAll('section input')].length<=2`)
 T('F11 chart sheet', `act('A1')`, ['F11'], `wb().getActiveSheet().getSheetName()==='Chart1'&&!!document.querySelector('.sx-chart canvas')`)
 T('Ctrl+T create table', `act('B2')`, ['Control+t','Enter'], `(wb().getTableList?.()??[]).length===1`)
 T('Ctrl+Shift+L toggle filter', `act('A1')`, ['Control+Shift+l'], `!!S().getFilter()`)
@@ -137,7 +138,7 @@ T('Alt+; visible cells', `S().getRange('A1:D4').activate()`, ['Alt+;'], `sel()==
 T('Ctrl+[ precedents', `S().getRange('F1').setFormula('=B2+C3'); act('F1')`, ['Control+['], `S().getSelection().getActiveRangeList?.().length===2||sel()==='B2'`)
 T('Ctrl+] dependents', `S().getRange('F1').setFormula('=A1*2'); act('A1')`, ['Control+]'], `sel()==='F1'`)
 T('Ctrl+\\ row differences', `S().getRange('B1').setValue(1); S().getRange('A1:C1').activate()`, ['Control+\\'], `sel()==='C1'`)
-T('F9 recalculates', `S().getRange('F1').setFormula('=RAND()'); await new Promise((r)=>setTimeout(r,400)); window.__r=S().getRange('F1').getValue()`, ['F9'], `typeof window.__r==='number'&&S().getRange('F1').getValue()!==window.__r`, { timeout: 10000 })
+T('F9 recalculates', `S().getRange('F1').setFormula('=RAND()'); for (let i=0;i<50&&typeof S().getRange('F1').getValue()!=='number';i++) await new Promise((r)=>setTimeout(r,100)); window.__r=S().getRange('F1').getValue()`, ['F9'], `typeof window.__r==='number'&&S().getRange('F1').getValue()!==window.__r`, { timeout: 10000 })
 T('Alt+Down pick from list', `S().getRange('F1').setValue('x'); S().getRange('F2').setValue('y'); act('F3')`, ['Alt+ArrowDown'], `[...document.querySelectorAll('div')].some((n)=>n.children.length===0&&n.textContent==='y')`)
 T('Ctrl+Alt+= zoom in', `S().zoom?.(1)`, ['Control+Alt+='], `S().getZoom()>1`)
 T("Ctrl+' then Esc restores the cell", `S().getRange('F1').setFormula('=A1+1'); S().getRange('F2').setValue('keep'); act('F2')`, ["Control+'",'Escape'], `v('F2')==='keep'`)
@@ -178,9 +179,14 @@ T('Ctrl+Shift+< font size down', `act('A1')`, ['Control+Shift+,'], `(st('A1').fs
 // ONLY=<regex> runs a subset (and prints renderer errors) when debugging.
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null
 if (only) { win.on('pageerror', (e) => console.log('PAGEERROR', e.message)); win.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 200)) }) }
+if (process.env.DEBUG_KEYS) {
+  win.on('console', (m) => { if (m.text().startsWith('KEY')) console.log(m.text()) })
+  await win.evaluate(() => { const svc = window.univerAPI._injector.get(window.__IShortcutService)
+    window.addEventListener('keydown', (e) => { if (e.key === 'F9') console.log('KEY F9 target=' + e.target.tagName + '.' + String(e.target.className).slice(0, 40) + ' dispatch=' + svc.dispatch(e)?.id + ' layoutOk=' + svc._layoutService?.checkElementInCurrentContainers(e.target)) }, true) })
+}
 const t0 = Date.now()
 for (const t of tests.filter((x) => !only || only.test(x.name))) {
-  let ok = false, note = ''
+  let ok = false, note = '', waited = 0
   try {
     // Close any panel/dialog a previous test opened and give the grid keyboard focus again.
     for (let i = 0; i < 3; i++) await win.keyboard.press('Escape')
@@ -191,13 +197,20 @@ for (const t of tests.filter((x) => !only || only.test(x.name))) {
     for (const k of t.keys) { if (k.startsWith('T:')) await win.keyboard.type(k.slice(2), { delay: 15 }); else if (k.startsWith('W:')) await win.waitForTimeout(+k.slice(2)); else await win.keyboard.press(k); await win.waitForTimeout(90) }
     await win.waitForTimeout(350)
     // Poll the check for up to 2 s: some effects (recalculation, spills, panels) land asynchronously.
-    let waited = 0
-    for (; waited <= (t.timeout ?? 2000) && !ok; waited += 150) {
+    for (waited = 0; waited <= (t.timeout ?? 2000) && !ok; waited += 150) {
       ok = !!(await run('return (' + t.check + ')'))
       if (!ok) await win.waitForTimeout(150)
     }
   } catch (e) { note = ' (error: ' + String(e.message).split('\n')[0].slice(0, 100) + ')' }
-  if (!ok) console.log('DIAG', t.name, await run(`return JSON.stringify({ sel: sel(), range: S().getActiveRange().getRange(), editing: wb().isCellEditing(), F1: S().getRange('F1').getCellData(), F2: S().getRange('F2').getCellData(), A1: S().getRange('A1').getCellData() })`))
+  if (!ok && t.timeout) console.log('ENGINE', t.name, await run(`
+    const svc = api._injector.get(window.__IShortcutService)
+    const f9 = svc.getAllShortcuts().filter((x) => x.binding === 120).map((x) => [x.id, x.priority ?? 0, x.preconditions ? x.preconditions(svc._contextService) : true])
+    const a = S().getRange('F1').getValue(); api.getFormula().executeCalculation(); await new Promise((r) => setTimeout(r, 2000))
+    const direct = S().getRange('F1').getValue() !== a
+    S().getRange('G59').setFormula('=RAND()'); await new Promise((r) => setTimeout(r, 1500)); const g = S().getRange('G59').getValue()
+    api.getFormula().executeCalculation(); await new Promise((r) => setTimeout(r, 2000))
+    return JSON.stringify({ f9, directRecalcChangedF1: direct, F1: S().getRange('F1').getCellData(), freshRandRecalc: S().getRange('G59').getValue() !== g })`))
+  if (!ok) console.log('DIAG', t.name, await run(`return JSON.stringify({ sel: sel(), range: S().getActiveRange().getRange(), editing: wb().isCellEditing(), F1: S().getRange('F1').getCellData(), F2: S().getRange('F2').getCellData(), A1: S().getRange('A1').getCellData(), focus: document.activeElement?.tagName + '.' + String(document.activeElement?.className).slice(0, 50), popupInputs: document.querySelectorAll('section input').length })`))
   if (t.timeout) note += ` (${ok ? 'took ~' + waited + ' ms' : 'no change in ' + t.timeout + ' ms'})`
   out.push(`${ok ? 'PASS' : 'FAIL'}  ${t.name}${note}`)
   await win.keyboard.press('Escape'); await win.keyboard.press('Escape')

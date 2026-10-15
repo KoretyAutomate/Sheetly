@@ -1,9 +1,143 @@
-SHORTCUT TEST (all) 2026-10-15T09:03:26.055Z
-pass 5/5  (15s)
+SHORTCUT TEST (all) 2026-10-15T10:43:50.620Z
+pass 139/139  (653s)
+PASS  Arrow Right
+PASS  Arrow Down
+PASS  Tab moves right
+PASS  Shift+Tab moves left
+PASS  Enter moves down
+PASS  Shift+Enter moves up
+PASS  Ctrl+Right to edge of data
+PASS  Ctrl+Down to edge of data
+PASS  Ctrl+Left
+PASS  Ctrl+Up
+PASS  Home -> start of row
+PASS  Ctrl+Home -> A1
+PASS  Ctrl+End -> last used cell
+PASS  PageDown moves down a screen
+PASS  PageUp moves up a screen
+PASS  Alt+PageDown moves right a screen
+PASS  Ctrl+PageDown next sheet
+PASS  Ctrl+PageUp previous sheet
+PASS  F5 Go To C3
+PASS  Ctrl+G Go To B2:C3
+PASS  Ctrl+F opens Find
+PASS  Ctrl+H opens Replace
+PASS  Ctrl+A selects current region
+PASS  Ctrl+Space selects column
+PASS  Shift+Space selects row
+PASS  Shift+Right extends
+PASS  Shift+Down extends
+PASS  Ctrl+Shift+Right to edge
+PASS  Ctrl+Shift+Down to edge
+PASS  Ctrl+Shift+End to last cell
+PASS  Ctrl+Shift+Home to start
+PASS  Ctrl+Shift+* current region
+PASS  Shift+Backspace collapses to active cell
+PASS  F8 extend mode
+PASS  F2 edit cell
+PASS  Esc cancels edit
+PASS  Typing + Enter commits
+PASS  Typing + Tab commits, moves right
+PASS  Alt+Enter new line in cell
+PASS  Ctrl+Enter fills selection
+PASS  Ctrl+Shift+Enter array formula
+PASS  Delete clears cell
+PASS  Backspace clears cell
+PASS  Ctrl+Z undo
+PASS  Ctrl+Y redo
+PASS  F4 repeats last action
+PASS  F4 toggles absolute ref while editing
+PASS  Ctrl+D fill down
+PASS  Ctrl+R fill right
+PASS  Ctrl+; inserts date
+PASS  Ctrl+Shift+; inserts time
+PASS  Ctrl+Shift+@ time displays en-US AM/PM
+PASS  Ctrl+' copies formula from above
+PASS  Ctrl+Shift+" copies value from above
+PASS  Ctrl+C / Ctrl+V
+PASS  Ctrl+X / Ctrl+V
+PASS  Ctrl+Alt+V paste special (All)
+PASS  Ctrl+Shift+= inserts row
+PASS  Ctrl+- deletes row
+PASS  Ctrl+9 hides row
+PASS  Ctrl+0 hides column
+PASS  Ctrl+Shift+9 unhides rows
+PASS  Ctrl+Shift+0 unhides columns
+PASS  Alt+= AutoSum
+PASS  Shift+F2 insert note
+PASS  Ctrl+Shift+F3 create names
+PASS  Ctrl+K hyperlink
+PASS  Esc closes hyperlink popup
+PASS  F11 chart sheet
+PASS  Ctrl+T create table
+PASS  Ctrl+Shift+L toggle filter
+PASS  Shift+F11 new sheet
+PASS  Ctrl+P print preview
+PASS  F1 help
+PASS  Ctrl+Shift+= shift cells down
+PASS  Ctrl+- shift cells up
+PASS  Ctrl+L create table
+PASS  Alt+F1 embedded chart
+PASS  Alt+Shift+F1 new sheet
+PASS  Ctrl+F2 print preview
+PASS  Ctrl+F3 name manager
+PASS  Ctrl+Shift+F Format Cells font tab
+PASS  Ctrl+Shift+P Format Cells font tab
+PASS  Ctrl+Shift+Space select all
+PASS  Shift+Home select to row start
+PASS  Ctrl+. next corner
+PASS  End then Right
+PASS  F8 then Esc leaves extend mode
+PASS  Ctrl+Shift+O select notes
+PASS  Alt+; visible cells
 PASS  Ctrl+[ precedents
 PASS  Ctrl+] dependents
 PASS  Ctrl+\ row differences
-PASS  F9 recalculates
+PASS  F9 recalculates (took ~150 ms)
 PASS  Alt+Down pick from list
+PASS  Ctrl+Alt+= zoom in
+PASS  Ctrl+' then Esc restores the cell
+PASS  Ctrl+' formula from above (edit mode)
+PASS  Ctrl+` show formulas
+PASS  Shift+F3 insert function
+PASS  F3 paste name
+PASS  Ctrl+Shift+A argument names
+PASS  Ctrl+E flash fill
+PASS  F7 spelling
+PASS  Shift+F10 context menu
+PASS  Ctrl+Shift+U expands formula bar
+PASS  Ctrl+6 hide objects
+PASS  Home in edit
+PASS  Ctrl+Left word jump in edit
+PASS  Ctrl+Backspace deletes word in edit
+PASS  Ctrl+Delete deletes to end of line in edit
+PASS  Ctrl+B bold
+PASS  Ctrl+I italic
+PASS  Ctrl+U underline
+PASS  Ctrl+5 strikethrough
+PASS  Ctrl+Shift+~ General
+PASS  Ctrl+Shift+! number #,##0.00
+PASS  Ctrl+Shift+@ time
+PASS  Ctrl+Shift+# date
+PASS  Ctrl+Shift+$ currency
+PASS  Ctrl+Shift+% percent
+PASS  Ctrl+Shift+^ scientific
+PASS  Ctrl+Shift+& outline border
+PASS  Ctrl+Shift+_ remove border
+PASS  Ctrl+1 Format Cells
+PASS  Ctrl+Shift+> font size up
+PASS  Ctrl+Shift+< font size down
+PASS  Ctrl+O open
+PASS  Ctrl+F12 open
+PASS  Ctrl+S save
+PASS  Shift+F12 save
+PASS  F12 save as
+PASS  Ctrl+Tab next window
+PASS  Ctrl+F6 next window
+PASS  Ctrl+Shift+Tab previous window
+PASS  Ctrl+F10 maximize
+PASS  Ctrl+N opens a new workbook window (1 -> 2)
+PASS  Ctrl+W closes the workbook window (2 -> 1)
+PASS  Ctrl+F4 closes the workbook window (2 -> 1)
 
 NOT AUTOMATED: Ctrl+F9 minimize (window-manager dependent).
