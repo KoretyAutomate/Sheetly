@@ -1,5 +1,5 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron')
-const fs = require('fs'), path = require('path')
+const fs = require('fs'), path = require('path'), os = require('os')
 let win, current = null
 
 function send(cmd) { win?.webContents.send('menu', cmd) }
@@ -32,6 +32,9 @@ ipcMain.handle('save', async (_e, data, saveAs) => {
   }
   fs.writeFileSync(p, Buffer.from(data)); current = p; return p
 })
+// INFO("directory"): folder of the open workbook (else home), with a trailing separator like Excel.
+ipcMain.on('directory', (e) => { e.returnValue = (current ? path.dirname(current) : os.homedir()) + path.sep })
+ipcMain.on('osversion', (e) => { e.returnValue = `${os.type()} ${os.release()}` })
 ipcMain.on('current', (_e, p) => { current = p })
 app.whenReady().then(createWindow)
 app.on('window-all-closed', () => app.quit())

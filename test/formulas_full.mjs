@@ -15,7 +15,7 @@ const res = await win.evaluate(async (cases) => {
   await new Promise((r) => setTimeout(r, 12000))
   ws.getRange(0, 0, cases.length, 1).setNumberFormat('General')
   await new Promise((r) => setTimeout(r, 1500))
-  return cases.map((c, i) => { const r = ws.getRange(i, 0), d = r.getCellData(); return { ...c, got: d?.t === 3 ? !!d.v : (d?.v ?? r.getValue()) } })
+  return cases.map((c, i) => { const r = ws.getRange(i, 0), d = r.getCellData(); return { ...c, got: d?.t === 3 ? !!d.v : (r.getRawValue() ?? d?.v ?? r.getValue()) } })
 }, cases)
 const dec = (s) => (/^-?\d+\.(\d+)$/.exec(s) || [])[1]?.length ?? 0
 const ok = (c) => {

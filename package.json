@@ -6,7 +6,8 @@
   "scripts": {
     "build": "vite build",
     "start": "vite build && electron .",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "postinstall": "patch-package"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +15,17 @@
   "dependencies": {
     "@univerjs/core": "^1.0.4",
     "@univerjs/engine-formula": "^1.0.4",
+    "@univerjs/preset-sheets-conditional-formatting": "^1.0.4",
     "@univerjs/preset-sheets-core": "^1.0.4",
+    "@univerjs/preset-sheets-data-validation": "^1.0.4",
+    "@univerjs/preset-sheets-drawing": "^1.0.4",
+    "@univerjs/preset-sheets-filter": "^1.0.4",
+    "@univerjs/preset-sheets-find-replace": "^1.0.4",
+    "@univerjs/preset-sheets-hyper-link": "^1.0.4",
+    "@univerjs/preset-sheets-note": "^1.0.4",
+    "@univerjs/preset-sheets-sort": "^1.0.4",
+    "@univerjs/preset-sheets-table": "^1.0.4",
+    "@univerjs/preset-sheets-thread-comment": "^1.0.4",
     "@univerjs/presets": "^1.0.4",
     "@univerjs/sheets": "^1.0.4",
     "@univerjs/sheets-ui": "^1.0.4",
@@ -23,6 +34,7 @@
     "exceljs": "^4.4.0"
   },
   "devDependencies": {
+    "patch-package": "^8.0.1",
     "playwright": "^1.64.1",
     "vite": "^8.3.4"
   },
