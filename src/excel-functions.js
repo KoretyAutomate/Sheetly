@@ -1,7 +1,7 @@
 // Excel functions Univer's engine lacks, implemented as native engine functions so they see
 // value objects (errors, omitted arguments, references) exactly as built-ins do.
 import {
-  ArrayValueObject, BaseFunction, BooleanValueObject, ErrorValueObject, FunctionType, IFunctionService,
+  ArrayValueObject, AsyncObject, BaseFunction, BooleanValueObject, ErrorValueObject, FunctionType, IFunctionService,
   NullValueObject, NumberValueObject, StringValueObject,
 } from '@univerjs/engine-formula'
 
@@ -141,6 +141,22 @@ export function excelFunctions(getApi, env = {}) {
     ['FIELDVALUE', FunctionType.Lookup, 2, 2, (v) => (first(v)?.isError() ? first(v) : err('#FIELD!')),
       'Returns a field from a linked data type.'],
   ]
+  // WEBSERVICE: asynchronous HTTP GET made by the Electron main process. Excel returns the
+  // response body as text, never reparsed as a number or array.
+  defs.push(['WEBSERVICE', FunctionType.Web ?? FunctionType.Text, 1, 1, function (url) {
+    const u = first(url)
+    if (u.isError()) return u
+    return new AsyncObject((async () => {
+      const r = env.webservice ? await env.webservice(String(u.getValue() ?? '')) : '#VALUE!'
+      return r === '#VALUE!' ? err('#VALUE!') : StringValueObject.create(r)
+    })())
+  }, 'Returns data from a web service on the Internet or Intranet.', { isAsync: () => true }])
+  // These call Microsoft online services (Translator, licensed market data) that Sheetly has no
+  // access to; Excel returns #CONNECT! when the service cannot be reached.
+  for (const [n, type, min, max, d] of [['TRANSLATE', FunctionType.Text, 1, 3, 'Translates text from one language to another.'],
+    ['DETECTLANGUAGE', FunctionType.Text, 1, 1, 'Identifies the language of a specified text.'],
+    ['STOCKHISTORY', FunctionType.Financial, 2, 255, 'Retrieves historical data about a financial instrument.']])
+    defs.push([n, type, min, max, () => err('#CONNECT!'), d])
   // Cube functions need an OLAP / Data Model connection. Sheetly has none, so every connection
   // name is invalid, for which Excel returns #NAME?.
   for (const n of ['CUBEKPIMEMBER', 'CUBEMEMBER', 'CUBEMEMBERPROPERTY', 'CUBERANKEDMEMBER', 'CUBESET', 'CUBESETCOUNT', 'CUBEVALUE'])

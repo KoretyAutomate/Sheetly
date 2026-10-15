@@ -26,4 +26,4 @@ const ok = (c) => {
 const bad = res.filter((c) => !ok(c))
 const out = [`FULL FORMULA VALUE TEST ${new Date().toISOString()}`, `pass ${res.length - bad.length}/${res.length}`,
   ...bad.map((c) => `FAIL ${c.f}  expected=${c.raw} got=${JSON.stringify(c.got)}`)].join('\n')
-console.log(out); writeFileSync('test_results/formulas_full_2026-10-14.txt', out + '\n'); await app.close()
+console.log(out); writeFileSync('test_results/formulas_full_' + new Date().toISOString().slice(0,10) + '.txt', out + '\n'); await app.close()

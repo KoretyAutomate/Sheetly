@@ -41,7 +41,8 @@ import { xlsxToSnapshot, snapshotToXlsx } from './xlsx.js'
 
 let univerAPI
 const getApi = () => univerAPI
-const extra = [pivotFunctions(getApi), excelFunctions(getApi, { directory: () => window.sheetly.directory(), osversion: () => window.sheetly.osversion() })]
+const extra = [pivotFunctions(getApi), excelFunctions(getApi, { directory: () => window.sheetly.directory(), osversion: () => window.sheetly.osversion(),
+  webservice: (url) => window.sheetly.webservice(url) })]
 ;({ univerAPI } = createUniver({
   locale: LocaleType.EN_US,
   locales: { [LocaleType.EN_US]: mergeLocales(enUS, findReplaceEnUS, filterEnUS, hyperLinkEnUS, noteEnUS, sortEnUS, dataValidationEnUS, conditionalFormattingEnUS, drawingEnUS, tableEnUS, threadCommentEnUS) },

@@ -389,3 +389,16 @@
 =REDUCE(0,J1:J4,SUM) => 10
 =INDEX(SCAN(0,J1:J4,SUM),4) => 10
 =SUM(MAKEARRAY(2,2,SUM)) => 12
+# --- error values (engine patch)
+=ERROR.TYPE(#SPILL!) => 9
+=ERROR.TYPE(#CONNECT!) => 10
+=ERROR.TYPE(#BLOCKED!) => 11
+=ERROR.TYPE(#UNKNOWN!) => 12
+=ERROR.TYPE(#FIELD!) => 13
+=ERROR.TYPE(FIELDVALUE(1,"x")) => 13
+=ISERROR(#BUSY!) => true
+# --- online-service functions (offline-safe expectations)
+=WEBSERVICE("ftp://example.com") => "#VALUE!"
+=TRANSLATE("hello","en","ja") => "#CONNECT!"
+=DETECTLANGUAGE("hello") => "#CONNECT!"
+=STOCKHISTORY("MSFT",DATE(2024,1,2)) => "#CONNECT!"

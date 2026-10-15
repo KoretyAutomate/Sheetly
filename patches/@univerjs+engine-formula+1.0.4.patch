@@ -1,8 +1,21 @@
 diff --git a/node_modules/@univerjs/engine-formula/lib/cjs/index.js b/node_modules/@univerjs/engine-formula/lib/cjs/index.js
-index 70debba..83274a6 100644
+index 70debba..3ea97fe 100644
 --- a/node_modules/@univerjs/engine-formula/lib/cjs/index.js
 +++ b/node_modules/@univerjs/engine-formula/lib/cjs/index.js
-@@ -10885,6 +10885,8 @@ var FunctionNode = class extends BaseAstNode {
+@@ -93,6 +93,12 @@ let ErrorType = /* @__PURE__ */ function(ErrorType) {
+ 	ErrorType["CONNECT"] = "#GETTING_DATA";
+ 	/** In the case of SUM(B1 C1), */
+ 	ErrorType["NULL"] = "#NULL!";
++	/** Excel errors for external data, blocked features, unknown data types and linked-data fields. */
++	ErrorType["CONNECT_ERROR"] = "#CONNECT!";
++	ErrorType["BLOCKED"] = "#BLOCKED!";
++	ErrorType["UNKNOWN"] = "#UNKNOWN!";
++	ErrorType["FIELD"] = "#FIELD!";
++	ErrorType["BUSY"] = "#BUSY!";
+ 	return ErrorType;
+ }({});
+ const ERROR_TYPE_SET = new Set(Object.values(ErrorType));
+@@ -10885,6 +10891,8 @@ var FunctionNode = class extends BaseAstNode {
  	_getChildVariant(child, dateSystem) {
  		const object = child.getValue();
  		if (object == null) return;
@@ -11,7 +24,7 @@ index 70debba..83274a6 100644
  		if (object.isReferenceObject() && this._functionExecutor.needsFilteredOutRows) this._setFilteredOutRows(object);
  		if (object.isReferenceObject() && !this._functionExecutor.needsReferenceObject) return object.withDateSystem(dateSystem).toArrayValueObject();
  		return object.withDateSystem(dateSystem);
-@@ -10892,6 +10894,20 @@ var FunctionNode = class extends BaseAstNode {
+@@ -10892,6 +10900,20 @@ var FunctionNode = class extends BaseAstNode {
  	isFunctionExecutorArgumentsIgnoreNumberPattern() {
  		return this._functionExecutor.isArgumentsIgnoreNumberPattern();
  	}
@@ -32,7 +45,7 @@ index 70debba..83274a6 100644
  	/**
  	* If it contains an array formula, set the current cell to the cache and send itself as a ref outward
  	*/
-@@ -11056,6 +11072,38 @@ var FunctionNode = class extends BaseAstNode {
+@@ -11056,6 +11078,38 @@ var FunctionNode = class extends BaseAstNode {
  		referenceObject.setFilteredOutRows(filteredOutRows);
  	}
  };
@@ -71,7 +84,7 @@ index 70debba..83274a6 100644
  var ErrorFunctionNode = class extends BaseAstNode {
  	constructor(token = "Error") {
  		super(token);
-@@ -11091,7 +11139,9 @@ let FunctionNodeFactory = class FunctionNodeFactory extends BaseAstNodeFactory {
+@@ -11091,7 +11145,9 @@ let FunctionNodeFactory = class FunctionNodeFactory extends BaseAstNodeFactory {
  			console.error(`No function ${token}`);
  			return ErrorNode.create("#NAME?");
  		}
@@ -82,7 +95,7 @@ index 70debba..83274a6 100644
  	}
  	checkAndCreateNodeType(param) {
  		if (typeof param === "string") return;
-@@ -25796,7 +25846,7 @@ var Imconjugate = class extends BaseFunction {
+@@ -25796,7 +25852,7 @@ var Imconjugate = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Conjugate();
@@ -91,7 +104,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25817,7 +25867,7 @@ var Imcos = class extends BaseFunction {
+@@ -25817,7 +25873,7 @@ var Imcos = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cos();
@@ -100,7 +113,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25839,7 +25889,7 @@ var Imcosh = class extends BaseFunction {
+@@ -25839,7 +25895,7 @@ var Imcosh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cosh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -109,7 +122,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25861,7 +25911,7 @@ var Imcot = class extends BaseFunction {
+@@ -25861,7 +25917,7 @@ var Imcot = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cot();
@@ -118,7 +131,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25884,7 +25934,7 @@ var Imcoth = class extends BaseFunction {
+@@ -25884,7 +25940,7 @@ var Imcoth = class extends BaseFunction {
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Coth();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -127,7 +140,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25906,7 +25956,7 @@ var Imcsc = class extends BaseFunction {
+@@ -25906,7 +25962,7 @@ var Imcsc = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Csc();
@@ -136,7 +149,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25928,7 +25978,7 @@ var Imcsch = class extends BaseFunction {
+@@ -25928,7 +25984,7 @@ var Imcsch = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Csch();
@@ -145,7 +158,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25954,7 +26004,7 @@ var Imdiv = class extends BaseFunction {
+@@ -25954,7 +26010,7 @@ var Imdiv = class extends BaseFunction {
  		if (complex1.isDifferentSuffixes(complex2)) return ErrorValueObject.create("#NUM!");
  		if (complex2.getRealNum() === 0 && complex2.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex1.Div(complex2);
@@ -154,7 +167,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25976,7 +26026,7 @@ var Imexp = class extends BaseFunction {
+@@ -25976,7 +26032,7 @@ var Imexp = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Exp();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -163,7 +176,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25998,7 +26048,7 @@ var Imln = class extends BaseFunction {
+@@ -25998,7 +26054,7 @@ var Imln = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Ln();
@@ -172,7 +185,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26033,7 +26083,7 @@ var Imlog = class extends BaseFunction {
+@@ -26033,7 +26089,7 @@ var Imlog = class extends BaseFunction {
  		if (baseValue <= 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(baseValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -181,7 +194,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26055,7 +26105,7 @@ var Imlog2 = class extends BaseFunction {
+@@ -26055,7 +26111,7 @@ var Imlog2 = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(2);
@@ -190,7 +203,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26077,7 +26127,7 @@ var Imlog10 = class extends BaseFunction {
+@@ -26077,7 +26133,7 @@ var Imlog10 = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(10);
@@ -199,7 +212,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26102,7 +26152,7 @@ var Impower = class extends BaseFunction {
+@@ -26102,7 +26158,7 @@ var Impower = class extends BaseFunction {
  		if (Number.isNaN(numberValue)) return ErrorValueObject.create("#VALUE!");
  		const result = complex.Power(numberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -208,7 +221,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26135,7 +26185,7 @@ var Improduct = class extends BaseFunction {
+@@ -26135,7 +26191,7 @@ var Improduct = class extends BaseFunction {
  			} else result = this._handleSingleObject(variant, result);
  		}
  		if (result instanceof ErrorValueObject) return result;
@@ -217,7 +230,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  	_handleSingleObject(variant, result) {
-@@ -26194,7 +26244,7 @@ var Imsec = class extends BaseFunction {
+@@ -26194,7 +26250,7 @@ var Imsec = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sec();
@@ -226,7 +239,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26215,7 +26265,7 @@ var Imsech = class extends BaseFunction {
+@@ -26215,7 +26271,7 @@ var Imsech = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sech();
@@ -235,7 +248,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26236,7 +26286,7 @@ var Imsin = class extends BaseFunction {
+@@ -26236,7 +26292,7 @@ var Imsin = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sin();
@@ -244,7 +257,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26258,7 +26308,7 @@ var Imsinh = class extends BaseFunction {
+@@ -26258,7 +26314,7 @@ var Imsinh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sinh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -253,7 +266,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26280,7 +26330,7 @@ var Imsqrt = class extends BaseFunction {
+@@ -26280,7 +26336,7 @@ var Imsqrt = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return NumberValueObject.create(0);
  		const result = complex.Sqrt();
@@ -262,7 +275,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26305,7 +26355,7 @@ var Imsub = class extends BaseFunction {
+@@ -26305,7 +26361,7 @@ var Imsub = class extends BaseFunction {
  		if (complex1.isError() || complex2.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex1.isDifferentSuffixes(complex2)) return ErrorValueObject.create("#NUM!");
  		const result = complex1.Sub(complex2);
@@ -271,7 +284,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26338,7 +26388,7 @@ var Imsum = class extends BaseFunction {
+@@ -26338,7 +26394,7 @@ var Imsum = class extends BaseFunction {
  			} else result = this._handleSingleObject(variant, result);
  		}
  		if (result instanceof ErrorValueObject) return result;
@@ -280,7 +293,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  	_handleSingleObject(variant, result) {
-@@ -26377,7 +26427,7 @@ var Imtan = class extends BaseFunction {
+@@ -26377,7 +26433,7 @@ var Imtan = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Tan();
@@ -289,7 +302,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26399,7 +26449,7 @@ var Imtanh = class extends BaseFunction {
+@@ -26399,7 +26455,7 @@ var Imtanh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Tanh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -298,7 +311,19 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -32736,7 +32786,9 @@ var Sort = class extends BaseFunction {
+@@ -29745,6 +29801,11 @@ var ErrorType$1 = class extends BaseFunction {
+ 			["#NUM!", 6],
+ 			["#N/A", 7],
+ 			["#GETTING_DATA", 8],
++			["#SPILL!", 9],
++			["#CONNECT!", 10],
++			["#BLOCKED!", 11],
++			["#UNKNOWN!", 12],
++			["#FIELD!", 13],
+ 			["#CALC!", 14]
+ 		]));
+ 	}
+@@ -32736,7 +32797,9 @@ var Sort = class extends BaseFunction {
  	_getResult(array, sortIndexValue, sortOrderValue, byColValue, arrayRowCount, arrayColumnCount) {
  		if (!byColValue) {
  			if (sortIndexValue > arrayColumnCount) return ErrorValueObject.create("#VALUE!");
@@ -309,7 +334,7 @@ index 70debba..83274a6 100644
  			arrayValue.sort(this._sort(sortIndexValue - 1, sortOrderValue));
  			return ArrayValueObject.create({
  				calculateValueList: arrayValue,
-@@ -41127,7 +41179,7 @@ var Dollar = class extends BaseFunction {
+@@ -41127,7 +41190,7 @@ var Dollar = class extends BaseFunction {
  			else numberValue = numberValue < 0 ? -round(Math.abs(numberValue), decimalsValue) : round(numberValue, decimalsValue);
  			decimalsValue = 0;
  		}
@@ -318,7 +343,7 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -43503,7 +43555,7 @@ var Valuetotext = class extends BaseFunction {
+@@ -43503,7 +43566,7 @@ var Valuetotext = class extends BaseFunction {
  		const formatArray = expandArrayValueObject(maxRowLength, maxColumnLength, _format, ErrorValueObject.create("#N/A"));
  		const resultArray = valueArray.mapValue((valueObject, rowIndex, columnIndex) => {
  			const formatObject = formatArray.get(rowIndex, columnIndex);
@@ -327,7 +352,7 @@ index 70debba..83274a6 100644
  			if (formatObject.isError()) return formatObject;
  			return this._handleSingleObject(valueObject, formatObject);
  		});
-@@ -43517,8 +43569,8 @@ var Valuetotext = class extends BaseFunction {
+@@ -43517,8 +43580,8 @@ var Valuetotext = class extends BaseFunction {
  		const formatValue = Math.floor(+formatObject.getValue());
  		if (formatValue < 0 || formatValue > 1) return ErrorValueObject.create("#VALUE!");
  		if (value.isNull()) return StringValueObject.create("");
@@ -339,10 +364,23 @@ index 70debba..83274a6 100644
  		return StringValueObject.create(result);
  	}
 diff --git a/node_modules/@univerjs/engine-formula/lib/es/index.js b/node_modules/@univerjs/engine-formula/lib/es/index.js
-index 04b8099..8184a35 100644
+index 04b8099..8bb245c 100644
 --- a/node_modules/@univerjs/engine-formula/lib/es/index.js
 +++ b/node_modules/@univerjs/engine-formula/lib/es/index.js
-@@ -10855,6 +10855,8 @@ var FunctionNode = class extends BaseAstNode {
+@@ -63,6 +63,12 @@ let ErrorType = /* @__PURE__ */ function(ErrorType) {
+ 	ErrorType["CONNECT"] = "#GETTING_DATA";
+ 	/** In the case of SUM(B1 C1), */
+ 	ErrorType["NULL"] = "#NULL!";
++	/** Excel errors for external data, blocked features, unknown data types and linked-data fields. */
++	ErrorType["CONNECT_ERROR"] = "#CONNECT!";
++	ErrorType["BLOCKED"] = "#BLOCKED!";
++	ErrorType["UNKNOWN"] = "#UNKNOWN!";
++	ErrorType["FIELD"] = "#FIELD!";
++	ErrorType["BUSY"] = "#BUSY!";
+ 	return ErrorType;
+ }({});
+ const ERROR_TYPE_SET = new Set(Object.values(ErrorType));
+@@ -10855,6 +10861,8 @@ var FunctionNode = class extends BaseAstNode {
  	_getChildVariant(child, dateSystem) {
  		const object = child.getValue();
  		if (object == null) return;
@@ -351,7 +389,7 @@ index 04b8099..8184a35 100644
  		if (object.isReferenceObject() && this._functionExecutor.needsFilteredOutRows) this._setFilteredOutRows(object);
  		if (object.isReferenceObject() && !this._functionExecutor.needsReferenceObject) return object.withDateSystem(dateSystem).toArrayValueObject();
  		return object.withDateSystem(dateSystem);
-@@ -10862,6 +10864,20 @@ var FunctionNode = class extends BaseAstNode {
+@@ -10862,6 +10870,20 @@ var FunctionNode = class extends BaseAstNode {
  	isFunctionExecutorArgumentsIgnoreNumberPattern() {
  		return this._functionExecutor.isArgumentsIgnoreNumberPattern();
  	}
@@ -372,7 +410,7 @@ index 04b8099..8184a35 100644
  	/**
  	* If it contains an array formula, set the current cell to the cache and send itself as a ref outward
  	*/
-@@ -11026,6 +11042,38 @@ var FunctionNode = class extends BaseAstNode {
+@@ -11026,6 +11048,38 @@ var FunctionNode = class extends BaseAstNode {
  		referenceObject.setFilteredOutRows(filteredOutRows);
  	}
  };
@@ -411,7 +449,7 @@ index 04b8099..8184a35 100644
  var ErrorFunctionNode = class extends BaseAstNode {
  	constructor(token = "Error") {
  		super(token);
-@@ -11061,7 +11109,9 @@ let FunctionNodeFactory = class FunctionNodeFactory extends BaseAstNodeFactory {
+@@ -11061,7 +11115,9 @@ let FunctionNodeFactory = class FunctionNodeFactory extends BaseAstNodeFactory {
  			console.error(`No function ${token}`);
  			return ErrorNode.create("#NAME?");
  		}
@@ -422,7 +460,7 @@ index 04b8099..8184a35 100644
  	}
  	checkAndCreateNodeType(param) {
  		if (typeof param === "string") return;
-@@ -25766,7 +25816,7 @@ var Imconjugate = class extends BaseFunction {
+@@ -25766,7 +25822,7 @@ var Imconjugate = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Conjugate();
@@ -431,7 +469,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25787,7 +25837,7 @@ var Imcos = class extends BaseFunction {
+@@ -25787,7 +25843,7 @@ var Imcos = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cos();
@@ -440,7 +478,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25809,7 +25859,7 @@ var Imcosh = class extends BaseFunction {
+@@ -25809,7 +25865,7 @@ var Imcosh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cosh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -449,7 +487,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25831,7 +25881,7 @@ var Imcot = class extends BaseFunction {
+@@ -25831,7 +25887,7 @@ var Imcot = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Cot();
@@ -458,7 +496,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25854,7 +25904,7 @@ var Imcoth = class extends BaseFunction {
+@@ -25854,7 +25910,7 @@ var Imcoth = class extends BaseFunction {
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Coth();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -467,7 +505,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25876,7 +25926,7 @@ var Imcsc = class extends BaseFunction {
+@@ -25876,7 +25932,7 @@ var Imcsc = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Csc();
@@ -476,7 +514,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25898,7 +25948,7 @@ var Imcsch = class extends BaseFunction {
+@@ -25898,7 +25954,7 @@ var Imcsch = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Csch();
@@ -485,7 +523,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25924,7 +25974,7 @@ var Imdiv = class extends BaseFunction {
+@@ -25924,7 +25980,7 @@ var Imdiv = class extends BaseFunction {
  		if (complex1.isDifferentSuffixes(complex2)) return ErrorValueObject.create("#NUM!");
  		if (complex2.getRealNum() === 0 && complex2.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex1.Div(complex2);
@@ -494,7 +532,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25946,7 +25996,7 @@ var Imexp = class extends BaseFunction {
+@@ -25946,7 +26002,7 @@ var Imexp = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Exp();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -503,7 +541,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -25968,7 +26018,7 @@ var Imln = class extends BaseFunction {
+@@ -25968,7 +26024,7 @@ var Imln = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Ln();
@@ -512,7 +550,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26003,7 +26053,7 @@ var Imlog = class extends BaseFunction {
+@@ -26003,7 +26059,7 @@ var Imlog = class extends BaseFunction {
  		if (baseValue <= 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(baseValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -521,7 +559,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26025,7 +26075,7 @@ var Imlog2 = class extends BaseFunction {
+@@ -26025,7 +26081,7 @@ var Imlog2 = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(2);
@@ -530,7 +568,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26047,7 +26097,7 @@ var Imlog10 = class extends BaseFunction {
+@@ -26047,7 +26103,7 @@ var Imlog10 = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return ErrorValueObject.create("#NUM!");
  		const result = complex.Log(10);
@@ -539,7 +577,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26072,7 +26122,7 @@ var Impower = class extends BaseFunction {
+@@ -26072,7 +26128,7 @@ var Impower = class extends BaseFunction {
  		if (Number.isNaN(numberValue)) return ErrorValueObject.create("#VALUE!");
  		const result = complex.Power(numberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -548,7 +586,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26105,7 +26155,7 @@ var Improduct = class extends BaseFunction {
+@@ -26105,7 +26161,7 @@ var Improduct = class extends BaseFunction {
  			} else result = this._handleSingleObject(variant, result);
  		}
  		if (result instanceof ErrorValueObject) return result;
@@ -557,7 +595,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  	_handleSingleObject(variant, result) {
-@@ -26164,7 +26214,7 @@ var Imsec = class extends BaseFunction {
+@@ -26164,7 +26220,7 @@ var Imsec = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sec();
@@ -566,7 +604,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26185,7 +26235,7 @@ var Imsech = class extends BaseFunction {
+@@ -26185,7 +26241,7 @@ var Imsech = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sech();
@@ -575,7 +613,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26206,7 +26256,7 @@ var Imsin = class extends BaseFunction {
+@@ -26206,7 +26262,7 @@ var Imsin = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sin();
@@ -584,7 +622,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26228,7 +26278,7 @@ var Imsinh = class extends BaseFunction {
+@@ -26228,7 +26284,7 @@ var Imsinh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Sinh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -593,7 +631,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26250,7 +26300,7 @@ var Imsqrt = class extends BaseFunction {
+@@ -26250,7 +26306,7 @@ var Imsqrt = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex.getRealNum() === 0 && complex.getINum() === 0) return NumberValueObject.create(0);
  		const result = complex.Sqrt();
@@ -602,7 +640,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26275,7 +26325,7 @@ var Imsub = class extends BaseFunction {
+@@ -26275,7 +26331,7 @@ var Imsub = class extends BaseFunction {
  		if (complex1.isError() || complex2.isError()) return ErrorValueObject.create("#NUM!");
  		if (complex1.isDifferentSuffixes(complex2)) return ErrorValueObject.create("#NUM!");
  		const result = complex1.Sub(complex2);
@@ -611,7 +649,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26308,7 +26358,7 @@ var Imsum = class extends BaseFunction {
+@@ -26308,7 +26364,7 @@ var Imsum = class extends BaseFunction {
  			} else result = this._handleSingleObject(variant, result);
  		}
  		if (result instanceof ErrorValueObject) return result;
@@ -620,7 +658,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  	_handleSingleObject(variant, result) {
-@@ -26347,7 +26397,7 @@ var Imtan = class extends BaseFunction {
+@@ -26347,7 +26403,7 @@ var Imtan = class extends BaseFunction {
  		const complex = new Complex$1(inumberValue);
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Tan();
@@ -629,7 +667,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -26369,7 +26419,7 @@ var Imtanh = class extends BaseFunction {
+@@ -26369,7 +26425,7 @@ var Imtanh = class extends BaseFunction {
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
  		const result = complex.Tanh();
  		if (complex.isError()) return ErrorValueObject.create("#NUM!");
@@ -638,7 +676,19 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -32706,7 +32756,9 @@ var Sort = class extends BaseFunction {
+@@ -29715,6 +29771,11 @@ var ErrorType$1 = class extends BaseFunction {
+ 			["#NUM!", 6],
+ 			["#N/A", 7],
+ 			["#GETTING_DATA", 8],
++			["#SPILL!", 9],
++			["#CONNECT!", 10],
++			["#BLOCKED!", 11],
++			["#UNKNOWN!", 12],
++			["#FIELD!", 13],
+ 			["#CALC!", 14]
+ 		]));
+ 	}
+@@ -32706,7 +32767,9 @@ var Sort = class extends BaseFunction {
  	_getResult(array, sortIndexValue, sortOrderValue, byColValue, arrayRowCount, arrayColumnCount) {
  		if (!byColValue) {
  			if (sortIndexValue > arrayColumnCount) return ErrorValueObject.create("#VALUE!");
@@ -649,7 +699,7 @@ index 04b8099..8184a35 100644
  			arrayValue.sort(this._sort(sortIndexValue - 1, sortOrderValue));
  			return ArrayValueObject.create({
  				calculateValueList: arrayValue,
-@@ -41097,7 +41149,7 @@ var Dollar = class extends BaseFunction {
+@@ -41097,7 +41160,7 @@ var Dollar = class extends BaseFunction {
  			else numberValue = numberValue < 0 ? -round(Math.abs(numberValue), decimalsValue) : round(numberValue, decimalsValue);
  			decimalsValue = 0;
  		}
@@ -658,7 +708,7 @@ index 04b8099..8184a35 100644
  		return StringValueObject.create(result);
  	}
  };
-@@ -43473,7 +43525,7 @@ var Valuetotext = class extends BaseFunction {
+@@ -43473,7 +43536,7 @@ var Valuetotext = class extends BaseFunction {
  		const formatArray = expandArrayValueObject(maxRowLength, maxColumnLength, _format, ErrorValueObject.create("#N/A"));
  		const resultArray = valueArray.mapValue((valueObject, rowIndex, columnIndex) => {
  			const formatObject = formatArray.get(rowIndex, columnIndex);
@@ -667,7 +717,7 @@ index 04b8099..8184a35 100644
  			if (formatObject.isError()) return formatObject;
  			return this._handleSingleObject(valueObject, formatObject);
  		});
-@@ -43487,8 +43539,8 @@ var Valuetotext = class extends BaseFunction {
+@@ -43487,8 +43550,8 @@ var Valuetotext = class extends BaseFunction {
  		const formatValue = Math.floor(+formatObject.getValue());
  		if (formatValue < 0 || formatValue > 1) return ErrorValueObject.create("#VALUE!");
  		if (value.isNull()) return StringValueObject.create("");

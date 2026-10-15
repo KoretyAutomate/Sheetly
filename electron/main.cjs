@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, net } = require('electron')
 const fs = require('fs'), path = require('path'), os = require('os')
 let win, current = null
 
@@ -35,6 +35,17 @@ ipcMain.handle('save', async (_e, data, saveAs) => {
 // INFO("directory"): folder of the open workbook (else home), with a trailing separator like Excel.
 ipcMain.on('directory', (e) => { e.returnValue = (current ? path.dirname(current) : os.homedir()) + path.sep })
 ipcMain.on('osversion', (e) => { e.returnValue = `${os.type()} ${os.release()}` })
+// WEBSERVICE(url), following Excel's limits: http(s) only, URL <= 2048 chars, result <= 32767 chars;
+// anything else, or a failed request, is #VALUE!.
+ipcMain.handle('webservice', async (_e, url) => {
+  if (url.length > 2048 || !/^https?:\/\//i.test(url)) return '#VALUE!'
+  try {
+    const res = await net.fetch(url, { signal: AbortSignal.timeout(30000) })
+    if (!res.ok) return '#VALUE!'
+    const text = await res.text()
+    return text.length > 32767 ? '#VALUE!' : text
+  } catch { return '#VALUE!' }
+})
 ipcMain.on('current', (_e, p) => { current = p })
 app.whenReady().then(createWindow)
 app.on('window-all-closed', () => app.quit())
