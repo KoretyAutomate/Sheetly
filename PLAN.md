@@ -81,3 +81,60 @@ Known gaps (not aligned yet):
 - Charts: clustered column only (F11 / Alt+F1), not saved to .xlsx. PivotTables not available.
 - .xlsx styles beyond bold/italic/number format/widths/merges are not round-tripped.
 - Expected values in the formula suite were written from Excel's documentation, not produced by Excel.
+
+## Next: remaining gaps (2026-10-16, round 2)
+A. .xlsx fidelity (src/xlsx.js) — resolve style ids (snapshot `styles` map; cell.s may be a string id) both ways:
+   font bold/italic/underline/strike/size/name/color, fill (solid fgColor), borders (t/b/l/r style + color),
+   alignment (horizontal, vertical, wrapText, textRotation incl. vertical text 255), number format.
+   Row heights (pt <-> px * 4/3, customHeight only), frozen panes (views[0] state 'frozen' <-> config.freeze),
+   tab colour, hidden sheets, shared formulas (cell.formula gives the translated text), dates read as Excel
+   serials (not ISO strings), formula error results (#N/A etc.), defined names (workbook-level), notes.
+   Test: test/xlsx.test.mjs in Node (ExcelJS file written by Sheetly's writer, read back by ExcelJS, and a
+   workbook built by ExcelJS read through xlsxToSnapshot) + one in-app round-trip of a UI-styled cell.
+B. Shortcuts
+   - F6 / Shift+F6 cycle focus: worksheet -> ribbon (toolbar) -> sheet tabs bar -> worksheet (Excel: worksheet,
+     ribbon, task pane, status bar/zoom). Window capture listener so it works wherever focus is; Esc from the
+     ribbon/tabs returns to the grid as in Excel. Not while a .sx-overlay dialog is open.
+   - Ctrl+F1 collapse/expand the ribbon (toolbar hidden, tabs kept); state kept in localStorage.
+   - Ctrl+Q Quick Analysis: popup at the selection's bottom-right with tabs Formatting (Data Bars, Color Scale,
+     Icon Set, Greater Than, Top 10%, Clear Format), Charts (Clustered Column), Totals (Sum, Average, Count,
+     % Total, Running Total, rows below / columns right), Tables (Table). Left/Right switch tabs, Tab/arrows move
+     between items, Enter runs, Esc closes. Conditional formats via Univer's CF facade.
+   - Shift+F8 Add to Selection mode: status bar "Add to Selection"; keeps the selections present when entered
+     (and those committed by mouse clicks) while arrows/Shift+arrows/clicks make a new area; Shift+F8 or Esc ends.
+C. Outline
+   - Settings dialog (Data > Outline launcher, KeyTip Alt A J? -> use the Group menu "Settings"): "Summary rows
+     below detail", "Summary columns to right of detail", buttons Create (Auto Outline), OK, Cancel.
+   - Summary direction per sheet in worksheet `custom.sheetlyOutline = { summaryBelow, summaryRight,
+     hideSymbols }`; the summary of a group is g.end+1 (below/right) or g.start-1 (above/left) everywhere
+     (collapse bit, +/- box, bracket tick, active-cell move, Show/Hide Detail, xlsx markCollapsed).
+   - Ctrl+8 state saved in the same custom field and in .xlsx sheetView showOutlineSymbols (ExcelJS patch).
+   - xlsx: sheetPr/outlinePr summaryBelow/summaryRight round-trip (ExcelJS supports outlineProperties).
+   - Auto Outline (Data > Group > Auto Outline, Alt A G A): rows whose formulas reference a vertical range in
+     the same column directly adjacent (above when summary below) become summaries; nested ranges nest levels;
+     same for columns with horizontal ranges. Replaces an existing outline after "Modify existing outline?"; no
+     such formulas -> "Cannot create an outline."
+Not in this round: charts in .xlsx (ExcelJS cannot write charts), online functions, PivotTables,
+Alt+Shift+= / Alt+Shift+- (unverified).
+Review (plan agent, 2026-10-16) adopted: style ids resolved (cell/row/column styles, merged col<row<cell on write),
+Univer's clockwise text angle (angle up = -45; KeyTips Alt H FQ and Format Cells degrees fixed too), colour forms
+#rgb / rgb() / theme+tint / indexed, blank styled cells kept, filled-down {si} formulas resolved from the live
+workbook on save, _xlfn./_xlws. stripped on load and added on save, exact error list, very hidden sheets, scrolled
+freeze (topLeftCell), notes get a size, format 14 -> m/d/yyyy, auto-fit rows stay automatic (ExcelJS patched for
+customHeight), defined names written/read raw (sheet scope, constants, formulas; ExcelJS patched), collapse bits
+move when the summary direction changes, Quick Analysis text options + Sparklines tab, Auto Outline over
+subtotals. Also found by tests: a plain arrow with a range selected moved from the range edge (Univer); it now
+moves from the active cell as in Excel.
+
+Status 2026-10-16 (round 2): done. xlsx 56/56, round2 43/43, outline 27/27, formulas 398/398, coverage 517/517.
+Not done from this round (deliberate or unverified):
+- F6 on the ribbon does not show KeyTip badges (Excel does, per the reviewer; unverified).
+- Quick Analysis: no live preview; Charts tab is fixed (Clustered Column), not recommendations; Sparklines and
+  PivotTable unavailable; Totals > Count uses COUNTA (unverified against Excel).
+- Outline Settings has no "Automatic styles" / "Apply Styles"; Auto Outline scans the whole sheet, not the
+  selection / current region.
+- .xlsx: workbook default font (Calibri / Aptos) and Excel's default row height / column width not applied;
+  date1904 workbooks read as 1900 dates (values shown as the same dates); LAMBDA/LET parameter names are written
+  without _xlpm.; spills saved as anchor formulas; conditional formats, data validation, tables, hyperlinks and
+  threaded comments are not written.
+- Opening a file given on the command line (file association) is not supported.

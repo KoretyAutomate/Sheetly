@@ -2,16 +2,16 @@
 // +/- buttons, level buttons, Show / Hide Detail, Clear Outline, Ctrl+8 to show or hide the outline symbols.
 //
 // Levels live in Univer's own row/column data (custom.outlineLevel, 1..7), so they move with inserted and
-// deleted rows and are saved with the workbook. The summary row/column (below / right of the detail, Excel's
-// default) carries custom.outlineCollapsed: a bit per level whose group directly before it was collapsed by
+// deleted rows and are saved with the workbook. The summary row/column (below / right of the detail by default,
+// above / left when the sheet's outline settings say so) carries custom.outlineCollapsed: a bit per level whose group directly before it was collapsed by
 // the user, so that expanding an outer group leaves the inner collapsed groups collapsed, as in Excel.
 // All changes go through Univer mutations and form one undo step per user action.
 import { CommandType, ICommandService, IUndoRedoService, IUniverInstanceService, sequenceExecute } from '@univerjs/core'
 import { IRenderManagerService, SheetExtension, Vector2 } from '@univerjs/engine-render'
 import { SheetInterceptorService } from '@univerjs/sheets'
 import { HEADER_UNHIDE_RANGE_VISIBLE_CHECK, HeaderUnhideRenderController, SheetSkeletonManagerService } from '@univerjs/sheets-ui'
-import { el, openDialog, radios } from './ui/dialog.js'
-import { MAX_LEVEL, outlineGroups } from './outline-model.js'
+import { button, check, el, group as fieldset, openDialog, radios } from './ui/dialog.js'
+import { MAX_LEVEL, outlineGroups, outlineSettings, summaryIndex } from './outline-model.js'
 
 export { outlineGroups }
 
@@ -31,7 +31,15 @@ export function createOutline(api) {
   const undoRedo = injector.get(IUndoRedoService)
   const instances = injector.get(IUniverInstanceService)
   const renders = injector.get(IRenderManagerService)
-  const hiddenSymbols = new Set() // sheet ids where Ctrl+8 hid the outline symbols
+  // Per-sheet settings (worksheet custom.sheetlyOutline): summary direction and Ctrl+8 symbols; saved with the file.
+  const settingsOf = (w) => outlineSettings(w.getCustomMetadata?.()?.sheetlyOutline)
+  const writeSettings = (w, v) => {
+    const custom = { ...(w.getCustomMetadata?.() ?? {}) }, next = outlineSettings(v)
+    if (next.isDefault) delete custom.sheetlyOutline; else custom.sheetlyOutline = next.value
+    w.setCustomMetadata(Object.keys(custom).length ? custom : undefined)
+  }
+  const after = (w, axis) => (axis === 'row' ? settingsOf(w).summaryBelow : settingsOf(w).summaryRight)
+  const sumOf = (w, axis, g) => summaryIndex(g, after(w, axis))
 
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
@@ -94,7 +102,7 @@ export function createOutline(api) {
 
   // Keep a summary-row collapse bit only while a group of that level still ends right before it.
   function cleanFlags(w, axis, levels, changes) {
-    const ends = new Set(outlineGroups(levels).map((g) => `${g.end + 1}:${g.level}`))
+    const ends = new Set(outlineGroups(levels).map((g) => `${sumOf(w, axis, g)}:${g.level}`))
     const candidates = new Set([...Object.keys(AX[axis].data(w) ?? {}).map(Number).filter((i) => flagsOf(w, axis, i))])
     for (const i of candidates) {
       const f = changes.get(i)?.flags ?? flagsOf(w, axis, i)
@@ -119,17 +127,17 @@ export function createOutline(api) {
 
   // ---- collapse / expand
   function setCollapsed(w, axis, g, collapse) {
-    const levels = levelMap(w, axis), changes = new Map(), s = g.end + 1
+    const levels = levelMap(w, axis), changes = new Map(), s = sumOf(w, axis, g)
     const flags = flagsOf(w, axis, s), bit = 1 << g.level
     const nf = collapse ? flags | bit : flags & ~bit
-    if (nf !== flags) changes.set(s, { level: levels.get(s) ?? 0, flags: nf })
+    if (nf !== flags && s >= 0) changes.set(s, { level: levels.get(s) ?? 0, flags: nf })
     const range = []
     for (let i = g.start; i <= g.end; i++) range.push(i)
     if (collapse) {
       const ok = apply(w, axis, changes, range, [])
       // Excel never leaves the active cell on a hidden row/column: it moves to the summary row/column.
       const g0 = sel(), cur = axis === 'row' ? g0.startRow : g0.startColumn
-      if (cur >= g.start && cur <= g.end && s < (axis === 'row' ? w.getRowCount() : w.getColumnCount())) {
+      if (cur >= g.start && cur <= g.end && s >= 0 && s < (axis === 'row' ? w.getRowCount() : w.getColumnCount())) {
         if (axis === 'row') ws().getRange(s, g0.startColumn).activate(); else ws().getRange(g0.startRow, s).activate()
       }
       return ok
@@ -138,7 +146,7 @@ export function createOutline(api) {
     const keepHidden = new Set()
     for (const n of outlineGroups(levels)) {
       if (n.level <= g.level || n.start < g.start || n.end > g.end) continue
-      if (flagsOf(w, axis, n.end + 1) & (1 << n.level)) for (let i = n.start; i <= n.end; i++) keepHidden.add(i)
+      if (flagsOf(w, axis, sumOf(w, axis, n)) & (1 << n.level)) for (let i = n.start; i <= n.end; i++) keepHidden.add(i)
     }
     return apply(w, axis, changes, [], range.filter((i) => !keepHidden.has(i)))
   }
@@ -150,7 +158,7 @@ export function createOutline(api) {
     for (const [i, L] of levels) (L >= k ? hide : show).push(i)
     const summaries = new Map()
     for (const g of outlineGroups(levels)) {
-      const s = g.end + 1, f = summaries.get(s) ?? flagsOf(w, axis, s)
+      const s = sumOf(w, axis, g), f = summaries.get(s) ?? flagsOf(w, axis, s)
       summaries.set(s, g.level >= k ? f | (1 << g.level) : f & ~(1 << g.level))
     }
     for (const [s, f] of summaries) if (f !== flagsOf(w, axis, s)) changes.set(s, { level: levels.get(s) ?? 0, flags: f })
@@ -185,7 +193,7 @@ export function createOutline(api) {
   // Hide / Show Detail act on the innermost group holding the active cell (or summarised by it).
   function detail(collapse) {
     const g = sel(), w = ws().getSheet(), st = state(w)
-    const find = (axis, list, i) => list.filter((x) => (x.start <= i && i <= x.end + 1)).sort((a, b) => b.level - a.level)
+    const find = (axis, list, i) => list.filter((x) => (x.start <= i && i <= x.end) || sumOf(w, axis, x) === i).sort((a, b) => b.level - a.level)
     const pick = (axis) => {
       const i = axis === 'row' ? g.startRow : g.startColumn
       const c = find(axis, axis === 'row' ? st.rows : st.cols, i)
@@ -207,15 +215,106 @@ export function createOutline(api) {
     return true
   }
   function toggleSymbols() {
-    const id = ws().getSheetId()
-    if (hiddenSymbols.has(id)) hiddenSymbols.delete(id); else hiddenSymbols.add(id)
+    const w = ws().getSheet()
+    writeSettings(w, { ...settingsOf(w).value, hideSymbols: !settingsOf(w).hideSymbols })
+    schedule()
+    return true
+  }
+  /** Outline Settings: summary rows below / columns right. Collapse bits move to the new summary rows/columns. */
+  function setDirection({ summaryBelow, summaryRight }) {
+    const w = ws().getSheet(), old = settingsOf(w)
+    const moves = [['row', old.summaryBelow, summaryBelow], ['col', old.summaryRight, summaryRight]]
+    const bits = moves.map(([axis, from, to]) => {
+      if (from === to) return null
+      const list = []
+      for (const g of outlineGroups(levelMap(w, axis))) {
+        const a = summaryIndex(g, from), b = summaryIndex(g, to), bit = 1 << g.level
+        if (a >= 0 && flagsOf(w, axis, a) & bit) list.push([a, b, bit])
+      }
+      return list
+    })
+    writeSettings(w, { ...old.value, summaryBelow, summaryRight })
+    moves.forEach(([axis], k) => {
+      if (!bits[k]?.length) return
+      const levels = levelMap(w, axis), flags = new Map()
+      const get = (i) => (flags.has(i) ? flags.get(i) : flagsOf(w, axis, i))
+      for (const [a, , bit] of bits[k]) flags.set(a, get(a) & ~bit)
+      for (const [, b, bit] of bits[k]) if (b >= 0) flags.set(b, get(b) | bit)
+      const changes = new Map([...flags].map(([i, f]) => [i, { level: levels.get(i) ?? 0, flags: f }]))
+      apply(w, axis, changes, [], [])
+    })
     schedule()
     return true
   }
 
+  // Auto Outline: a row whose formulas refer to cells of their own column ending right next to it (above when
+  // summaries are below) summarises the rows from the first referenced one; a referenced row that is itself a
+  // summary pulls in its detail, so a grand total over subtotals (=B5+B9 or SUM(B2:B9)) nests over them. A single
+  // adjacent cell (=A3*2) is not a summary. Columns likewise with references along the row.
+  function autoOutline({ confirm } = {}) {
+    const w = ws().getSheet(), st = settingsOf(w)
+    const found = { row: [], col: [] }
+    const ref = /(\$?)([A-Z]{1,3})(\$?)(\d+)(?::(\$?)([A-Z]{1,3})(\$?)(\d+))?/g
+    const colNum = (L) => [...L].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
+    const formulas = []
+    w.getCellMatrix().forValue((r, c, cell) => { if (typeof cell?.f === 'string' && cell.f.startsWith('=')) formulas.push([r, c, cell.f]) })
+    const refsOf = (f) => {
+      // String literals and references into other sheets do not outline this one.
+      const text = f.replace(/"(?:[^"]|"")*"/g, '""').replace(/'[^']*'![$A-Z0-9:]+|[A-Za-z_][\w.]*![$A-Z0-9:]+/g, '')
+      return [...text.matchAll(ref)].map((m) => { const r0 = +m[4] - 1, c0 = colNum(m[2]); return m[6] ? { r0, c0, r1: +m[8] - 1, c1: colNum(m[6]), range: true } : { r0, c0, r1: r0, c1: c0, range: false } })
+    }
+    for (const [axis, forward] of [['row', st.summaryBelow], ['col', st.summaryRight]]) {
+      const groups = new Map() // summary index -> [start, end]
+      const list = formulas.map(([r, c, f]) => [axis === 'row' ? r : c, axis === 'row' ? c : r, f]).sort((x, y) => (forward ? x[0] - y[0] : y[0] - x[0]))
+      for (const [i, j, f] of list) {
+        // references lying along this summary's line (same column for rows, same row for columns)
+        const along = refsOf(f).filter((x) => (axis === 'row' ? x.c0 === j && x.c1 === j : x.r0 === j && x.r1 === j))
+          .map((x) => (axis === 'row' ? [x.r0, x.r1, x.range] : [x.c0, x.c1, x.range]))
+        if (!along.length || (along.length === 1 && !along[0][2])) continue
+        const lo = Math.min(...along.map((x) => x[0])), hi = Math.max(...along.map((x) => x[1]))
+        if (forward ? hi !== i - 1 || lo >= i : lo !== i + 1 || hi <= i) continue
+        let [a, b] = forward ? [lo, i - 1] : [i + 1, hi]
+        for (const [k, [ga, gb]] of groups) if (k >= a && k <= b) { a = Math.min(a, ga); b = Math.max(b, gb) }
+        const prev = groups.get(i)
+        groups.set(i, prev ? [Math.min(prev[0], a), Math.max(prev[1], b)] : [a, b])
+      }
+      found[axis] = [...groups.values()]
+    }
+    if (!found.row.length && !found.col.length) return message('Cannot create an outline.')
+    const run = () => {
+      clearOutline()
+      for (const axis of ['row', 'col']) {
+        const levels = new Map()
+        const spans = [...new Set(found[axis].map((x) => x.join(':')))].map((x) => x.split(':').map(Number))
+        for (const [a, b] of spans) for (let i = a; i <= b; i++) levels.set(i, Math.min(MAX_LEVEL, (levels.get(i) ?? 0) + 1))
+        const changes = new Map([...levels].map(([i, L]) => [i, { level: L, flags: 0 }]))
+        if (changes.size) apply(w, axis, changes, [], [])
+      }
+      schedule()
+      return true
+    }
+    const st0 = state(w)
+    if ((st0.rowLevels || st0.colLevels) && confirm !== true) {
+      openDialog({ title: 'Sheetly', width: 300, body: el('p', { style: { margin: 0 } }, 'Modify existing outline?'), okLabel: 'OK', onOk: run })
+      return true
+    }
+    return run()
+  }
+
+  function settingsDialog() {
+    const w = ws().getSheet(), st = settingsOf(w)
+    const below = check('Summary rows &below detail', st.summaryBelow), right = check('Summary columns to &right of detail', st.summaryRight)
+    const dir = () => setDirection({ summaryBelow: below.input.checked, summaryRight: right.input.checked })
+    let d = null
+    const create = button('&Create', () => { dir(); d.close(); autoOutline() })
+    d = openDialog({ title: 'Settings', width: 320, body: fieldset('Direction', below.node, right.node), extraButtons: [create], onOk: () => { dir() } })
+    return true
+  }
+
+
   // ---- rendering: gutter inside a widened row / column header
   const gutter = (w, st) => {
-    if (hiddenSymbols.has(w.getSheetId())) return { row: 0, col: 0 }
+    if (settingsOf(w).hideSymbols) return { row: 0, col: 0 }
     return { row: st.rowLevels ? (st.rowLevels + 1) * STEP + 2 : 0, col: st.colLevels ? (st.colLevels + 1) * STEP + 2 : 0 }
   }
   const box = (ctx, x, y, plus) => {
@@ -247,14 +346,16 @@ export function createOutline(api) {
       for (const g of st.rows) {
         if (g.end < seg.startRow - 1 || g.start > seg.endRow + 1) continue
         const x = (g.level - 1) * STEP + STEP / 2 + 1
-        const shut = collapsed(w, 'row', g)
+        const shut = collapsed(w, 'row', g), below = after(w, 'row')
         if (!shut && bottom(g.end) > top(g.start)) {
+          // The bracket runs along the detail; its tick sits at the end away from the summary row.
+          const a = below ? top(g.start) + 2 : top(g.start), b = below ? bottom(g.end) : bottom(g.end) - 2, tick = below ? a + 0.5 : b - 0.5
           ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.beginPath()
-          ctx.moveTo(x + 0.5, top(g.start) + 2); ctx.lineTo(x + 0.5, bottom(g.end)); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(x - 3, top(g.start) + 2.5); ctx.lineTo(x + 1, top(g.start) + 2.5); ctx.stroke()
+          ctx.moveTo(x + 0.5, a); ctx.lineTo(x + 0.5, b); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x - 3, tick); ctx.lineTo(x + 1, tick); ctx.stroke()
         }
-        const s = g.end + 1
-        if (s < acc.length && bottom(s) - top(s) >= BOX) box(ctx, x + 0.5, top(s) + (bottom(s) - top(s)) / 2, shut)
+        const s = sumOf(w, 'row', g)
+        if (s >= 0 && s < acc.length && bottom(s) - top(s) >= BOX) box(ctx, x + 0.5, top(s) + (bottom(s) - top(s)) / 2, shut)
       }
       ctx.restore()
     }
@@ -278,14 +379,15 @@ export function createOutline(api) {
       for (const g of st.cols) {
         if (g.end < seg.startColumn - 1 || g.start > seg.endColumn + 1) continue
         const y = (g.level - 1) * STEP + STEP / 2 + 1
-        const shut = collapsed(w, 'col', g)
+        const shut = collapsed(w, 'col', g), toRight = after(w, 'col')
         if (!shut && right(g.end) > left(g.start)) {
+          const a = toRight ? left(g.start) + 2 : left(g.start), b = toRight ? right(g.end) : right(g.end) - 2, tick = toRight ? a + 0.5 : b - 0.5
           ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.beginPath()
-          ctx.moveTo(left(g.start) + 2, y + 0.5); ctx.lineTo(right(g.end), y + 0.5); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(left(g.start) + 2.5, y - 3); ctx.lineTo(left(g.start) + 2.5, y + 1); ctx.stroke()
+          ctx.moveTo(a, y + 0.5); ctx.lineTo(b, y + 0.5); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(tick, y - 3); ctx.lineTo(tick, y + 1); ctx.stroke()
         }
-        const s = g.end + 1
-        if (s < acc.length && right(s) - left(s) >= BOX) box(ctx, left(s) + (right(s) - left(s)) / 2, y + 0.5, shut)
+        const s = sumOf(w, 'col', g)
+        if (s >= 0 && s < acc.length && right(s) - left(s) >= BOX) box(ctx, left(s) + (right(s) - left(s)) / 2, y + 0.5, shut)
       }
       ctx.restore()
     }
@@ -340,7 +442,7 @@ export function createOutline(api) {
     const axis = inRowGutter ? 'row' : 'col'
     const i = axis === 'row' ? sk.getRowIndexByOffsetY(rel.y, scaleY, scroll) : sk.getColumnIndexByOffsetX(rel.x, scaleX, scroll)
     const level = Math.floor((axis === 'row' ? x : y) / STEP) + 1
-    const g = (axis === 'row' ? st.rows : st.cols).find((x2) => x2.level === level && (x2.end + 1 === i || (x2.start <= i && i <= x2.end)))
+    const g = (axis === 'row' ? st.rows : st.cols).find((x2) => x2.level === level && (sumOf(w, axis, x2) === i || (x2.start <= i && i <= x2.end)))
     if (g) commands.executeCommand('sheetly.outline.toggle', { axis, start: g.start, end: g.end, level: g.level })
   }
 
@@ -405,6 +507,9 @@ export function createOutline(api) {
     'sheetly.outline.show-detail': () => detail(false),
     'sheetly.outline.clear': () => clearOutline(),
     'sheetly.outline.toggle-symbols': () => toggleSymbols(),
+    'sheetly.outline.auto': (p) => autoOutline(p),
+    'sheetly.outline.settings': () => settingsDialog(),
+    'sheetly.outline.set-direction': (p) => setDirection(p),
   }
   for (const [id, fn] of Object.entries(commandDefs)) commands.registerCommand({ id, type: CommandType.COMMAND, handler: (_a, p) => fn(p ?? {}) !== false })
 
@@ -440,7 +545,9 @@ export function createOutline(api) {
 
   return {
     group, ungroup, toggle, showLevel, hideDetail: () => detail(true), showDetail: () => detail(false), clearOutline, toggleSymbols, refresh,
-    showSymbols: () => { hiddenSymbols.delete(ws().getSheetId()); schedule() },
+    autoOutline, settingsDialog, setDirection,
+    settings: () => settingsOf(ws().getSheet()).value,
+    showSymbols: () => { const w = ws().getSheet(); if (settingsOf(w).hideSymbols) writeSettings(w, { ...settingsOf(w).value, hideSymbols: false }); schedule() },
     /** For tests: outline of the active sheet. */
     info: () => { const w = ws().getSheet(), st = state(w); return { ...st, gutter: gutter(w, st),
       rowsCollapsed: st.rows.map((g) => collapsed(w, 'row', g)), colsCollapsed: st.cols.map((g) => collapsed(w, 'col', g)),

@@ -1,5 +1,5 @@
 diff --git a/node_modules/exceljs/dist/exceljs.js b/node_modules/exceljs/dist/exceljs.js
-index ab2c9d6..3815692 100644
+index ab2c9d6..78ebef1 100644
 --- a/node_modules/exceljs/dist/exceljs.js
 +++ b/node_modules/exceljs/dist/exceljs.js
 @@ -1273,6 +1273,7 @@ class Column {
@@ -45,14 +45,91 @@ index ab2c9d6..3815692 100644
        cells,
        number: this.number,
        min,
-@@ -2478,6 +2487,7 @@ class Row {
+@@ -2476,8 +2485,11 @@ class Row {
+     } else {
+       delete this.height;
      }
++    // Sheetly: customHeight from the file (see row-xform).
++    this.customHeight = value.customHeight;
      this.hidden = value.hidden;
      this.outlineLevel = value.outlineLevel || 0;
 +    this._collapsed = !!value.collapsed;
      this.style = value.style && JSON.parse(JSON.stringify(value.style)) || {};
    }
  }
+@@ -3070,7 +3082,8 @@ class Workbook {
+       properties: this.properties,
+       worksheets: this.worksheets.map(worksheet => worksheet.model),
+       sheets: this.worksheets.map(ws => ws.model).filter(Boolean),
+-      definedNames: this._definedNames.model,
++      // Sheetly: extraDefinedNames are written as given ({name, localSheetId, ranges: [text]}).
++      definedNames: this._definedNames.model.concat(this.extraDefinedNames || []),
+       views: this.views,
+       company: this.company,
+       manager: this.manager,
+@@ -3123,6 +3136,8 @@ class Workbook {
+       worksheet.model = worksheetModel;
+     });
+     this._definedNames.model = value.definedNames;
++    // Sheetly: every <definedName> as read, with its localSheetId and text.
++    this.rawDefinedNames = value.definedNames || [];
+     this.views = value.views;
+     this._themes = value.themes;
+     this.media = value.media || [];
+@@ -6137,7 +6152,9 @@ class DefinedNamesXform extends BaseXform {
+   parseClose() {
+     this.model = {
+       name: this._parsedName,
+-      ranges: extractRanges(this._parsedText.join(''))
++      ranges: extractRanges(this._parsedText.join('')),
++      // Sheetly: the definition as written (constants and formulas are not ranges).
++      text: this._parsedText.join('')
+     };
+     if (this._parsedLocalSheetId !== undefined) {
+       this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
+@@ -11463,6 +11480,10 @@ class RowXform extends BaseXform {
+       if (node.attributes.ht) {
+         model.height = parseFloat(node.attributes.ht);
+       }
++      // Sheetly: keep whether the height was set by hand (auto-fit rows carry ht without customHeight).
++      if (node.attributes.ht) {
++        model.customHeight = utils.parseBoolean(node.attributes.customHeight);
++      }
+       if (node.attributes.outlineLevel) {
+         model.outlineLevel = parseInt(node.attributes.outlineLevel, 10);
+       }
+@@ -11768,6 +11789,7 @@ class SheetViewXform extends BaseXform {
+     add('showRuler', '0', model.showRuler === false);
+     add('showRowColHeaders', '0', model.showRowColHeaders === false);
+     add('showGridLines', '0', model.showGridLines === false);
++    add('showOutlineSymbols', '0', model.showOutlineSymbols === false);
+     add('zoomScale', model.zoomScale, model.zoomScale);
+     add('zoomScaleNormal', model.zoomScaleNormal, model.zoomScaleNormal);
+     add('view', model.style, model.style);
+@@ -11833,6 +11855,7 @@ class SheetViewXform extends BaseXform {
+           showRuler: !(node.attributes.showRuler === '0'),
+           showRowColHeaders: !(node.attributes.showRowColHeaders === '0'),
+           showGridLines: !(node.attributes.showGridLines === '0'),
++          showOutlineSymbols: !(node.attributes.showOutlineSymbols === '0'),
+           zoomScale: parseInt(node.attributes.zoomScale || '100', 10),
+           zoomScaleNormal: parseInt(node.attributes.zoomScaleNormal || '100', 10),
+           style: node.attributes.view
+@@ -11880,6 +11903,7 @@ class SheetViewXform extends BaseXform {
+             showRuler: this.sheetView.showRuler,
+             showRowColHeaders: this.sheetView.showRowColHeaders,
+             showGridLines: this.sheetView.showGridLines,
++            showOutlineSymbols: this.sheetView.showOutlineSymbols,
+             zoomScale: this.sheetView.zoomScale,
+             zoomScaleNormal: this.sheetView.zoomScaleNormal
+           };
+@@ -11901,6 +11925,7 @@ class SheetViewXform extends BaseXform {
+             showRuler: this.sheetView.showRuler,
+             showRowColHeaders: this.sheetView.showRowColHeaders,
+             showGridLines: this.sheetView.showGridLines,
++            showOutlineSymbols: this.sheetView.showOutlineSymbols,
+             zoomScale: this.sheetView.zoomScale,
+             zoomScaleNormal: this.sheetView.zoomScaleNormal
+           };
 diff --git a/node_modules/exceljs/lib/doc/column.js b/node_modules/exceljs/lib/doc/column.js
 index c7fc282..e13503a 100644
 --- a/node_modules/exceljs/lib/doc/column.js
@@ -85,7 +162,7 @@ index c7fc282..e13503a 100644
      return JSON.stringify({
        key: this.key,
 diff --git a/node_modules/exceljs/lib/doc/row.js b/node_modules/exceljs/lib/doc/row.js
-index 054f52a..f4a407b 100644
+index 054f52a..e41f79c 100644
 --- a/node_modules/exceljs/lib/doc/row.js
 +++ b/node_modules/exceljs/lib/doc/row.js
 @@ -323,12 +323,18 @@ class Row {
@@ -117,7 +194,12 @@ index 054f52a..f4a407b 100644
        ? {
            cells,
            number: this.number,
-@@ -407,6 +414,7 @@ class Row {
+@@ -404,9 +411,12 @@ class Row {
+     } else {
+       delete this.height;
+     }
++    // Sheetly: customHeight from the file (see row-xform).
++    this.customHeight = value.customHeight;
  
      this.hidden = value.hidden;
      this.outlineLevel = value.outlineLevel || 0;
@@ -125,3 +207,90 @@ index 054f52a..f4a407b 100644
  
      this.style = (value.style && JSON.parse(JSON.stringify(value.style))) || {};
    }
+diff --git a/node_modules/exceljs/lib/doc/workbook.js b/node_modules/exceljs/lib/doc/workbook.js
+index 8e7f46e..54577e9 100644
+--- a/node_modules/exceljs/lib/doc/workbook.js
++++ b/node_modules/exceljs/lib/doc/workbook.js
+@@ -160,7 +160,8 @@ class Workbook {
+       properties: this.properties,
+       worksheets: this.worksheets.map(worksheet => worksheet.model),
+       sheets: this.worksheets.map(ws => ws.model).filter(Boolean),
+-      definedNames: this._definedNames.model,
++      // Sheetly: extraDefinedNames are written as given ({name, localSheetId, ranges: [text]}).
++      definedNames: this._definedNames.model.concat(this.extraDefinedNames || []),
+       views: this.views,
+       company: this.company,
+       manager: this.manager,
+@@ -212,6 +213,8 @@ class Workbook {
+     });
+ 
+     this._definedNames.model = value.definedNames;
++    // Sheetly: every <definedName> as read, with its localSheetId and text.
++    this.rawDefinedNames = value.definedNames || [];
+     this.views = value.views;
+     this._themes = value.themes;
+     this.media = value.media || [];
+diff --git a/node_modules/exceljs/lib/xlsx/xform/book/defined-name-xform.js b/node_modules/exceljs/lib/xlsx/xform/book/defined-name-xform.js
+index 9ed8fec..9bad67d 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/book/defined-name-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/book/defined-name-xform.js
+@@ -35,6 +35,8 @@ class DefinedNamesXform extends BaseXform {
+     this.model = {
+       name: this._parsedName,
+       ranges: extractRanges(this._parsedText.join('')),
++      // Sheetly: the definition as written (constants and formulas are not ranges).
++      text: this._parsedText.join(''),
+     };
+     if (this._parsedLocalSheetId !== undefined) {
+       this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js
+index 890a0fc..3cfd999 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js
+@@ -89,6 +89,10 @@ class RowXform extends BaseXform {
+       if (node.attributes.ht) {
+         model.height = parseFloat(node.attributes.ht);
+       }
++      // Sheetly: keep whether the height was set by hand (auto-fit rows carry ht without customHeight).
++      if (node.attributes.ht) {
++        model.customHeight = utils.parseBoolean(node.attributes.customHeight);
++      }
+       if (node.attributes.outlineLevel) {
+         model.outlineLevel = parseInt(node.attributes.outlineLevel, 10);
+       }
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/sheet-view-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/sheet-view-xform.js
+index f53fdcd..7c41bd4 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/sheet-view-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/sheet-view-xform.js
+@@ -37,6 +37,7 @@ class SheetViewXform extends BaseXform {
+     add('showRuler', '0', model.showRuler === false);
+     add('showRowColHeaders', '0', model.showRowColHeaders === false);
+     add('showGridLines', '0', model.showGridLines === false);
++    add('showOutlineSymbols', '0', model.showOutlineSymbols === false);
+     add('zoomScale', model.zoomScale, model.zoomScale);
+     add('zoomScaleNormal', model.zoomScaleNormal, model.zoomScaleNormal);
+     add('view', model.style, model.style);
+@@ -108,6 +109,7 @@ class SheetViewXform extends BaseXform {
+           showRuler: !(node.attributes.showRuler === '0'),
+           showRowColHeaders: !(node.attributes.showRowColHeaders === '0'),
+           showGridLines: !(node.attributes.showGridLines === '0'),
++          showOutlineSymbols: !(node.attributes.showOutlineSymbols === '0'),
+           zoomScale: parseInt(node.attributes.zoomScale || '100', 10),
+           zoomScaleNormal: parseInt(node.attributes.zoomScaleNormal || '100', 10),
+           style: node.attributes.view,
+@@ -158,6 +160,7 @@ class SheetViewXform extends BaseXform {
+             showRuler: this.sheetView.showRuler,
+             showRowColHeaders: this.sheetView.showRowColHeaders,
+             showGridLines: this.sheetView.showGridLines,
++            showOutlineSymbols: this.sheetView.showOutlineSymbols,
+             zoomScale: this.sheetView.zoomScale,
+             zoomScaleNormal: this.sheetView.zoomScaleNormal,
+           };
+@@ -179,6 +182,7 @@ class SheetViewXform extends BaseXform {
+             showRuler: this.sheetView.showRuler,
+             showRowColHeaders: this.sheetView.showRowColHeaders,
+             showGridLines: this.sheetView.showGridLines,
++            showOutlineSymbols: this.sheetView.showOutlineSymbols,
+             zoomScale: this.sheetView.zoomScale,
+             zoomScaleNormal: this.sheetView.zoomScaleNormal,
+           };

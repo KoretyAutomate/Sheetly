@@ -17,3 +17,14 @@ export function outlineGroups(levels) {
   closeFrom(1)
   return out.sort((a, b) => a.level - b.level || a.start - b.start)
 }
+
+/** Per-sheet outline settings (worksheet custom.sheetlyOutline): Excel's defaults are summary rows below the
+ *  detail, summary columns to the right, outline symbols shown. */
+export function outlineSettings(v) {
+  const summaryBelow = v?.summaryBelow !== false, summaryRight = v?.summaryRight !== false, hideSymbols = v?.hideSymbols === true
+  return { summaryBelow, summaryRight, hideSymbols, isDefault: summaryBelow && summaryRight && !hideSymbols,
+    value: { summaryBelow, summaryRight, hideSymbols } }
+}
+
+/** Index of a group's summary row/column: after the group (below / right) or before it (above / left). */
+export const summaryIndex = (g, after) => (after ? g.end + 1 : g.start - 1)

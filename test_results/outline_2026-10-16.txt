@@ -1,4 +1,4 @@
-outline.test.mjs  2026-10-16T14:55:45.065Z
+outline.test.mjs  2026-10-16T21:56:52.752Z
 pass 27/27
 PASS  xlsx: row levels survive
 PASS  xlsx: hidden rows survive
@@ -27,3 +27,4 @@ PASS  column level button 2 shows them
 PASS  header size stable after refreshes
 PASS  clear outline restores header size
 PASS  no page errors
+

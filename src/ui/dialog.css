@@ -56,3 +56,14 @@
 .sx-print table { border-collapse: collapse; font: 11pt Calibri, Arial, sans-serif; }
 .sx-print td { padding: 1px 4px; white-space: nowrap; }
 @media (max-width: 640px) { .sx-print { flex-direction: column; } .sx-print aside { width: auto; border-right: 0; } }
+.sx-qa { position: fixed; z-index: 9500; background: var(--sx-bg); color: var(--sx-fg); border: 1px solid var(--sx-border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.22); font: 12px/1.4 "Segoe UI", system-ui, sans-serif; width: min(420px, calc(100vw - 32px)); }
+.sx-qa-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--sx-border); }
+.sx-qa-tab { border: 0; border-bottom: 2px solid transparent; background: none; color: var(--sx-muted); font: 600 11px/1.4 inherit; padding: 4px 8px; cursor: pointer; }
+.sx-qa-tab[aria-selected="true"] { color: var(--sx-accent); border-bottom-color: var(--sx-accent); }
+.sx-qa-items { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; }
+.sx-qa-item { border: 1px solid transparent; background: none; color: inherit; font: inherit; padding: 6px 8px; min-width: 72px; cursor: pointer; }
+.sx-qa-item:hover, .sx-qa-item[aria-current="true"] { border-color: var(--sx-border); background: var(--sx-title); }
+.sx-qa-item:focus-visible, .sx-qa-tab:focus-visible { outline: 2px solid var(--sx-accent); outline-offset: 1px; }
+.sx-qa-hint { color: var(--sx-muted); padding: 0 8px 6px; }
+.sx-qa-item[aria-disabled="true"] { opacity: .45; cursor: default; }

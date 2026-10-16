@@ -13,7 +13,7 @@ const excelSerial = (d) => Math.floor((d - new Date(1899, 11, 30)) / 864e5)
 const dayFraction = (d) => (d - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5
 const PRIORITY = 200
 
-export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline) {
+export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline, quickAnalysis) {
   const commands = api._injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook()
   const sheet = () => wb().getActiveSheet()
@@ -32,16 +32,17 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
   const pageCols = () => { const v = visible(); return Math.max(1, v.endColumn - v.startColumn) }
   const fmt = (p) => { cur().setNumberFormat(p); return true }
   const lastCell = () => { const u = dialogs.usedRange(); return [u.endRow, u.endColumn] }
+  const multiCell = () => { const g = sel(); return g.startRow !== g.endRow || g.startColumn !== g.endColumn }
   const app = (name) => { window.sheetly?.appAction?.(name); return true }
 
-  // Modes: F8 Extend Selection, End mode.
-  const mode = { extend: false, end: false }
+  // Modes: F8 Extend Selection, Shift+F8 Add to Selection, End mode.
+  const mode = { extend: false, end: false, add: false }
   window.__sheetlyModes = mode
   const status = document.createElement('div')
   Object.assign(status.style, { position: 'fixed', left: '8px', bottom: '4px', font: '12px system-ui, sans-serif', color: '#605e5c', pointerEvents: 'none', zIndex: 5 })
   status.setAttribute('aria-live', 'polite')
   document.body.append(status)
-  const showMode = () => { status.textContent = mode.extend ? 'Extend Selection' : mode.end ? 'End Mode' : '' }
+  const showMode = () => { status.textContent = mode.extend ? 'Extend Selection' : mode.add ? 'Add to Selection' : mode.end ? 'End Mode' : '' }
   const inExtend = (ctx) => mode.extend && whenSheetEditorFocused(ctx)
   const inEnd = (ctx) => mode.end && whenSheetEditorFocused(ctx)
 
@@ -69,7 +70,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     ['select-row-start', SHIFT | KeyCode.HOME, () => { const [r, c] = activeCell(); return selectRect(r, 0, r, c) }],
     ['current-region', CTRL | SHIFT | DIGIT(8), () => { const [r, c] = activeCell(); dialogs.select([dialogs.currentRegion(r, c)]); return true }],
     ['collapse-selection', SHIFT | KeyCode.BACKSPACE, () => { const [r, c] = activeCell(); return goto(r, c) }],
-    ['extend-mode', KeyCode.F8, () => { mode.extend = !mode.extend; mode.end = false; showMode(); return true }],
+    ['extend-mode', KeyCode.F8, () => { mode.extend = !mode.extend; mode.end = false; leaveAdd(); showMode(); return true }],
+    ['add-mode', SHIFT | KeyCode.F8, () => { if (mode.add) leaveAdd(); else enterAdd(); mode.extend = mode.end = false; showMode(); return true }],
     ['end-mode', KeyCode.END, () => { mode.end = !mode.end; mode.extend = false; showMode(); return true }],
     ['select-notes', CTRL | SHIFT | KeyCode.O, () => dialogs.runGoToSpecial('notes') || true],
     ['select-visible', ALT | SEMICOLON, () => dialogs.runGoToSpecial('visible') || true],
@@ -134,6 +136,7 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     ['context-menu-key', CONTEXT_MENU_KEY, () => extras.contextMenu()],
     ['toggle-objects', CTRL | DIGIT(6), () => extras.toggleObjects()],
     ['formula-bar', CTRL | SHIFT | KeyCode.U, () => extras.toggleFormulaBar()],
+    ['quick-analysis', CTRL | KeyCode.Q, () => quickAnalysis.open()],
     // ---- workbook / window (actions run in the Electron main process)
     ['file-new', CTRL | KeyCode.N, () => app('new')],
     ['file-open', CTRL | KeyCode.O, () => app('open')],
@@ -151,6 +154,32 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     ['window-maximize', CTRL | KeyCode.F10, () => app('maximize')],
     ['zoom-out', CTRL | ALT | MINUS, () => zoomBy(-0.1)],
   ]
+
+  // Shift+F8 Add to Selection: the areas selected when the mode starts (and each area finished before a mouse
+  // click) stay selected while arrows, Shift+arrows and clicks make a new area; Univer's own selection changes
+  // replace the selection, so the kept areas are put back in front of the new one.
+  let kept = [], restoring = false
+  const selections = () => (sheet().getSelection?.()?.getActiveRangeList?.() ?? []).map((r) => r.getRange())
+  const sameRange = (a, b) => a.startRow === b.startRow && a.endRow === b.endRow && a.startColumn === b.startColumn && a.endColumn === b.endColumn
+  function enterAdd() { mode.add = true; kept = selections() }
+  function leaveAdd() { mode.add = false; kept = [] }
+  commands.onCommandExecuted((cmd) => {
+    if (!mode.add || restoring || cmd.id !== 'sheet.operation.set-selections') return
+    const next = cmd.params?.selections ?? []
+    if (!next.length || kept.every((k) => next.some((n) => sameRange(n.range, k)))) return
+    const extra = kept.filter((k) => !next.some((n) => sameRange(n.range, k))).map((range) => ({ range: { ...range, rangeType: range.rangeType ?? 0 }, primary: null, style: null }))
+    restoring = true
+    try { commands.syncExecuteCommand('sheet.operation.set-selections', { ...cmd.params, selections: [...extra, ...next] }) } finally { restoring = false }
+  })
+  // Before a new area starts (a click, or a plain arrow moving away), the area just made joins the kept ones; a
+  // lone active cell left by moving with the arrows does not.
+  const commit = () => {
+    const all = selections()
+    kept = all.filter((r, i) => i < all.length - 1 || kept.some((k) => sameRange(k, r)) || r.startRow !== r.endRow || r.startColumn !== r.endColumn)
+  }
+  document.addEventListener('pointerdown', (e) => { if (mode.add && e.target instanceof HTMLCanvasElement) commit() }, true)
+  // Univer's key listener runs before any listener added here, so commit just before the move command instead.
+  commands.beforeCommandExecuted((cmd) => { if (mode.add && (cmd.id === 'sheet.command.move-selection' || cmd.id.startsWith('sheetly.move-from-active-'))) commit() })
 
   function switchSheet(step) {
     const w = wb(), s = w.getSheets().filter((x) => !x.isSheetHidden())
@@ -246,6 +275,15 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
           cloned.add(key)
           shortcuts.registerShortcut({ ...item, binding: item.binding & ~SHIFT, priority: PRIORITY + 10, preconditions: inExtend })
         }
+        // A plain arrow with a range selected moves from the active cell (A1:B2 with A1 active, Down -> A2);
+        // Univer moves from the edge of the range. Collapse to the active cell first, then let Univer move.
+        if (item.id === 'sheet.command.move-selection' && !p.jumpOver && item.binding >= KeyCode.ARROW_LEFT && item.binding <= KeyCode.ARROW_DOWN) {
+          cloned.add(key)
+          const id = `sheetly.move-from-active-${item.binding}`
+          commands.registerCommand({ id, type: CommandType.COMMAND, handler: async () => { const [r, c] = activeCell(); goto(r, c); return commands.executeCommand(item.id, p) } })
+          shortcuts.registerShortcut({ id, binding: item.binding, priority: PRIORITY + 5,
+            preconditions: (ctx) => !mode.extend && !mode.end && whenSheetEditorFocused(ctx) && multiCell() })
+        }
         // End mode: End then arrow = Ctrl+arrow.
         if (item.id === 'sheet.command.move-selection' && p.jumpOver === 1 && (item.binding & ~CTRL) >= KeyCode.ARROW_LEFT && (item.binding & ~CTRL) <= KeyCode.ARROW_DOWN) {
           cloned.add(key)
@@ -266,8 +304,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
   shortcuts.shortcutChanged$.subscribe(cloneBindings)
 
   // Leaving the modes: Esc ends both.
-  commands.registerCommand({ id: 'sheetly.leave-modes', type: CommandType.COMMAND, handler: () => { mode.extend = mode.end = false; showMode(); return true } })
-  shortcuts.registerShortcut({ id: 'sheetly.leave-modes', binding: KeyCode.ESC, priority: PRIORITY + 10, preconditions: () => mode.extend || mode.end })
+  commands.registerCommand({ id: 'sheetly.leave-modes', type: CommandType.COMMAND, handler: () => { mode.extend = mode.end = false; leaveAdd(); showMode(); return true } })
+  shortcuts.registerShortcut({ id: 'sheetly.leave-modes', binding: KeyCode.ESC, priority: PRIORITY + 10, preconditions: () => mode.extend || mode.end || mode.add })
 
   // While editing a cell: Shift+F3 Insert Function, F3 Paste Name, Ctrl+Shift+A argument names.
   for (const [name, binding, handler] of [['edit-insert-function', SHIFT | KeyCode.F3, () => extras.insertFunction()],
@@ -318,7 +356,8 @@ export const SHORTCUT_DOCS = [
   ['Ctrl+Space / Shift+Space', 'Select column / row'], ['Shift+Arrow', 'Extend the selection'],
   ['Ctrl+Shift+Arrow', 'Extend to the edge of the data'], ['Ctrl+Shift+Home / End', 'Extend to A1 / the last used cell'],
   ['Ctrl+Shift+*', 'Select the current region'], ['Shift+Backspace', 'Select only the active cell'],
-  ['F8', 'Extend Selection mode'], ['End, Arrow', 'End mode: move to the edge of the data'],
+  ['F8', 'Extend Selection mode'], ['Shift+F8', 'Add to Selection mode'], ['F6 / Shift+F6', 'Move between the worksheet, ribbon, task pane and status bar'],
+  ['Ctrl+F1', 'Collapse or expand the ribbon'], ['Ctrl+Q', 'Quick Analysis'], ['End, Arrow', 'End mode: move to the edge of the data'],
   ['Ctrl+Shift+O', 'Select cells with notes'], ['Alt+;', 'Select visible cells only'], ['Ctrl+\\ / Ctrl+Shift+|', 'Row / column differences'],
   ['Ctrl+[ / Ctrl+]', 'Select precedents / dependents'],
   ['F2', 'Edit the active cell'], ['Esc', 'Cancel editing'], ['Enter / Shift+Enter', 'Commit and move down / up'],

@@ -463,7 +463,8 @@ export function createDialogs(api) {
       const vert = el('select', { 'aria-label': 'Vertical' }, ...[['top', 'Top'], ['middle', 'Center'], ['bottom', 'Bottom']].map(([v, t]) => el('option', { value: v }, t)))
       vert.value = { 1: 'top', 2: 'middle', 3: 'bottom' }[style.vt] ?? 'bottom'
       const wrap = check('Wrap text', style.tb === 3), shrink = check('Shrink to fit', !!range.getShrinkToFit?.()), merge = check('Merge cells', range.isMerged?.())
-      const deg = el('input', { type: 'number', min: -90, max: 90, value: style.tr?.a ?? 0, 'aria-label': 'Degrees' })
+      // Excel's degrees count counterclockwise; Univer's angle clockwise.
+      const deg = el('input', { type: 'number', min: -90, max: 90, value: -(style.tr?.a ?? 0) || 0, 'aria-label': 'Degrees' })
       panels.Alignment = el('div', {}, group('Text alignment', field('Horizontal:', horiz), field('Vertical:', vert)),
         group('Text control', wrap.node, shrink.node, merge.node), field('Orientation (degrees):', deg))
       apply.push(() => {
@@ -473,7 +474,7 @@ export function createDialogs(api) {
         range.setShrinkToFit?.(shrink.input.checked)
         if (merge.input.checked && !range.isMerged()) range.merge()
         else if (!merge.input.checked && range.isMerged()) range.breakApart()
-        if (+deg.value !== (style.tr?.a ?? 0)) range.setTextRotation(+deg.value)
+        if (-deg.value !== (style.tr?.a ?? 0)) range.setTextRotation(-deg.value || 0)
       })
     }
     // Font

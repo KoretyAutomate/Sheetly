@@ -1,0 +1,59 @@
+xlsx fidelity  2026-10-16T21:55:55.504Z
+PASS  write: style id resolved (bold + fill)
+PASS  write: font italic/underline/strike/size/name/colour
+PASS  write: borders
+PASS  write: alignment (Univer angle-up -45 -> Excel 45)
+PASS  write: vertical text
+PASS  write: formula error result
+PASS  write: number format
+PASS  write: custom row height in points, auto height not written
+PASS  write: frozen panes
+PASS  write: showOutlineSymbols=0
+PASS  write: outlinePr summaryBelow=0
+PASS  write: tab colour
+PASS  write: hidden sheet
+PASS  write: defined name
+PASS  write: note
+PASS  round-trip: bold + fill
+PASS  round-trip: font
+PASS  round-trip: borders
+PASS  round-trip: alignment + rotation (Univer -45 = Excel 45 counterclockwise)
+PASS  round-trip: vertical text
+PASS  round-trip: date serial stays a number
+PASS  round-trip: error result
+PASS  round-trip: row height
+PASS  round-trip: freeze
+PASS  round-trip: tab colour
+PASS  round-trip: outline settings
+PASS  round-trip: hidden sheet
+PASS  round-trip: defined name
+PASS  round-trip: note
+PASS  read: date becomes an Excel serial
+PASS  read: shared formula clones translated
+PASS  read: error result kept
+PASS  read: boolean
+PASS  read: merged-away cell left empty
+PASS  read: summary above -> collapse bit on the row before the group
+PASS  read: summary direction
+PASS  write: #rgb and rgb() colours normalised
+PASS  write: shared-formula cell gets its formula from the resolver
+PASS  write: _xlfn. / _xlfn._xlws. prefixes added
+PASS  write: text "#N/A" stays text, an error value is written as an error
+PASS  write: row style (bold row) and its cells
+PASS  write: column style (italic column G)
+PASS  write: very hidden sheet
+PASS  write: freeze keeps the scrolled top-left cell
+PASS  round-trip: constant name
+PASS  round-trip: sheet-scoped and workbook names with the same name both kept
+PASS  round-trip: blank cell with a border kept
+PASS  round-trip: _xlfn. removed on load
+PASS  round-trip: row and column styles
+PASS  round-trip: very hidden
+PASS  round-trip: scrolled freeze
+PASS  read: theme colour (accent1 of the file's theme, Office 2007 here) resolved
+PASS  read: theme colour with tint (Accent 1, Lighter 40% = 95B3D7)
+PASS  read: indexed colour
+PASS  read: built-in format 14 shows as m/d/yyyy
+PASS  read: auto-fit row stays automatic, custom row fixed
+
+56/56 passed

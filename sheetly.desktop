@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Sheetly
-Comment=Excel-compatible spreadsheet
-Exec=/home/korety/Project/Sheetly/sheetly.sh
-Terminal=false
-Type=Application
-Categories=Office;Spreadsheet;
-MimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;

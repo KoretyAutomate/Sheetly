@@ -47,8 +47,10 @@ import { createDialogs } from './excel-dialogs.js'
 import { createCharts } from './charts.js'
 import { createExtras } from './excel-extras.js'
 import { createOutline } from './outline.js'
+import { installPanes } from './panes.js'
+import { createQuickAnalysis } from './quick-analysis.js'
 import { setDialogShortcutService } from './ui/dialog.js'
-import { xlsxToSnapshot, snapshotToXlsx } from './xlsx.js'
+import { xlsxToSnapshot, snapshotToXlsx, formulaResolver } from './xlsx.js'
 
 let univerAPI
 const getApi = () => univerAPI
@@ -87,8 +89,10 @@ setDialogShortcutService(shortcutSvc)
 const charts = createCharts(univerAPI, dialogs)
 const extras = createExtras(univerAPI)
 const outline = createOutline(univerAPI)
-installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline)
-window.__sheetly = { dialogs, charts, extras, outline, keyTips: keyTipState }
+const quickAnalysis = createQuickAnalysis(univerAPI, { dialogs, charts })
+const panes = installPanes(univerAPI)
+installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline, quickAnalysis)
+window.__sheetly = { dialogs, charts, extras, outline, keyTips: keyTipState, panes, quickAnalysis, xlsx: { xlsxToSnapshot, snapshotToXlsx, save: () => workbookToXlsx(univerAPI.getActiveWorkbook()) } }
 const contextService = univerAPI._injector.get(IContextService)
 setKeyTipTree(buildKeyTipTree(univerAPI, { dialogs, extras, charts, outline }), { canStart: () => whenSheetEditorFocused(contextService) })
 // Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which
@@ -115,9 +119,11 @@ async function openFile() {
   univerAPI.createWorkbook({ ...snap, name: f.name, locale: LocaleType.EN_US })
   window.sheetly.setCurrent(f.path)
 }
+// Filled-down formulas are kept by Univer as shared-formula ids; their text comes from the live workbook.
+const workbookToXlsx = (wb) => snapshotToXlsx(wb.save(), { formulaOf: formulaResolver(wb) })
 async function saveFile(saveAs) {
   const wb = univerAPI.getActiveWorkbook()
-  const data = await snapshotToXlsx(wb.save())
+  const data = await workbookToXlsx(wb)
   await window.sheetly.save(data, saveAs)
 }
 window.sheetly.onMenu((cmd) => ({ open: openFile, save: () => saveFile(false), saveAs: () => saveFile(true) })[cmd]?.())
