@@ -34,6 +34,9 @@ const reset = () => run(`
   document.querySelectorAll('.sx-chart').forEach((c) => c.closest('[class*="float"]')?.remove?.())
   if (window.__sheetly.extras.isShowingFormulas()) window.__sheetly.extras.toggleShowFormulas()
   window.__sheetly.outline.clearOutline(); window.__sheetly.outline.showSymbols()
+  try { ws.cancelFreeze() } catch (e) {}
+  try { ws.getRange(0, 0, 60, 12).breakApart() } catch (e) {}
+  try { ws.setColumnWidths(0, 12, 88) } catch (e) {}
   try { ws.showColumns(0, 12); ws.showRows(0, 60) } catch (e) {}
   ws.getRange(0, 0, 60, 12).clear()
   for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) ws.getRange(r, c).setValue(r * 4 + c + 1)
@@ -170,6 +173,36 @@ T('Alt+Shift+Left ungroups', `S().getRange('3:5').activate(); ${O}.group()`, ['A
 T('Ctrl+Z undoes a group', `S().getRange('3:5').activate()`, ['Alt+Shift+ArrowRight','W:200','Control+z'], `${O}.levelOf('row',3)===0`)
 T('Ctrl+8 hides outline symbols', `S().getRange('3:5').activate(); ${O}.group()`, ['W:200','Control+8'], `${O}.info().gutter.row===0&&${O}.info().rows.length===1`)
 T('Ctrl+8 twice shows them again', `S().getRange('3:5').activate(); ${O}.group()`, ['W:200','Control+8','W:200','Control+8'], `${O}.info().gutter.row>0`)
+// ---- Ribbon KeyTips (Alt / F10, then letters) and Office 2003 access keys
+const KT = 'window.__sheetly.keyTips()'
+T('Alt shows KeyTips', `act('A1')`, ['Alt'], `${KT}.active&&!document.querySelector('.sx-keytips').hidden`)
+T('Alt H shows the Home tab', `act('A1')`, ['Alt','h'], `${KT}.path.join()==='H'&&document.querySelectorAll('.sx-keytips-item').length>20`)
+T('Esc goes back one level', `act('A1')`, ['Alt','h','Escape'], `${KT}.active&&${KT}.path.length===0`)
+T('Esc at the top hides KeyTips', `act('A1')`, ['Alt','h','Escape','Escape'], `!${KT}.active`)
+T('Alt again hides KeyTips', `act('A1')`, ['Alt','W:100','Alt'], `!${KT}.active`)
+T('F10 shows KeyTips', `act('A1')`, ['F10'], `${KT}.active`)
+T('Alt+H (held) opens Home', `act('A1')`, ['Alt+h'], `${KT}.active&&${KT}.path.join()==='H'`)
+T('Alt H O I autofits column width', `S().getRange('A1').setValue('a much longer piece of text in this cell'); act('A1')`, ['Alt','h','o','i'], `S().getColumnWidth(0)>150`)
+T('Alt H 1 bold', `act('A1')`, ['Alt','h','1'], `st('A1').bl===1`)
+T('Alt H A C center', `act('A1')`, ['Alt','h','a','c'], `st('A1').ht===2`)
+T('Alt H B A all borders', `act('A1')`, ['Alt','h','b','a'], `!!st('A1').bd?.t&&!!st('A1').bd?.l&&!!st('A1').bd?.b&&!!st('A1').bd?.r`)
+T('Alt H M C merge & center', `S().getRange('F1:G1').activate()`, ['Alt','h','m','c'], `S().getSheet().getMergeData().some((m)=>m.startColumn===5&&m.endColumn===6)&&st('F1').ht===2`)
+T('Alt H I R inserts a row', `act('A2')`, ['Alt','h','i','r'], `v('A3')==5&&(v('A2')==null||v('A2')==='')`)
+T('Alt H D C deletes a column', `act('A1')`, ['Alt','h','d','c'], `v('A1')==2`)
+T('Alt H E A clears all', `S().getRange('A1').setFontWeight('bold'); act('A1')`, ['Alt','h','e','a'], `(v('A1')==null||v('A1')==='')&&!st('A1').bl`)
+T('Alt H 0 adds a decimal', `S().getRange('A1').setValue(1.5); act('A1')`, ['Alt','h','0'], `/0\.00/.test(S().getRange('A1').getNumberFormat())`)
+T('Alt H K comma style', `act('A1')`, ['Alt','h','k'], `/#,##0\.00/.test(S().getRange('A1').getNumberFormat())`)
+T('Alt H V V pastes values', `S().getRange('F1').setFormula('=A1+1'); act('F1')`, ['W:300','Control+c','W:200','ArrowRight','Alt','h','v','v'], `v('G1')==2&&!f('G1')`)
+T('Alt H H opens fill colours', `act('A1')`, ['Alt','h','h'], `document.querySelectorAll('[role=menu]').length>0`)
+T('Alt W F F freezes panes', `act('B2')`, ['Alt','w','f','f'], `S().getSheet().getConfig().freeze?.xSplit===1&&S().getSheet().getConfig().freeze?.ySplit===1`)
+T('Alt M H shows formulas', `act('A1')`, ['Alt','m','h'], `window.__sheetly.extras.isShowingFormulas()`)
+T('Alt A G G groups rows', `S().getRange('3:5').activate()`, ['Alt','a','g','g'], `window.__sheetly.outline.levelOf('row',3)===1`)
+T('Alt A H hides detail', `S().getRange('3:5').activate(); window.__sheetly.outline.group(); act('A4')`, ['W:200','Alt','a','h'], `S().getSheet().getRowManager().getRow(3)?.hd===1`)
+T('Alt E shows the Office 2003 prompt', `act('A1')`, ['Alt','e'], `${KT}.legacy&&/Office 2003 access key/.test(document.querySelector('.sx-keytips').textContent)`)
+T('Alt E S V Enter pastes values', `S().getRange('F1').setFormula('=A1+1'); act('F1')`, ['W:300','Control+c','W:200','ArrowRight','Alt','e','s','v','Enter'], `v('G1')==2&&!f('G1')`)
+T('Alt O C A autofits column (2003)', `S().getRange('A1').setValue('a much longer piece of text in this cell'); act('A1')`, ['Alt','o','c','a'], `S().getColumnWidth(0)>150`)
+T('Alt I R inserts a row (2003)', `act('A2')`, ['Alt','i','r'], `v('A3')==5`)
+T('Paste Special access key T = Formats', `act('A1')`, ['Control+c','ArrowRight','Control+Alt+v','t'], `document.querySelector('[role=dialog] input[value=formats]')?.checked===true`)
 // ---- Formatting
 T('Ctrl+B bold', `act('A1')`, ['Control+b'], `st('A1').bl===1`)
 T('Ctrl+I italic', `act('A1')`, ['Control+i'], `st('A1').it===1`)
@@ -198,16 +231,18 @@ if (process.env.DEBUG_KEYS) {
 }
 const t0 = Date.now()
 for (const t of tests.filter((x) => !only || only.test(x.name))) {
+  if (only) console.log('RUN', t.name)
   let ok = false, note = '', waited = 0
   try {
     // Close any panel/dialog a previous test opened and give the grid keyboard focus again.
     for (let i = 0; i < 3; i++) await win.keyboard.press('Escape')
     await win.evaluate(() => document.querySelectorAll('[class*="dialog"] [class*="close"],[class*="sidebar"] [class*="close"]').forEach((b) => b.click()))
-    await win.mouse.click(700, 560); await win.waitForTimeout(80)
-    await reset(); await win.waitForTimeout(120)
-    await run(t.setup); await win.waitForTimeout(150)
+    const tick = Date.now(), lap = (what) => { if (process.env.TIMING) console.log('  ', what, Date.now() - tick, 'ms') }
+    await win.mouse.click(700, 560); await win.waitForTimeout(80); lap('click')
+    await reset(); await win.waitForTimeout(120); lap('reset')
+    await run(t.setup); await win.waitForTimeout(150); lap('setup')
     for (const k of t.keys) { if (k.startsWith('T:')) await win.keyboard.type(k.slice(2), { delay: 15 }); else if (k.startsWith('W:')) await win.waitForTimeout(+k.slice(2)); else await win.keyboard.press(k); await win.waitForTimeout(90) }
-    await win.waitForTimeout(350)
+    await win.waitForTimeout(350); lap('keys')
     // Poll the check for up to 2 s: some effects (recalculation, spills, panels) land asynchronously.
     for (waited = 0; waited <= (t.timeout ?? 2000) && !ok; waited += 150) {
       ok = !!(await run('return (' + t.check + ')'))

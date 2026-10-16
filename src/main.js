@@ -1,3 +1,5 @@
+// KeyTips first: its key listener must be registered before Univer's own (see keytips.js).
+import { keyTipState, setKeyTipTree } from './keytips.js'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import enUS from '@univerjs/preset-sheets-core/locales/en-US'
@@ -34,9 +36,10 @@ import threadCommentEnUS from '@univerjs/preset-sheets-thread-comment/locales/en
 import '@univerjs/preset-sheets-thread-comment/lib/index.css'
 import { IFunctionService } from '@univerjs/engine-formula'
 import { IContextMenuService, IShortcutService } from '@univerjs/ui'
-import { ICommandService } from '@univerjs/core'
+import { ICommandService, IContextService } from '@univerjs/core'
 import { IRenderManagerService } from '@univerjs/engine-render'
-import { HeaderUnhideRenderController, SheetSkeletonManagerService } from '@univerjs/sheets-ui'
+import { HeaderUnhideRenderController, SheetSkeletonManagerService, whenSheetEditorFocused } from '@univerjs/sheets-ui'
+import { buildKeyTipTree } from './keytips-tree.js'
 import { pivotFunctions } from './groupby.js'
 import { excelFunctions } from './excel-functions.js'
 import { installExcelShortcuts } from './excel-shortcuts.js'
@@ -85,7 +88,9 @@ const charts = createCharts(univerAPI, dialogs)
 const extras = createExtras(univerAPI)
 const outline = createOutline(univerAPI)
 installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline)
-window.__sheetly = { dialogs, charts, extras, outline }
+window.__sheetly = { dialogs, charts, extras, outline, keyTips: keyTipState }
+const contextService = univerAPI._injector.get(IContextService)
+setKeyTipTree(buildKeyTipTree(univerAPI, { dialogs, extras, charts, outline }), { canStart: () => whenSheetEditorFocused(contextService) })
 // Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which
 // Univer otherwise creates at 1,000 x 20.
 const commandService = univerAPI._injector.get(ICommandService)

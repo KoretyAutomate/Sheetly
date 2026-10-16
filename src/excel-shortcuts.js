@@ -292,17 +292,18 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
   shortcuts.registerShortcut({ id: 'sheetly.delete-to-line-end', binding: CTRL | KeyCode.DELETE, priority: PRIORITY, preconditions: whenSheetEditorActivated })
 }
 
-function autosum(ws, r) {
+/** AutoSum (Alt+=); fn picks the AutoSum menu entry: SUM, AVERAGE, COUNT, MAX, MIN. */
+export function autosum(ws, r, fn = 'SUM') {
   const row = r.getRow(), col = r.getColumn(), num = (a, b) => typeof ws.getRange(a, b).getValue() === 'number'
   let top = row - 1
   while (top >= 0 && num(top, col)) top--
   const target = ws.getRange(row, col)
-  if (top < row - 1) { target.setFormula(`=SUM(${ws.getRange(top + 1, col, row - 1 - top, 1).getA1Notation()})`); return true }
+  if (top < row - 1) { target.setFormula(`=${fn}(${ws.getRange(top + 1, col, row - 1 - top, 1).getA1Notation()})`); return true }
   let left = col - 1
   while (left >= 0 && num(row, left)) left--
-  if (left < col - 1) { target.setFormula(`=SUM(${ws.getRange(row, left + 1, 1, col - 1 - left).getA1Notation()})`); return true }
+  if (left < col - 1) { target.setFormula(`=${fn}(${ws.getRange(row, left + 1, 1, col - 1 - left).getA1Notation()})`); return true }
   // Nothing to sum: Excel leaves =SUM() in edit mode for the user to pick a range.
-  target.setFormula('=SUM()')
+  target.setFormula(`=${fn}()`)
   return true
 }
 

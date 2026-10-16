@@ -163,7 +163,7 @@ export function createOutline(api) {
   const isFullCols = (g) => g.startRow === 0 && g.endRow >= ws().getMaxRows() - 1
   const span = (axis, g) => (axis === 'row' ? [g.startRow, g.endRow] : [g.startColumn, g.endColumn])
   function askAxis(title, run) {
-    const r = radios('outline-axis', [['row', 'Rows'], ['col', 'Columns']], 'row')
+    const r = radios('outline-axis', [['row', '&Rows'], ['col', '&Columns']], 'row')
     openDialog({ title, width: 200, body: el('div', {}, ...r.nodes), onOk: () => { run(r.value) } })
     return true
   }

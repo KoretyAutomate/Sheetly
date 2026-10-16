@@ -1,5 +1,7 @@
 // Minimal Excel-style modal dialogs: title bar, body, OK/Cancel; Enter = OK, Esc = Cancel.
 // Sheet shortcuts are suspended while a dialog is open so typing goes to the dialog.
+// Access keys as in Windows dialogs: a label written '&Values' underlines V; pressing V (or Alt+V while typing in a
+// text box) selects that option / toggles that box / presses that button.
 import './dialog.css'
 
 let shortcutService = null
@@ -46,6 +48,12 @@ export function openDialog(opts) {
   const overlay = el('div', { class: 'sx-overlay' }, box)
   overlay.addEventListener('keydown', (e) => {
     e.stopPropagation()
+    const typing = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && !['radio', 'checkbox', 'button'].includes(e.target.type))
+    const letter = /^Key[A-Z]$|^Digit\d$/.test(e.code) ? e.code.slice(-1).toLowerCase() : null
+    if (letter && !e.ctrlKey && !e.metaKey && (e.altKey || !typing)) {
+      const target = box.querySelector(`[data-access="${letter}"]`)
+      if (target) { e.preventDefault(); target.focus(); target.click(); return }
+    }
     if (e.key === 'Escape') { e.preventDefault(); close() }
     else if (e.key === 'Enter' && !opts.noButtons && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); ok() }
   })
@@ -56,15 +64,24 @@ export function openDialog(opts) {
   return { close, ok, root: box }
 }
 
+/** '&Values' -> ['Values' with V underlined, 'v'] */
+export function accessLabel(label) {
+  const i = typeof label === 'string' ? label.indexOf('&') : -1
+  if (i < 0 || i === label.length - 1) return [label, null]
+  return [[label.slice(0, i), el('u', { class: 'sx-ak' }, label[i + 1]), label.slice(i + 2)], label[i + 1].toLowerCase()]
+}
+export const button = (label, onClick, cls = 'sx-btn') => { const [text, key] = accessLabel(label); return el('button', { class: cls, type: 'button', onClick, 'data-access': key }, text) }
 export const field = (label, control) => el('label', { class: 'sx-field' }, el('span', {}, label), control)
 export const check = (label, checked = false) => {
-  const input = el('input', { type: 'checkbox', checked })
-  return { input, node: el('label', { class: 'sx-check' }, input, label) }
+  const [text, key] = accessLabel(label)
+  const input = el('input', { type: 'checkbox', checked, 'data-access': key })
+  return { input, node: el('label', { class: 'sx-check' }, input, text) }
 }
 export function radios(name, options, value) {
   const inputs = options.map(([v, label]) => {
-    const input = el('input', { type: 'radio', name, value: v, checked: v === value })
-    return { v, input, node: el('label', { class: 'sx-check' }, input, label) }
+    const [text, key] = accessLabel(label)
+    const input = el('input', { type: 'radio', name, value: v, checked: v === value, 'data-access': key })
+    return { v, input, node: el('label', { class: 'sx-check' }, input, text) }
   })
   return { nodes: inputs.map((i) => i.node), get value() { return inputs.find((i) => i.input.checked)?.v } }
 }

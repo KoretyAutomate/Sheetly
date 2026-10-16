@@ -59,10 +59,23 @@ KeyTips — src/keytips.js
 - Electron: renderer preventDefault()s Alt keyup so the window menu does not take focus.
 Tests: shortcuts_full.mjs cases for group/ungroup/collapse/expand/levels/Ctrl+8/undo/insert-row shift and for
 KeyTip sequences (end effect asserted, e.g. Alt H O I autofits, Alt H V V pastes values); xlsx round-trip test.
+Delegation: KeyTip research ran as a Claude subagent; LocalCrew not used (broken since 2026-10-15, user said skip).
+Review (plan agent) adopted: inserted rows join the group (command interceptor), fixed base header size, active
+cell leaves collapsed rows, Univer unhide arrows suppressed, multi-selection / 8-level refusals, exceljs patched for
+the collapsed flag and cell-less rows, KeyTip listener registered before Univer's, no forceDisable nesting.
+Not done: summary rows above / columns left (outlinePr) are not read; Ctrl+8 state is not saved; Auto Outline;
+Alt+Shift+= / Alt+Shift+- (listed on Microsoft's outline page, not verified) are not bound.
+KeyTip letters with single-source support (to check against a live Excel): H 2, H 3 U, H A T/M/B, H P, H O A/D/T/E,
+H U A/C/M/I/F, H F I *, H S F/C/Y, H F D R/G/S/U/M/N, H F Q *, H V N, N I, N C1 (opens a clustered column chart
+directly), A C, A F F, legacy E D/E L/E A */E I */O C W/O R */D G */D L/D E/V Z. Sheetly lists only commands it has.
+
+Status 2026-10-16: outline + KeyTips done. Shortcuts 176/176, outline 27/27, formulas 398/398, coverage 517/517,
+flash fill 11/11. Also fixed: a column-width change froze the app for >10 s (Univer queued auto-height for all
+1,048,576 rows; patches/@univerjs+sheets-ui clips the task to the last row with cells or row data).
 
 Known gaps (not aligned yet):
-- Row/column grouping & outline (Alt+Shift+Right/Left, Ctrl+8): Univer has no outline feature.
-- Ribbon key tips (Alt / F10), F6 pane cycling, Ctrl+F1 ribbon toggle, Ctrl+Q Quick Analysis, Shift+F8 add-to-selection.
+- F6 pane cycling, Ctrl+F1 ribbon toggle, Ctrl+Q Quick Analysis, Shift+F8 add-to-selection.
+- KeyTips cover only commands Sheetly has; single-source letters listed above still need checking in real Excel.
 - TRANSLATE / DETECTLANGUAGE / STOCKHISTORY return #CONNECT! (they need Microsoft online services);
   CUBE* return #NAME? (no Data Model connection); GETPIVOTDATA returns #REF! (no PivotTables).
 - Charts: clustered column only (F11 / Alt+F1), not saved to .xlsx. PivotTables not available.

@@ -1,7 +1,7 @@
 // Excel dialogs reached by keyboard shortcuts: Go To / Go To Special, Insert, Delete, Create Names,
 // Create Table, Paste Special, Format Cells, Print preview, and the Help pane.
 import { BorderStyleTypes, BorderType, ICommandService, numfmt, TextDecoration } from '@univerjs/core'
-import { check, el, field, group, openDialog, radios } from './ui/dialog.js'
+import { button, check, el, field, group, openDialog, radios } from './ui/dialog.js'
 
 // ---------- references
 export const colName = (c) => { let s = ''; for (c += 1; c > 0; c = Math.floor((c - 1) / 26)) s = String.fromCharCode(65 + ((c - 1) % 26)) + s; return s }
@@ -213,7 +213,7 @@ export function createDialogs(api) {
     const g = sel()
     if (isFullRows(g)) return ws().insertRowsBefore(g.startRow, g.endRow - g.startRow + 1), true
     if (isFullCols(g)) return ws().insertColumnsBefore(g.startColumn, g.endColumn - g.startColumn + 1), true
-    const r = radios('ins', [['right', 'Shift cells right'], ['down', 'Shift cells down'], ['row', 'Entire row'], ['col', 'Entire column']], 'down')
+    const r = radios('ins', [['right', 'Shift cells r&ight'], ['down', 'Shift cells &down'], ['row', 'Entire &row'], ['col', 'Entire &column']], 'down')
     openDialog({ title: 'Insert', width: 240, body: el('div', {}, ...r.nodes), onOk: () => {
       if (r.value === 'right') commands.executeCommand('sheet.command.insert-range-move-right')
       else if (r.value === 'down') commands.executeCommand('sheet.command.insert-range-move-down')
@@ -226,7 +226,7 @@ export function createDialogs(api) {
     const g = sel()
     if (isFullRows(g)) return ws().deleteRows(g.startRow, g.endRow - g.startRow + 1), true
     if (isFullCols(g)) return ws().deleteColumns(g.startColumn, g.endColumn - g.startColumn + 1), true
-    const r = radios('del', [['left', 'Shift cells left'], ['up', 'Shift cells up'], ['row', 'Entire row'], ['col', 'Entire column']], 'up')
+    const r = radios('del', [['left', 'Shift cells &left'], ['up', 'Shift cells &up'], ['row', 'Entire &row'], ['col', 'Entire &column']], 'up')
     openDialog({ title: 'Delete', width: 240, body: el('div', {}, ...r.nodes), onOk: () => {
       if (r.value === 'left') commands.executeCommand('sheet.command.delete-range-move-left')
       else if (r.value === 'up') commands.executeCommand('sheet.command.delete-range-move-up')
@@ -323,15 +323,16 @@ export function createDialogs(api) {
   })
   function pasteSpecial() {
     if (!lastCopy) { alertBox('Copy something first (Ctrl+C), then use Paste Special.'); return true }
-    const what = radios('ps', [['all', 'All'], ['formulas', 'Formulas'], ['values', 'Values'], ['formats', 'Formats'],
-      ['notes', 'Comments and Notes'], ['validation', 'Validation'], ['theme', 'All using Source theme'], ['noborders', 'All except borders'],
-      ['widths', 'Column widths'], ['formulasnum', 'Formulas and number formats'], ['valuesnum', 'Values and number formats'],
-      ['mergecf', 'All merging conditional formats']], 'all')
-    const op = radios('op', [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']], 'none')
-    const skip = check('Skip blanks'), transpose = check('Transpose')
+    // Access keys as in Excel's Paste Special dialog (Alt E S V = values).
+    const what = radios('ps', [['all', '&All'], ['formulas', '&Formulas'], ['values', '&Values'], ['formats', 'Forma&ts'],
+      ['notes', '&Comments and Notes'], ['validation', 'Validatio&n'], ['theme', 'All using Source t&heme'], ['noborders', 'All e&xcept borders'],
+      ['widths', 'Column &widths'], ['formulasnum', 'Fo&rmulas and number formats'], ['valuesnum', 'Val&ues and number formats'],
+      ['mergecf', 'All mer&ging conditional formats']], 'all')
+    const op = radios('op', [['none', 'N&one'], ['add', 'A&dd'], ['subtract', '&Subtract'], ['multiply', '&Multiply'], ['divide', 'D&ivide']], 'none')
+    const skip = check('Skip &blanks'), transpose = check('Transpos&e')
     const d = openDialog({ title: 'Paste Special', width: 440,
       body: el('div', {}, group('Paste', ...what.nodes), group('Operation', ...op.nodes), el('div', { class: 'sx-row' }, skip.node, transpose.node)),
-      extraButtons: [el('button', { class: 'sx-btn', type: 'button', onClick: () => { pasteLink(); d.close() } }, 'Paste Link')],
+      extraButtons: [button('Paste &Link', () => { pasteLink(); d.close() })],
       onOk: () => { runPasteSpecial(what.value, op.value, skip.input.checked, transpose.input.checked) } })
     return true
   }
@@ -641,7 +642,7 @@ export function createDialogs(api) {
   return {
     setShortcutService: (s) => { shortcutServiceRef = s },
     goTo, goToSpecial, goToReference, runGoToSpecial, insertCells, deleteCells, createNames, createNamesFrom, createTable, makeTable,
-    pasteSpecial, runPasteSpecial, formatCells, printPreview, help, currentRegion, usedRange, select, getLastCopy: () => lastCopy,
+    pasteSpecial, runPasteSpecial, pasteLink, formatCells, printPreview, help, currentRegion, usedRange, select, getLastCopy: () => lastCopy,
   }
 }
 

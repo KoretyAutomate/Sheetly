@@ -1,0 +1,14 @@
+.sx-keytips { position: fixed; top: 0; left: 0; right: 0; z-index: 9000; background: var(--sx-bg); color: var(--sx-fg);
+  border-bottom: 1px solid var(--sx-border); box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 4px 8px 6px;
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif; display: flex; flex-direction: column; gap: 4px; }
+.sx-keytips[hidden] { display: none; }
+.sx-keytips-tabs, .sx-keytips-items { display: flex; flex-wrap: wrap; gap: 4px; }
+.sx-keytips-tab, .sx-keytips-item { position: relative; border: 1px solid transparent; background: none; color: inherit; font: inherit;
+  padding: 3px 10px 3px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.sx-keytips-tab[aria-current="true"] { border-color: var(--sx-border); border-bottom-color: var(--sx-accent); }
+.sx-keytips-tab:hover, .sx-keytips-item:hover { background: var(--sx-title); }
+.sx-keytip { display: inline-block; min-width: 14px; padding: 0 3px; border: 1px solid #5f5f5f; border-radius: 2px; background: #fbfbfb;
+  color: #1f1f1f; font: 600 11px/14px "Segoe UI", system-ui, sans-serif; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.sx-keytips-crumb, .sx-keytips-legacy { color: var(--sx-muted); padding: 0 2px; }
+.sx-dialog u.sx-ak { text-decoration: underline; }
+@media (max-width: 640px) { .sx-keytips-tab, .sx-keytips-item { padding: 3px 6px; } }

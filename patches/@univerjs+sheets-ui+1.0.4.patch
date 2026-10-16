@@ -1,0 +1,78 @@
+diff --git a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
+index aa80317..11827db 100644
+--- a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
++++ b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
+@@ -34399,13 +34399,20 @@ let AutoHeightService = class AutoHeightService extends _univerjs_core.Disposabl
+ 	startAutoHeightTask(task) {
+ 		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
+ 		if (!skeleton) return;
+-		task.ranges = _univerjs_core.Rectangle.mergeRanges(task.ranges.map((range) => {
++		// Sheetly: rows below the last row with cells or row data have nothing to measure. On a 1,048,576-row sheet
++		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
++		const sheetlyWorksheet = skeleton.worksheet;
++		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
++		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		task.ranges = _univerjs_core.Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
+ 			return {
+ 				...range,
++				endRow: Math.min(range.endRow, sheetlyLastRow),
+ 				startColumn: 0,
+ 				endColumn: 0
+ 			};
+ 		}));
++		if (!task.ranges.length) return;
+ 		const remainRanges = _univerjs_core.Rectangle.subtractMulti(task.ranges, this._autoHeightTasks.filter((newTask) => newTask.sheetId === task.sheetId).map((task) => task.ranges).flat());
+ 		if (remainRanges.length) {
+ 			this._autoHeightTasks.push({
+diff --git a/node_modules/@univerjs/sheets-ui/lib/es/index.js b/node_modules/@univerjs/sheets-ui/lib/es/index.js
+index 5ae414a..0fb0e66 100644
+--- a/node_modules/@univerjs/sheets-ui/lib/es/index.js
++++ b/node_modules/@univerjs/sheets-ui/lib/es/index.js
+@@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
+ 	startAutoHeightTask(task) {
+ 		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
+ 		if (!skeleton) return;
+-		task.ranges = Rectangle.mergeRanges(task.ranges.map((range) => {
++		// Sheetly: rows below the last row with cells or row data have nothing to measure. On a 1,048,576-row sheet
++		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
++		const sheetlyWorksheet = skeleton.worksheet;
++		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
++		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		task.ranges = Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
+ 			return {
+ 				...range,
++				endRow: Math.min(range.endRow, sheetlyLastRow),
+ 				startColumn: 0,
+ 				endColumn: 0
+ 			};
+ 		}));
++		if (!task.ranges.length) return;
+ 		const remainRanges = Rectangle.subtractMulti(task.ranges, this._autoHeightTasks.filter((newTask) => newTask.sheetId === task.sheetId).map((task) => task.ranges).flat());
+ 		if (remainRanges.length) {
+ 			this._autoHeightTasks.push({
+diff --git a/node_modules/@univerjs/sheets-ui/lib/index.js b/node_modules/@univerjs/sheets-ui/lib/index.js
+index 5ae414a..0fb0e66 100644
+--- a/node_modules/@univerjs/sheets-ui/lib/index.js
++++ b/node_modules/@univerjs/sheets-ui/lib/index.js
+@@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
+ 	startAutoHeightTask(task) {
+ 		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
+ 		if (!skeleton) return;
+-		task.ranges = Rectangle.mergeRanges(task.ranges.map((range) => {
++		// Sheetly: rows below the last row with cells or row data have nothing to measure. On a 1,048,576-row sheet
++		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
++		const sheetlyWorksheet = skeleton.worksheet;
++		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
++		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		task.ranges = Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
+ 			return {
+ 				...range,
++				endRow: Math.min(range.endRow, sheetlyLastRow),
+ 				startColumn: 0,
+ 				endColumn: 0
+ 			};
+ 		}));
++		if (!task.ranges.length) return;
+ 		const remainRanges = Rectangle.subtractMulti(task.ranges, this._autoHeightTasks.filter((newTask) => newTask.sheetId === task.sheetId).map((task) => task.ranges).flat());
+ 		if (remainRanges.length) {
+ 			this._autoHeightTasks.push({
