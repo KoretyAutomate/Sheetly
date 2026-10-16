@@ -13,7 +13,7 @@ const excelSerial = (d) => Math.floor((d - new Date(1899, 11, 30)) / 864e5)
 const dayFraction = (d) => (d - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5
 const PRIORITY = 200
 
-export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras) {
+export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline) {
   const commands = api._injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook()
   const sheet = () => wb().getActiveSheet()
@@ -88,6 +88,9 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras) {
     ['paste-special', CTRL | ALT | KeyCode.V, () => dialogs.pasteSpecial()],
     ['hide-rows', CTRL | DIGIT(9), () => { const g = sel(); sheet().hideRows(g.startRow, g.endRow - g.startRow + 1); return true }],
     ['unhide-rows', CTRL | SHIFT | DIGIT(9), () => { const g = sel(); sheet().showRows(g.startRow, g.endRow - g.startRow + 1); return true }],
+    ['group', ALT | SHIFT | KeyCode.ARROW_RIGHT, () => commands.executeCommand('sheetly.outline.group')],
+    ['ungroup', ALT | SHIFT | KeyCode.ARROW_LEFT, () => commands.executeCommand('sheetly.outline.ungroup')],
+    ['outline-symbols', CTRL | DIGIT(8), () => commands.executeCommand('sheetly.outline.toggle-symbols')],
     ['hide-columns', CTRL | DIGIT(0), () => { const g = sel(); sheet().hideColumns(g.startColumn, g.endColumn - g.startColumn + 1); return true }],
     ['unhide-columns', CTRL | SHIFT | DIGIT(0), () => { const g = sel(); sheet().showColumns(g.startColumn, g.endColumn - g.startColumn + 1); return true }],
     ['insert-note', SHIFT | KeyCode.F2, () => commands.executeCommand('sheet.operation.add-note-popup')],
@@ -323,7 +326,8 @@ export const SHORTCUT_DOCS = [
   ['Ctrl+D / Ctrl+R', 'Fill down / right'], ['Ctrl+; / Ctrl+Shift+;', 'Insert date / time'],
   ["Ctrl+' / Ctrl+Shift+\"", 'Copy formula / value from the cell above'], ['Alt+=', 'AutoSum'],
   ['Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste'], ['Ctrl+Alt+V', 'Paste Special'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
-  ['Ctrl+Shift++ / Ctrl+-', 'Insert / delete cells'], ['Ctrl+9 / Ctrl+Shift+9', 'Hide / unhide rows'], ['Ctrl+0 / Ctrl+Shift+0', 'Hide / unhide columns'],
+  ['Ctrl+Shift++ / Ctrl+-', 'Insert / delete cells'], ['Ctrl+9 / Ctrl+Shift+9', 'Hide / unhide rows'], ['Alt+Shift+Right / Alt+Shift+Left', 'Group / ungroup rows or columns'],
+  ['Ctrl+8', 'Show or hide outline symbols'],['Ctrl+0 / Ctrl+Shift+0', 'Hide / unhide columns'],
   ['Shift+F2', 'Insert or edit a note'], ['Ctrl+F3 / Ctrl+Shift+F3', 'Name Manager / create names from selection'],
   ['Ctrl+K', 'Insert hyperlink'], ['Ctrl+T / Ctrl+L', 'Create table'], ['Ctrl+Shift+L', 'Toggle filter'], ['Alt+Down', 'Open drop-down list'],
   ['F11 / Alt+F1', 'Chart sheet / embedded chart'], ['Shift+F11 / Alt+Shift+F1', 'Insert a worksheet'],

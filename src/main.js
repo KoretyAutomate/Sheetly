@@ -35,12 +35,15 @@ import '@univerjs/preset-sheets-thread-comment/lib/index.css'
 import { IFunctionService } from '@univerjs/engine-formula'
 import { IContextMenuService, IShortcutService } from '@univerjs/ui'
 import { ICommandService } from '@univerjs/core'
+import { IRenderManagerService } from '@univerjs/engine-render'
+import { HeaderUnhideRenderController, SheetSkeletonManagerService } from '@univerjs/sheets-ui'
 import { pivotFunctions } from './groupby.js'
 import { excelFunctions } from './excel-functions.js'
 import { installExcelShortcuts } from './excel-shortcuts.js'
 import { createDialogs } from './excel-dialogs.js'
 import { createCharts } from './charts.js'
 import { createExtras } from './excel-extras.js'
+import { createOutline } from './outline.js'
 import { setDialogShortcutService } from './ui/dialog.js'
 import { xlsxToSnapshot, snapshotToXlsx } from './xlsx.js'
 
@@ -69,6 +72,9 @@ window.univerAPI = univerAPI
 window.__ICommandService = ICommandService
 window.__IShortcutService = IShortcutService
 window.__IContextMenuService = IContextMenuService
+window.__IRenderManagerService = IRenderManagerService
+window.__SheetSkeletonManagerService = SheetSkeletonManagerService
+window.__HeaderUnhideRenderController = HeaderUnhideRenderController
 const shortcutSvc = univerAPI._injector.get(IShortcutService)
 window.__shortcuts = () => shortcutSvc.getAllShortcuts().map((x) => ({ id: x.id, b: x.binding, w: x.win, l: x.linux, d: shortcutSvc.getShortcutDisplay(x) }))
 window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExecutors().keys()]
@@ -77,8 +83,9 @@ dialogs.setShortcutService(shortcutSvc)
 setDialogShortcutService(shortcutSvc)
 const charts = createCharts(univerAPI, dialogs)
 const extras = createExtras(univerAPI)
-installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras)
-window.__sheetly = { dialogs, charts, extras }
+const outline = createOutline(univerAPI)
+installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline)
+window.__sheetly = { dialogs, charts, extras, outline }
 // Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which
 // Univer otherwise creates at 1,000 x 20.
 const commandService = univerAPI._injector.get(ICommandService)

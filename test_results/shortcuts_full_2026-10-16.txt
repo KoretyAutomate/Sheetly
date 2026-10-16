@@ -1,0 +1,14 @@
+SHORTCUT TEST (all) 2026-10-16T13:29:07.349Z
+pass 10/10  (34s)
+PASS  Alt+Shift+F1 new sheet
+PASS  Alt+Shift+Right groups selected rows
+PASS  Alt+Shift+Right groups selected columns
+PASS  Alt+Shift+Right on cells asks Rows (default)
+PASS  Alt+Shift+Right on cells, choose Columns
+PASS  Alt+Shift+Right twice nests (level 2)
+PASS  Alt+Shift+Left ungroups
+PASS  Ctrl+Z undoes a group
+PASS  Ctrl+8 hides outline symbols
+PASS  Ctrl+8 twice shows them again
+
+NOT AUTOMATED: Ctrl+F9 minimize (window-manager dependent).

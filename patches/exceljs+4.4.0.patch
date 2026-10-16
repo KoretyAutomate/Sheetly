@@ -1,0 +1,127 @@
+diff --git a/node_modules/exceljs/dist/exceljs.js b/node_modules/exceljs/dist/exceljs.js
+index ab2c9d6..3815692 100644
+--- a/node_modules/exceljs/dist/exceljs.js
++++ b/node_modules/exceljs/dist/exceljs.js
+@@ -1273,6 +1273,7 @@ class Column {
+       // headers must be set after style
+       this.header = value.header;
+       this._hidden = !!value.hidden;
++      if (value.collapsed !== undefined) this._collapsed = !!value.collapsed;
+     } else {
+       delete this._header;
+       delete this._key;
+@@ -1323,8 +1324,12 @@ class Column {
+     this._outlineLevel = value;
+   }
+   get collapsed() {
++    if (this._collapsed !== undefined) return this._collapsed;
+     return !!(this._outlineLevel && this._outlineLevel >= this._worksheet.properties.outlineLevelCol);
+   }
++  set collapsed(value) {
++    this._collapsed = !!value;
++  }
+   toString() {
+     return JSON.stringify({
+       key: this.key,
+@@ -2400,8 +2405,12 @@ class Row {
+     this._outlineLevel = value;
+   }
+   get collapsed() {
++    if (this._collapsed !== undefined) return this._collapsed;
+     return !!(this._outlineLevel && this._outlineLevel >= this._worksheet.properties.outlineLevelRow);
+   }
++  set collapsed(value) {
++    this._collapsed = !!value;
++  }
+ 
+   // =========================================================================
+   get model() {
+@@ -2422,7 +2431,7 @@ class Row {
+         }
+       }
+     });
+-    return this.height || cells.length ? {
++    return this.height || cells.length || this.hidden || this.outlineLevel || this._collapsed ? {
+       cells,
+       number: this.number,
+       min,
+@@ -2478,6 +2487,7 @@ class Row {
+     }
+     this.hidden = value.hidden;
+     this.outlineLevel = value.outlineLevel || 0;
++    this._collapsed = !!value.collapsed;
+     this.style = value.style && JSON.parse(JSON.stringify(value.style)) || {};
+   }
+ }
+diff --git a/node_modules/exceljs/lib/doc/column.js b/node_modules/exceljs/lib/doc/column.js
+index c7fc282..e13503a 100644
+--- a/node_modules/exceljs/lib/doc/column.js
++++ b/node_modules/exceljs/lib/doc/column.js
+@@ -61,6 +61,7 @@ class Column {
+       // headers must be set after style
+       this.header = value.header;
+       this._hidden = !!value.hidden;
++      if (value.collapsed !== undefined) this._collapsed = !!value.collapsed;
+     } else {
+       delete this._header;
+       delete this._key;
+@@ -121,12 +122,18 @@ class Column {
+     this._outlineLevel = value;
+   }
+ 
++  // Sheetly: an explicit collapsed flag (Excel stores it on the summary column) wins over the derived one.
+   get collapsed() {
++    if (this._collapsed !== undefined) return this._collapsed;
+     return !!(
+       this._outlineLevel && this._outlineLevel >= this._worksheet.properties.outlineLevelCol
+     );
+   }
+ 
++  set collapsed(value) {
++    this._collapsed = !!value;
++  }
++
+   toString() {
+     return JSON.stringify({
+       key: this.key,
+diff --git a/node_modules/exceljs/lib/doc/row.js b/node_modules/exceljs/lib/doc/row.js
+index 054f52a..f4a407b 100644
+--- a/node_modules/exceljs/lib/doc/row.js
++++ b/node_modules/exceljs/lib/doc/row.js
+@@ -323,12 +323,18 @@ class Row {
+     this._outlineLevel = value;
+   }
+ 
++  // Sheetly: an explicit collapsed flag (Excel stores it on the summary row) wins over the derived one.
+   get collapsed() {
++    if (this._collapsed !== undefined) return this._collapsed;
+     return !!(
+       this._outlineLevel && this._outlineLevel >= this._worksheet.properties.outlineLevelRow
+     );
+   }
+ 
++  set collapsed(value) {
++    this._collapsed = !!value;
++  }
++
+   // =========================================================================
+   get model() {
+     const cells = [];
+@@ -349,7 +355,8 @@ class Row {
+       }
+     });
+ 
+-    return this.height || cells.length
++    // Sheetly: rows without cells are still written when they carry hidden / outline data.
++    return this.height || cells.length || this.hidden || this.outlineLevel || this._collapsed
+       ? {
+           cells,
+           number: this.number,
+@@ -407,6 +414,7 @@ class Row {
+ 
+     this.hidden = value.hidden;
+     this.outlineLevel = value.outlineLevel || 0;
++    this._collapsed = !!value.collapsed;
+ 
+     this.style = (value.style && JSON.parse(JSON.stringify(value.style))) || {};
+   }

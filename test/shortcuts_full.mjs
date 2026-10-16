@@ -33,6 +33,7 @@ const reset = () => run(`
   for (const n of ws.getNotes?.() ?? []) { try { ws.getRange(n.row, n.col).deleteNote() } catch (e) {} }
   document.querySelectorAll('.sx-chart').forEach((c) => c.closest('[class*="float"]')?.remove?.())
   if (window.__sheetly.extras.isShowingFormulas()) window.__sheetly.extras.toggleShowFormulas()
+  window.__sheetly.outline.clearOutline(); window.__sheetly.outline.showSymbols()
   try { ws.showColumns(0, 12); ws.showRows(0, 60) } catch (e) {}
   ws.getRange(0, 0, 60, 12).clear()
   for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) ws.getRange(r, c).setValue(r * 4 + c + 1)
@@ -158,6 +159,17 @@ T('Home in edit', `S().getRange('F1').setValue('abc'); act('F1')`, ['F2','Home',
 T('Ctrl+Left word jump in edit', `S().getRange('F1').setValue('abc def'); act('F1')`, ['F2','Control+ArrowLeft','T:X','Enter'], `v('F1')==='abc Xdef'`)
 T('Ctrl+Backspace deletes word in edit', `S().getRange('F1').setValue('abc def'); act('F1')`, ['F2','Control+Backspace','Enter'], `v('F1')==='abc '`)
 T('Ctrl+Delete deletes to end of line in edit', `S().getRange('F1').setValue('abc def'); act('F1')`, ['F2','Control+ArrowLeft','Control+Delete','Enter'], `v('F1')==='abc '`)
+// ---- Outline (grouping)
+const O = 'window.__sheetly.outline'
+T('Alt+Shift+Right groups selected rows', `S().getRange('3:5').activate()`, ['Alt+Shift+ArrowRight'], `[1,2,3,4,5].map((r)=>${O}.levelOf('row',r)).join('')==='01110'`)
+T('Alt+Shift+Right groups selected columns', `S().getRange('C:D').activate()`, ['Alt+Shift+ArrowRight'], `[1,2,3,4].map((c)=>${O}.levelOf('col',c)).join('')==='0110'`)
+T('Alt+Shift+Right on cells asks Rows (default)', `S().getRange('B2:C3').activate()`, ['Alt+Shift+ArrowRight','W:200','Enter'], `${O}.levelOf('row',1)===1&&${O}.levelOf('row',2)===1&&${O}.levelOf('col',1)===0`)
+T('Alt+Shift+Right on cells, choose Columns', `S().getRange('B2:C3').activate()`, ['Alt+Shift+ArrowRight','W:200','ArrowDown','Enter'], `${O}.levelOf('col',1)===1&&${O}.levelOf('col',2)===1&&${O}.levelOf('row',1)===0`)
+T('Alt+Shift+Right twice nests (level 2)', `S().getRange('3:5').activate()`, ['Alt+Shift+ArrowRight','Alt+Shift+ArrowRight'], `${O}.levelOf('row',3)===2&&${O}.info().rowLevels===2`)
+T('Alt+Shift+Left ungroups', `S().getRange('3:5').activate(); ${O}.group()`, ['Alt+Shift+ArrowLeft'], `${O}.levelOf('row',3)===0&&${O}.info().rows.length===0`)
+T('Ctrl+Z undoes a group', `S().getRange('3:5').activate()`, ['Alt+Shift+ArrowRight','W:200','Control+z'], `${O}.levelOf('row',3)===0`)
+T('Ctrl+8 hides outline symbols', `S().getRange('3:5').activate(); ${O}.group()`, ['W:200','Control+8'], `${O}.info().gutter.row===0&&${O}.info().rows.length===1`)
+T('Ctrl+8 twice shows them again', `S().getRange('3:5').activate(); ${O}.group()`, ['W:200','Control+8','W:200','Control+8'], `${O}.info().gutter.row>0`)
 // ---- Formatting
 T('Ctrl+B bold', `act('A1')`, ['Control+b'], `st('A1').bl===1`)
 T('Ctrl+I italic', `act('A1')`, ['Control+i'], `st('A1').it===1`)

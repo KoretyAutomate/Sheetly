@@ -33,6 +33,33 @@ Formulas: all 517 functions in test/excel-functions.txt are registered (coverage
 Shortcuts: test/shortcuts_full.mjs drives real key presses and asserts each effect: 139/139 (see test_results/).
 Flash Fill learner: test/flashfill.test.mjs 11/11.
 
+## Next: outline (grouping) + ribbon KeyTips (2026-10-16)
+Outline — src/outline.js
+- Storage: level per row/column in Univer's row/col data `custom.outlineLevel` (1..7), collapsed flag on the
+  summary row/col `custom.outlineCollapsed`. Lives in rowData, so insert/delete rows shift it, wb.save() keeps it.
+- Writes via mutations only (sheet.mutation.set-row-data / set-col-data, set-row-hidden / visible,
+  set-col-hidden / visible), one undo step per user action (IUndoRedoService.pushUndoRedo).
+- Excel semantics: summary rows below / columns right; group = maximal run with level >= k; +/- button on the
+  summary row; collapse hides the run; expand re-shows it except nested collapsed groups; level buttons 1..n+1
+  collapse every group of level >= k; ungroup decrements and leaves hidden rows hidden.
+- Keys: Alt+Shift+Right group, Alt+Shift+Left ungroup (whole rows -> rows, whole columns -> columns, otherwise
+  Rows/Columns dialog, default Rows), Ctrl+8 show/hide outline symbols. Also Hide/Show Detail, Clear Outline.
+- Rendering: header extensions (registerSheetRowHeaderExtension / ColumnHeader): widen the header by a gutter
+  (setRowHeaderWidth / setColumnHeaderHeight), draw brackets and +/- in the gutter, redraw the numbers/letters
+  in the remaining part (default header text made transparent while a gutter is shown). Level buttons are a DOM
+  box over the fixed corner. Gutter clicks: capture-phase pointerdown on the canvas, row/col from the skeleton.
+- .xlsx: row/column outlineLevel, hidden, collapsed round-trip via ExcelJS.
+KeyTips — src/keytips.js
+- Alt (press+release) or F10 shows tab KeyTips; Alt+letter goes straight into the tab; letters walk the tree;
+  multi-letter tips filter as typed; Esc goes back one level; Alt/F10/click exits. Not active while editing.
+- Panel: an overlay ribbon strip (tabs, then the current level's commands with their KeyTip badges); clickable.
+- Tree data in one table of [keys, label, action | children]; sequences taken from Excel 365 (sources
+  cross-checked), plus the Office 2003 access keys Excel still accepts (Alt E S, Alt O C A, ...).
+- Dialog access keys (letters select options in Paste Special etc.) so Alt+E+S+V / Alt+H+V+S work end to end.
+- Electron: renderer preventDefault()s Alt keyup so the window menu does not take focus.
+Tests: shortcuts_full.mjs cases for group/ungroup/collapse/expand/levels/Ctrl+8/undo/insert-row shift and for
+KeyTip sequences (end effect asserted, e.g. Alt H O I autofits, Alt H V V pastes values); xlsx round-trip test.
+
 Known gaps (not aligned yet):
 - Row/column grouping & outline (Alt+Shift+Right/Left, Ctrl+8): Univer has no outline feature.
 - Ribbon key tips (Alt / F10), F6 pane cycling, Ctrl+F1 ribbon toggle, Ctrl+Q Quick Analysis, Shift+F8 add-to-selection.
