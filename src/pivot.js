@@ -118,7 +118,8 @@ export function createPivots(api, { dialogs, refs }) {
     })
     p.extent = { written: true, dRow: top - row, rows, cols: width, filterRows }
     const area = { startRow: next.row, endRow: next.row + next.rows - 1, startColumn: next.col, endColumn: next.col + next.cols - 1 }
-    p.writtenRef = (p.writtenRef ? refs?.update(p.writtenRef, sheet.getSheetId(), area) : refs?.track(sheet.getSheetId(), area)) ?? undefined
+    // A new name each time: undo brings back the earlier definition with its own name, still on the earlier area.
+    p.writtenRef = refs?.track(sheet.getSheetId(), area) ?? undefined
     if (!hasGrid) return p
     const values = L.grid.map((r) => [...r.map((c) => c.v ?? null), ...Array(width - r.length).fill(null)])
     sheet.getRange(top, col, values.length, width).setValues(values)

@@ -1,5 +1,5 @@
-SHORTCUT TEST (all) 2026-10-17T02:42:36.103Z
-pass 176/176  (816s)
+SHORTCUT TEST (all) 2026-10-17T03:08:56.783Z
+pass 176/176  (831s)
 PASS  Arrow Right
 PASS  Arrow Down
 PASS  Tab moves right

@@ -204,6 +204,20 @@ export async function finishPackage(buf, { charts = [], spills = new Set(), spar
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
 }
 
+/** Formula cells marked as dynamic arrays (cm= on an array formula): Set of `${sheetIndex}!A1`. */
+export async function readDynamicArrays(buf) {
+  const zip = await JSZip.loadAsync(buf), out = new Set()
+  for (const [i, sheet] of (await sheetParts(zip)).entries()) {
+    const xml = await zip.file(sheet.part)?.async('string')
+    if (!xml) continue
+    for (const m of xml.matchAll(/<c\b([^>]*)>\s*<f\b[^>]*\bt="array"/g)) {
+      const ref = /\br="([A-Z]+\d+)"/.exec(m[1])?.[1]
+      if (ref && /\bcm="/.test(m[1])) out.add(`${i}!${ref}`)
+    }
+  }
+  return out
+}
+
 // ---- sparklines (x14)
 const X14 = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main', XM = 'http://schemas.microsoft.com/office/excel/2006/main'
 const argbOf = (c) => `FF${String(c).replace('#', '').toUpperCase()}`
@@ -240,6 +254,23 @@ export async function readSparklines(buf) {
 }
 
 // ---- reading charts back
+// Prefixes are the file's choice: rewrite the ones bound to the chart / drawing / DrawingML / relationship namespaces
+// (and an unprefixed default namespace) to c:, xdr:, a:, r: before reading.
+const CANON = { [NS.c]: 'c', [NS.xdr]: 'xdr', [NS.a]: 'a', [NS.r]: 'r' }
+export function canonical(xml) {
+  const map = {}
+  for (const m of xml.matchAll(/\sxmlns:([\w.-]+)="([^"]*)"/g)) if (CANON[m[2]] && CANON[m[2]] !== m[1]) map[m[1]] = CANON[m[2]]
+  let out = xml
+  const keys = Object.keys(map)
+  if (keys.length) {
+    const re = new RegExp(`(<\\/?|\\s)(${keys.map((k) => k.replace(/[.-]/g, '\\$&')).join('|')}):`, 'g')
+    out = out.replace(re, (m, lead, p) => `${lead}${map[p]}:`)
+  }
+  const def = /<[\w]+[^>]*\sxmlns="([^"]*)"/.exec(out)?.[1]
+  if (def && CANON[def]) out = out.replace(/<(\/?)([A-Za-z][\w.-]*)(?=[\s>/])/g, (m, slash, name) => `<${slash}${CANON[def]}:${name}`)
+  return out
+}
+
 const attr = (xml, tag, name) => new RegExp(`<${tag}\\b[^>]*\\b${name}="([^"]*)"`).exec(xml)?.[1]
 const texts = (xml) => [...(xml ?? '').matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => unesc(m[1])).join('')
 const anchorIn = (xml) => ({ column: +(/<xdr:col>(\d+)/.exec(xml)?.[1] ?? 0), columnOffset: Math.round(+(/<xdr:colOff>(-?\d+)/.exec(xml)?.[1] ?? 0) / EMU),
@@ -254,17 +285,18 @@ export async function readCharts(buf) {
     const sRels = relList(await zip.file(relsPath(sheet.part))?.async('string'))
     for (const dr of sRels.filter((r) => r.Type === REL.drawing)) {
       const drawingPart = resolve(sheet.part, dr.Target)
-      const drawingXml = await zip.file(drawingPart)?.async('string')
-      if (!drawingXml) continue
+      const drawingRaw = await zip.file(drawingPart)?.async('string')
+      if (!drawingRaw) continue
+      const drawingXml = canonical(drawingRaw)
       const dRels = relList(await zip.file(relsPath(drawingPart))?.async('string'))
       for (const m of drawingXml.matchAll(/<xdr:(twoCellAnchor|oneCellAnchor)\b[^>]*>([\s\S]*?)<\/xdr:\1>/g)) {
         const body = m[2]
         const rid = /<c:chart\b[^>]*r:id="([^"]*)"/.exec(body)?.[1]
         if (!rid) continue
         const chartPart = resolve(drawingPart, dRels.find((r) => r.Id === rid)?.Target ?? '')
-        const xml = await zip.file(chartPart)?.async('string')
-        if (!xml) continue
-        const spec = specFromXml(xml)
+        const raw = await zip.file(chartPart)?.async('string')
+        if (!raw) continue
+        const spec = specFromXml(raw)
         if (!spec) continue
         const from = anchorIn(/<xdr:from>([\s\S]*?)<\/xdr:from>/.exec(body)?.[1] ?? '')
         const toXml = /<xdr:to>([\s\S]*?)<\/xdr:to>/.exec(body)?.[1]
@@ -278,7 +310,8 @@ export async function readCharts(buf) {
 }
 
 /** Sheetly chart spec from a DrawingML chart part (types Sheetly draws; 3-D charts read as their 2-D kind). */
-export function specFromXml(xml) {
+export function specFromXml(raw) {
+  const xml = canonical(raw)
   let type = null
   const plot = /<c:plotArea>([\s\S]*)<\/c:plotArea>/.exec(xml)?.[1] ?? ''
   const grouping = attr(plot, 'c:grouping', 'val')

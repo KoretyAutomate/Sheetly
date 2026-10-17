@@ -10,7 +10,7 @@
 import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
 import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
-import { finishPackage, readCharts, readSparklines } from './xlsx-zip.js'
+import { finishPackage, readCharts, readDynamicArrays, readSparklines } from './xlsx-zip.js'
 import { resolveSource } from './chart-model.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
@@ -309,6 +309,7 @@ export async function xlsxToSnapshot(buf) {
   epoch = date1904 ? EPOCH_1904 : EPOCH
   const sheets = {}, order = [], notes = {}, idByIndex = {}, links = [], idByName = {}
   const cfs = {}, dvs = {}, drawings = {}, tables = []
+  const dynamic = await readDynamicArrays(buf)
   wb.eachSheet((ws, i) => {
     idByName[ws.name] = `sheet${i}`
     const id = `sheet${i}`, cellData = {}, columnData = {}, rowData = {}, mergeData = []
@@ -343,17 +344,26 @@ export async function xlsxToSnapshot(buf) {
       if (Object.keys(d).length) rowData[r - 1] = d
     })
     if (Object.keys(sheetNotes).length) notes[id] = sheetNotes
-    // Dynamic arrays: the file holds the spilled values as plain cells inside the anchor's ref; Univer computes
-    // them itself (keeping them as constants would make the formula #SPILL!).
+    // Array formulas. A dynamic array (cm= in the file) holds its spilled values as plain cells inside the anchor's
+    // ref; Univer computes them itself (kept as constants they would make the formula #SPILL!). A legacy array
+    // formula (Ctrl+Shift+Enter) whose cells all show one value is a scalar entered over the range: each cell gets
+    // the formula. One whose cells differ returns an array, which Univer spills the same way.
+    const sheetIndex = order.length
     ws.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: false }, (cell) => {
       const v = cell.value
       if (!v || typeof v !== 'object' || v.shareType !== 'array' || !v.ref) return
       const g = parseRange(v.ref)
       if (!g) return
-      for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) {
-        if (r === cell.row - 1 && c === cell.col - 1) continue
-        const x = cellData[r]?.[c]
-        if (x && !x.f) { delete x.v; delete x.t; if (!Object.keys(x).length) delete cellData[r][c] }
+      const r0 = cell.row - 1, c0 = cell.col - 1, anchor = cellData[r0]?.[c0]
+      const others = []
+      for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (r !== r0 || c !== c0) others.push([r, c])
+      const legacy = !dynamic.has(`${sheetIndex}!${cell.address}`)
+      const scalar = legacy && anchor?.f && others.every(([r, c]) => cellData[r]?.[c]?.v === anchor.v)
+      for (const [r, c] of others) {
+        const x = (cellData[r] ??= {})[c] ??= {}
+        if (x.f) continue
+        if (scalar) { x.f = anchor.f; x.v = anchor.v; if (anchor.t != null) x.t = anchor.t }
+        else { delete x.v; delete x.t; if (!Object.keys(x).length) delete cellData[r][c] }
       }
     }))
     ws.columns?.forEach((col, i2) => {
@@ -393,7 +403,7 @@ export async function xlsxToSnapshot(buf) {
     if (!settings.isDefault) sheet.custom.sheetlyOutline = settings.value
     sheets[id] = sheet
     order.push(id)
-    const rules = cfIn(ws, id)
+    const rules = cfIn(ws, id, (c) => colorIn(c, theme))
     if (rules.length) cfs[id] = rules
     const vals = dvIn(ws, id)
     if (vals.length) dvs[id] = vals

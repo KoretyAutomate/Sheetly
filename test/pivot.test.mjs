@@ -120,6 +120,18 @@ const changed = await grid('A3:B4')
 await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(700)
 const def1 = await ev(`S().getRange('A4').activate(); await new Promise(r=>setTimeout(r,200)); return JSON.stringify(P.active() && [P.active().rows, P.active().values.map(v=>v.fn)])`)
 check('Ctrl+Z undoes a field change in one step (cells and definition)', changed !== a30 && (await grid('A3:B4')) === a30 && def1 === def0, `${def0} ${def1}`)
+// ---- after undoing a change that widened the report, the cells it gave back are no longer its own
+await ev(`S().getRange('A4').activate()`); await settle(300)
+await ev(`P.toggleField('Product', false)`); await settle(700)
+const narrow = await ev(`return S().getRange('D4').getRawValue()`)
+await ev(`S().getRange('A4').activate(); P.place('Product', 'cols')`); await settle(800)
+const wide = await ev(`return S().getRange('D4').getRawValue()`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(600)
+await ev(`S().getRange('D4').setValue('mine'); S().getRange('A4').activate()`); await settle(300)
+await key('Alt+F5'); await settle(800)
+check('data typed where an undone wider report was is kept by Refresh', narrow == null && wide != null && (await ev(`return S().getRange('D4').getRawValue()`)) === 'mine', `${narrow} ${wide} ${await ev(`return S().getRange('D4').getRawValue()`)}`)
+await ev(`S().getRange('D4').clear()`)
+
 // ---- a table name works as the source
 await ev(`W().setActiveSheet(W().getSheets()[W().getSheets().length-1]); S().getRange('K1:L3').setValues([['Item','Qty'],['x',1],['y',2]]); await S().addTable('Stock', { startRow: 0, endRow: 2, startColumn: 10, endColumn: 11 })`); await settle(600)
 const okTable = await ev(`return P.create('Stock', 'new', '') && P.active()?.name`)

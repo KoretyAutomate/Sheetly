@@ -249,6 +249,30 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('scatter: each series is written with its own X range', (x10.match(/<c:xVal><c:numRef><c:f>[^<]*<\/c:f>/g) ?? []).map((t) => t.replace(/.*<c:f>/, '').replace('</c:f>', '')).join(',') === 'Data!$A$2:$A$4,Data!$C$2:$C$4', (x10.match(/<c:xVal>[\s\S]{0,60}/g) ?? []).join(' '))
 }
 
+// ---- review round 6: legacy array formulas, validation flag defaults, chart prefixes, theme colours in CF
+{
+  const w = new ExcelJS.Workbook(), t = w.addWorksheet('L')
+  t.getCell('A1').value = 1; t.getCell('A2').value = 2; t.getCell('A3').value = 3
+  t.getCell('C1').value = { formula: 'SUM(A1:A3)', result: 6, shareType: 'array', ref: 'C1:C3' }; t.getCell('C2').value = 6; t.getCell('C3').value = 6
+  t.getCell('E1').value = { formula: 'A1:A3*2', result: 2, shareType: 'array', ref: 'E1:E3' }; t.getCell('E2').value = 4; t.getCell('E3').value = 6
+  t.dataValidations.model['G1'] = { type: 'whole', operator: 'between', formulae: [1, 9] }
+  t.addConditionalFormatting({ ref: 'A1:A3', rules: [{ type: 'cellIs', operator: 'greaterThan', formulae: ['1'], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { theme: 4 } } } }] })
+  const r = await xlsxToSnapshot(await w.xlsx.writeBuffer()), c = r.sheets[r.sheetOrder[0]].cellData
+  check('a legacy array formula entered over C1:C3 (one value) keeps a formula and 6 in each cell', [0, 1, 2].every((k) => c[k][2]?.f === '=SUM(A1:A3)' && c[k][2]?.v === 6), J([c[0][2], c[1][2], c[2][2]]))
+  check('a legacy array formula returning an array spills from its first cell', c[0][4]?.f === '=A1:A3*2' && c[1][4]?.v === undefined && c[2][4]?.v === undefined, J([c[0][4], c[1][4], c[2][4]]))
+  const v = res(r, 'SHEET_DATA_VALIDATION_PLUGIN')[r.sheetOrder[0]]?.[0]
+  check('a validation without allowBlank / showErrorMessage in the file has both off', v?.allowBlank === false && v?.showErrorMessage === false, J(v))
+  const cf = res(r, 'SHEET_CONDITIONAL_FORMATTING_PLUGIN')[r.sheetOrder[0]]?.[0]?.rule
+  check('a conditional format filled with a theme colour keeps the colour', /^#[0-9a-f]{6}$/.test(cf?.style?.bg?.rgb ?? ''), J(cf?.style))
+  // the same chart with another namespace prefix
+  const zc = await JSZip.loadAsync(await snapshotToXlsx(snap))
+  const cp = Object.keys(zc.files).find((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))
+  zc.file(cp, (await zc.file(cp).async('string')).replace(/xmlns:c=/, 'xmlns:ch=').replace(/<(\/?)c:/g, '<$1ch:'))
+  const back = await xlsxToSnapshot(await zc.generateAsync({ type: 'uint8array' }))
+  const ch = Object.values(res(back, 'SHEET_DRAWING_PLUGIN')[back.sheetOrder[0]]?.data ?? {}).filter((d) => d.drawingType === 8)
+  check('a chart written with another namespace prefix (ch:) is still read', ch.length === 1 && ch[0].data.type === 'column', String(ch.length))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

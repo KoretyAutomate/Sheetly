@@ -44,15 +44,15 @@ function dxfOut(st = {}) {
   if (argb(st.bg?.rgb)) out.fill = { type: 'pattern', pattern: 'solid', bgColor: { argb: argb(st.bg.rgb) }, fgColor: { argb: argb(st.bg.rgb) } }
   return out
 }
-function dxfIn(style = {}) {
+function dxfIn(style = {}, color = fromArgb) {
   const s = {}, f = style.font ?? {}, fill = style.fill
-  const cl = fromArgb(f.color); if (cl) s.cl = { rgb: cl }
+  const cl = color(f.color); if (cl) s.cl = { rgb: cl }
   if (f.bold) s.bl = 1
   if (f.italic) s.it = 1
   if (f.strike) s.st = { s: 1 }
   if (f.underline) s.ul = { s: 1 }
   // A dxf's solid fill colour is bgColor (fgColor when a writer put it there).
-  const bg = fromArgb(fill?.bgColor) ?? fromArgb(fill?.fgColor); if (bg) s.bg = { rgb: bg }
+  const bg = color(fill?.bgColor) ?? color(fill?.fgColor); if (bg) s.bg = { rgb: bg }
   return s
 }
 
@@ -110,14 +110,15 @@ export function cfOut(ws, rules = []) {
 
 let cfSeq = 0
 /** ExcelJS ws.conditionalFormattings -> Univer rules for one sheet. */
-export function cfIn(ws, sheetId) {
+/** color: the workbook's colour resolver (theme, tint, indexed and ARGB colours). */
+export function cfIn(ws, sheetId, color = fromArgb) {
   const out = []
   const list = (ws.conditionalFormattings ?? []).flatMap((cf) => (cf.rules ?? []).map((rule) => ({ ref: cf.ref, rule })))
   list.sort((a, b) => (a.rule.priority ?? 0) - (b.rule.priority ?? 0))
   for (const { ref, rule: x } of list) {
     const ranges = sqrefIn(ref).map((g) => ({ ...g, rangeType: 0, sheetId }))
     if (!ranges.length) continue
-    const style = dxfIn(x.style)
+    const style = dxfIn(x.style, color)
     let rule = null
     switch (x.type) {
       case 'cellIs': {
@@ -147,8 +148,8 @@ export function cfIn(ws, sheetId) {
       case 'expression': rule = { type: 'highlightCell', subType: 'formula', value: `=${x.formulae?.[0] ?? 'FALSE'}`, style }; break
       case 'duplicateValues': case 'uniqueValues': rule = { type: 'highlightCell', subType: x.type, style }; break
       case 'dataBar': rule = { type: 'dataBar', isShowValue: x.showValue !== false,
-        config: { min: cfvoIn(x.cfvo?.[0]), max: cfvoIn(x.cfvo?.[1]), isGradient: x.gradient !== false, positiveColor: fromArgb(x.color) ?? '#638ec6', nativeColor: '#ff0000' } }; break
-      case 'colorScale': rule = { type: 'colorScale', config: (x.cfvo ?? []).map((v, i) => ({ index: i, color: fromArgb(x.color?.[i]) ?? '#000000', value: cfvoIn(v) })) }; break
+        config: { min: cfvoIn(x.cfvo?.[0]), max: cfvoIn(x.cfvo?.[1]), isGradient: x.gradient !== false, positiveColor: color(x.color) ?? '#638ec6', nativeColor: '#ff0000' } }; break
+      case 'colorScale': rule = { type: 'colorScale', config: (x.cfvo ?? []).map((v, i) => ({ index: i, color: color(x.color?.[i]) ?? '#000000', value: cfvoIn(v) })) }; break
       case 'iconSet': {
         const cfvo = x.cfvo ?? [], n = cfvo.length
         const config = []
@@ -212,8 +213,9 @@ export function dvIn(ws, sheetId) {
       formula1 = ref(formula1); formula2 = ref(formula2)
     }
     out.push({ uid: `dv${++dvSeq}`, ranges, type: v.type, ...(v.operator && v.type !== 'list' && v.type !== 'custom' ? { operator: v.operator } : {}),
-      formula1, ...(formula2 !== undefined ? { formula2 } : {}), allowBlank: v.allowBlank !== false, showDropDown: true,
-      showErrorMessage: v.showErrorMessage !== false, errorStyle: ERROR_STYLE_IN[v.errorStyle ?? 'stop'] ?? 1,
+      // In the file an omitted allowBlank / showErrorMessage means off.
+      formula1, ...(formula2 !== undefined ? { formula2 } : {}), allowBlank: v.allowBlank === true, showDropDown: true,
+      showErrorMessage: v.showErrorMessage === true, errorStyle: ERROR_STYLE_IN[v.errorStyle ?? 'stop'] ?? 1,
       ...(v.error ? { error: v.error } : {}), ...(v.errorTitle ? { errorTitle: v.errorTitle } : {}),
       ...(v.showInputMessage ? { showInputMessage: true } : {}), ...(v.prompt ? { prompt: v.prompt } : {}), ...(v.promptTitle ? { promptTitle: v.promptTitle } : {}) })
   }
