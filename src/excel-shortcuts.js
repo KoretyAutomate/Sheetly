@@ -13,7 +13,7 @@ const excelSerial = (d) => Math.floor((d - new Date(1899, 11, 30)) / 864e5)
 const dayFraction = (d) => (d - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5
 const PRIORITY = 200
 
-export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline, quickAnalysis) {
+export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline, quickAnalysis, pivots) {
   const commands = api._injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook()
   const sheet = () => wb().getActiveSheet()
@@ -137,6 +137,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     ['toggle-objects', CTRL | DIGIT(6), () => extras.toggleObjects()],
     ['formula-bar', CTRL | SHIFT | KeyCode.U, () => extras.toggleFormulaBar()],
     ['quick-analysis', CTRL | KeyCode.Q, () => quickAnalysis.open()],
+    ['pivot-refresh', ALT | KeyCode.F5, () => pivots.refresh(false)],
+    ['pivot-refresh-all', CTRL | ALT | KeyCode.F5, () => pivots.refresh(true)],
     // ---- workbook / window (actions run in the Electron main process)
     ['file-new', CTRL | KeyCode.N, () => app('new')],
     ['file-open', CTRL | KeyCode.O, () => app('open')],
@@ -212,10 +214,10 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     const [r, c] = activeCell()
     if (r === 0) return true
     const above = sheet().getRange(r - 1, c), range = sheet().getRange(r, c)
-    // getCellData() is the live cell object: copy it before the cell is overwritten.
-    const original = structuredClone(range.getCellData() ?? null)
+    // The stored cell (getCellData() is the formatted view, e.g. "$100" for 100): copied before it is overwritten.
+    const original = structuredClone(sheet().getSheet().getCellRaw(r, c) ?? null)
     if (formula && above.getFormula()) range.setFormula(above.getFormula())
-    else { const v = above.getValue(); if (v == null || v === '') range.clearContent(); else range.setValue(v) }
+    else { const v = above.getRawValue(); if (v == null || v === '') range.clearContent(); else range.setValue(v) }
     commands.executeCommand('sheet.operation.set-cell-edit-visible-f2', { visible: true, eventType: 4, keycode: KeyCode.F2 })
     const sub = commands.onCommandExecuted((cmd) => {
       // Only user-initiated closes carry a keycode (Esc, Enter, Tab, ...); internal closes do not.
@@ -239,8 +241,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
   function pickFromList() {
     const [r, c] = activeCell()
     const s = sheet(), seen = new Set()
-    for (let y = r - 1; y >= 0 && s.getRange(y, c).getValue() != null && s.getRange(y, c).getValue() !== ''; y--) seen.add(String(s.getRange(y, c).getValue()))
-    for (let y = r + 1; s.getRange(y, c).getValue() != null && s.getRange(y, c).getValue() !== ''; y++) seen.add(String(s.getRange(y, c).getValue()))
+    for (let y = r - 1; y >= 0 && s.getRange(y, c).getRawValue() != null && s.getRange(y, c).getRawValue() !== ''; y--) seen.add(String(s.getRange(y, c).getRawValue()))
+    for (let y = r + 1; s.getRange(y, c).getRawValue() != null && s.getRange(y, c).getRawValue() !== ''; y++) seen.add(String(s.getRange(y, c).getRawValue()))
     const options = [...seen].filter((v) => Number.isNaN(Number(v))).sort((a, b) => a.localeCompare(b))
     if (!options.length) return true
     const hide = s.getRange(r, c).showDropdown({
@@ -332,7 +334,7 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
 
 /** AutoSum (Alt+=); fn picks the AutoSum menu entry: SUM, AVERAGE, COUNT, MAX, MIN. */
 export function autosum(ws, r, fn = 'SUM') {
-  const row = r.getRow(), col = r.getColumn(), num = (a, b) => typeof ws.getRange(a, b).getValue() === 'number'
+  const row = r.getRow(), col = r.getColumn(), num = (a, b) => typeof ws.getRange(a, b).getRawValue() === 'number'
   let top = row - 1
   while (top >= 0 && num(top, col)) top--
   const target = ws.getRange(row, col)
@@ -357,7 +359,7 @@ export const SHORTCUT_DOCS = [
   ['Ctrl+Shift+Arrow', 'Extend to the edge of the data'], ['Ctrl+Shift+Home / End', 'Extend to A1 / the last used cell'],
   ['Ctrl+Shift+*', 'Select the current region'], ['Shift+Backspace', 'Select only the active cell'],
   ['F8', 'Extend Selection mode'], ['Shift+F8', 'Add to Selection mode'], ['F6 / Shift+F6', 'Move between the worksheet, ribbon, task pane and status bar'],
-  ['Ctrl+F1', 'Collapse or expand the ribbon'], ['Ctrl+Q', 'Quick Analysis'], ['End, Arrow', 'End mode: move to the edge of the data'],
+  ['Ctrl+F1', 'Collapse or expand the ribbon'], ['Ctrl+Q', 'Quick Analysis'], ['Alt+F5 / Ctrl+Alt+F5', 'Refresh the PivotTable / all PivotTables'], ['End, Arrow', 'End mode: move to the edge of the data'],
   ['Ctrl+Shift+O', 'Select cells with notes'], ['Alt+;', 'Select visible cells only'], ['Ctrl+\\ / Ctrl+Shift+|', 'Row / column differences'],
   ['Ctrl+[ / Ctrl+]', 'Select precedents / dependents'],
   ['F2', 'Edit the active cell'], ['Esc', 'Cancel editing'], ['Enter / Shift+Enter', 'Commit and move down / up'],

@@ -8,7 +8,9 @@
 import './keytips.css'
 import { el } from './ui/dialog.js'
 
-let tree = null // { tabs: Node[], legacy: Node[] }  Node = { k, label, run?, items? }
+let tree = null // { tabs: Node[], legacy: Node[] }  Node = { k, label, run?, items?, when? }
+// Contextual tabs (Chart Design) carry when(): shown only while it returns true.
+const tabs = () => tree.tabs.filter((t) => !t.when || t.when())
 let canStart = () => false
 const state = { active: false, path: [], buffer: '', altDown: false, altOther: false, altAgain: false, legacy: false, typed: [] }
 
@@ -19,7 +21,7 @@ const panel = el('div', { class: 'sx-keytips', role: 'menubar', 'aria-label': 'K
 const mount = () => { if (!panel.isConnected) document.body.append(panel) }
 const overlayOpen = () => !!document.querySelector('.sx-overlay')
 const keyChar = (e) => (/^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : null)
-const level = () => (state.path.length ? state.path[state.path.length - 1].items : state.legacy ? tree.legacy : tree.tabs)
+const level = () => (state.path.length ? state.path[state.path.length - 1].items : state.legacy ? tree.legacy : tabs())
 
 function start(first) {
   state.active = true; state.path = []; state.buffer = ''; state.legacy = false; state.typed = []
@@ -47,7 +49,7 @@ function type(ch) {
   const buf = state.buffer + ch
   // At the top level a letter that no tab uses reaches the Office 2003 menus.
   if (!state.path.length && !state.legacy && !state.buffer) {
-    const tab = tree.tabs.find((n) => n.k === ch)
+    const tab = tabs().find((n) => n.k === ch || n.k.startsWith(ch))
     if (!tab) { const menu = tree.legacy.find((n) => n.k === ch); if (menu) { state.legacy = true; state.typed = []; return choose(menu) } return }
   }
   const items = level() ?? []
@@ -60,9 +62,9 @@ function badge(text) { return el('span', { class: 'sx-keytip' }, text) }
 function render() {
   mount()
   panel.hidden = false
-  const tabs = el('div', { class: 'sx-keytips-tabs' }, ...tree.tabs.map((t) => el('button', { type: 'button', class: 'sx-keytips-tab',
+  const tabRow = el('div', { class: 'sx-keytips-tabs' }, ...tabs().map((t) => el('button', { type: 'button', class: 'sx-keytips-tab',
     'aria-current': state.path[0] === t ? 'true' : null, onClick: () => { state.path = []; state.legacy = false; choose(t) } }, t.label, badge(t.k))))
-  const rows = [tabs]
+  const rows = [tabRow]
   if (state.legacy) {
     rows.push(el('div', { class: 'sx-keytips-legacy' }, `Office 2003 access key: ALT, ${state.typed.join(', ')}, `,
       'continue typing the menu key sequence from an earlier version of Office or press Escape to cancel.'))
@@ -97,7 +99,7 @@ window.addEventListener('keydown', (e) => {
   if (state.altDown) state.altOther = true
   // Alt+letter (Alt still held): straight into that tab or Office 2003 menu.
   const ch = keyChar(e)
-  if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && ch && (tree.tabs.some((n) => n.k === ch) || tree.legacy.some((n) => n.k === ch)) && canStart()) {
+  if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && ch && (tabs().some((n) => n.k === ch) || tree.legacy.some((n) => n.k === ch)) && canStart()) {
     e.preventDefault(); e.stopImmediatePropagation()
     start(ch)
     return

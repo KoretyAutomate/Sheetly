@@ -9,9 +9,12 @@
 // On load a summary flagged collapsed, or a group whose detail is all hidden, sets custom.outlineCollapsed.
 import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
+import { CF, CHART_COMPONENT, DRAWINGS, DV, TABLES, cfIn, cfOut, dvIn, dvOut, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
+import { finishPackage, readCharts, readSparklines } from './xlsx-zip.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
-const EPOCH = Date.UTC(1899, 11, 30)
+const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1)
+let epoch = EPOCH // the workbook being read: 1904 date system workbooks count days from 1904-01-01
 const PX_PER_PT = 4 / 3
 const NOTE_SIZE = { width: 160, height: 72 }
 
@@ -182,13 +185,46 @@ const XLWS = new Set(['FILTER', 'SORT'])
 // Apply fn to the parts of a formula outside string literals.
 const outsideStrings = (f, fn) => f.split(/("(?:[^"]|"")*")/).map((p, i) => (i % 2 ? p : fn(p))).join('')
 export const formulaIn = (f) => outsideStrings(f, (p) => p.replace(/_xlfn\.(_xlws\.)?/gi, '').replace(/_xlpm\./gi, ''))
-export const formulaOut = (f) => outsideStrings(f, (p) => p.replace(/(^|[^A-Za-z0-9_.])([A-Za-z][A-Za-z0-9.]*)(?=\()/g, (m, pre, name) => {
+// LET / LAMBDA parameter names are stored as _xlpm.name inside their call (Excel reads a bare name as a defined name).
+function xlpm(f) {
+  const call = /(^|[^A-Za-z0-9_.])(?:_xlfn\.)?(LET|LAMBDA)\(/gi
+  let from = 0, m
+  while ((call.lastIndex = from, m = call.exec(f))) {
+    const open = m.index + m[0].length - 1
+    // the call's arguments: top-level commas up to the matching parenthesis, skipping strings and nesting
+    const commas = []
+    let depth = 0, close = -1, inStr = false
+    for (let i = open; i < f.length; i++) {
+      const ch = f[i]
+      if (inStr) { if (ch === '"') { if (f[i + 1] === '"') i++; else inStr = false } continue }
+      if (ch === '"') inStr = true
+      else if (ch === '(' || ch === '{') depth++
+      else if (ch === ')' || ch === '}') { depth--; if (depth === 0) { close = i; break } }
+      else if (ch === ',' && depth === 1) commas.push(i)
+    }
+    if (close < 0) break
+    const bounds = [open, ...commas, close]
+    const args = bounds.slice(0, -1).map((b, k) => f.slice(b + 1, bounds[k + 1]).trim())
+    const isLet = m[2].toUpperCase() === 'LET'
+    const names = args.slice(0, -1).filter((_, k) => !isLet || k % 2 === 0).filter((x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x))
+    if (names.length) {
+      const re = new RegExp(`(^|[^A-Za-z0-9_.!$'])(${names.map((x) => x.replace(/\./g, '\\.')).join('|')})(?![A-Za-z0-9_.(!])`, 'gi')
+      const span = outsideStrings(f.slice(open, close + 1), (part) => part.replace(re, '$1_xlpm.$2'))
+      f = f.slice(0, open) + span + f.slice(close + 1)
+    }
+    from = m.index + 1
+  }
+  return f
+}
+export const formulaOut = (f) => xlpmThen(f)
+const xlpmThen = (f) => xlpm(fnPrefix(f))
+const fnPrefix = (f) => outsideStrings(f, (p) => p.replace(/(^|[^A-Za-z0-9_.])([A-Za-z][A-Za-z0-9.]*)(?=\()/g, (m, pre, name) => {
   const u = name.toUpperCase()
   return XLWS.has(u) ? `${pre}_xlfn._xlws.${name}` : XLFN.has(u) ? `${pre}_xlfn.${name}` : m
 }))
 
 // Dates come from ExcelJS as Date objects with millisecond precision; round off the float noise.
-const serial = (d) => Math.round(((d.getTime() - EPOCH) / 864e5) * 1e10) / 1e10
+const serial = (d) => Math.round(((d.getTime() - epoch) / 864e5) * 1e10) / 1e10
 
 function cellValueIn(cell) {
   const v = cell.value, o = {}
@@ -201,7 +237,7 @@ function cellValueIn(cell) {
     else if (res !== undefined) o.v = res
   } else if (v && typeof v === 'object' && 'richText' in v) o.v = v.richText.map((t) => t.text).join('')
   else if (v && typeof v === 'object' && 'error' in v) { o.v = v.error; o.t = 1 }
-  else if (v && typeof v === 'object' && 'hyperlink' in v) o.v = v.text
+  else if (v && typeof v === 'object' && 'hyperlink' in v) { o.v = typeof v.text === 'string' ? v.text : v.text?.richText?.map((t) => t.text).join('') ?? ''; o.link = v.hyperlink }
   else if (v instanceof Date) o.v = serial(v)
   else o.v = v
   if (typeof o.v === 'number') o.t = 2
@@ -214,6 +250,16 @@ const resource = (snap, name) => {
   const r = snap.resources?.find((x) => x.name === name)
   try { return r?.data ? JSON.parse(r.data) : {} } catch { return {} }
 }
+const docText = (p) => p.body.dataStream.replace(/\r?\n$/, '').replace(/\r/g, '\n')
+const linkOf = (p) => p?.body?.customRanges?.find((r) => r.rangeType === 0 && r.properties?.url)?.properties.url
+let linkSeq = 0
+/** A one-paragraph Univer document whose whole text links to url. */
+function linkDoc(text, url) {
+  const id = `link${++linkSeq}`
+  return { id: `d_${id}`, documentStyle: {}, body: { dataStream: `${text}\r\n`, textRuns: [],
+    paragraphs: [{ startIndex: text.length }], sectionBreaks: [{ startIndex: text.length + 1 }],
+    customRanges: [{ startIndex: 0, endIndex: Math.max(0, text.length - 1), rangeType: 0, rangeId: id, properties: { url } }] } }
+}
 const noteText = (n) => (typeof n === 'string' ? n : n?.texts ? n.texts.map((t) => t.text).join('') : '')
 const a1 = (r, c) => { let s = ''; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s + (r + 1) }
 const parseA1 = (ref) => { const m = /^([A-Z]+)(\d+)$/.exec(ref ?? ''); if (!m) return null; return { r: +m[2] - 1, c: [...m[1]].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1 } }
@@ -222,8 +268,13 @@ export async function xlsxToSnapshot(buf) {
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buf)
   const theme = themePalette(wb)
-  const sheets = {}, order = [], notes = {}, idByIndex = {}
+  // 1904 workbooks keep their serials; Univer is told the date system.
+  const date1904 = !!wb.properties?.date1904
+  epoch = date1904 ? EPOCH_1904 : EPOCH
+  const sheets = {}, order = [], notes = {}, idByIndex = {}, links = [], idByName = {}
+  const cfs = {}, dvs = {}, drawings = {}, tables = []
   wb.eachSheet((ws, i) => {
+    idByName[ws.name] = `sheet${i}`
     const id = `sheet${i}`, cellData = {}, columnData = {}, rowData = {}, mergeData = []
     idByIndex[order.length] = id
     const sheetNotes = {}
@@ -235,6 +286,7 @@ export async function xlsxToSnapshot(buf) {
         // Merged-away cells repeat the master's value in ExcelJS; Univer keeps them empty.
         if (cell.isMerged && cell.master !== cell) { if (!isEmptyStyle(s)) rowCells[c - 1] = { s }; return }
         const o = cellValueIn(cell)
+        if (o.link) { links.push([o, o.link]); delete o.link }
         if (o.v == null) { delete o.v; delete o.t }
         if (!isEmptyStyle(s)) o.s = s
         if (Object.keys(o).length) rowCells[c - 1] = o
@@ -255,6 +307,19 @@ export async function xlsxToSnapshot(buf) {
       if (Object.keys(d).length) rowData[r - 1] = d
     })
     if (Object.keys(sheetNotes).length) notes[id] = sheetNotes
+    // Dynamic arrays: the file holds the spilled values as plain cells inside the anchor's ref; Univer computes
+    // them itself (keeping them as constants would make the formula #SPILL!).
+    ws.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: false }, (cell) => {
+      const v = cell.value
+      if (!v || typeof v !== 'object' || v.shareType !== 'array' || !v.ref) return
+      const g = parseRange(v.ref)
+      if (!g) return
+      for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) {
+        if (r === cell.row - 1 && c === cell.col - 1) continue
+        const x = cellData[r]?.[c]
+        if (x && !x.f) { delete x.v; delete x.t; if (!Object.keys(x).length) delete cellData[r][c] }
+      }
+    }))
     ws.columns?.forEach((col, i2) => {
       const d = {}
       if (col.width) d.w = Math.round(col.width * 7)
@@ -273,7 +338,11 @@ export async function xlsxToSnapshot(buf) {
       const m = ws._merges[k].model
       mergeData.push({ startRow: m.top - 1, endRow: m.bottom - 1, startColumn: m.left - 1, endColumn: m.right - 1 })
     })
-    const sheet = { id, name: ws.name, cellData, columnData, rowData, mergeData, rowCount: 1048576, columnCount: 16384 }
+    // Sheet defaults from <sheetFormatPr> (Excel's 15 pt rows and 8.43-character columns when absent), Calibri 11.
+    const fp = ws.properties ?? {}
+    const sheet = { id, name: ws.name, cellData, columnData, rowData, mergeData, rowCount: 1048576, columnCount: 16384,
+      defaultRowHeight: Math.round((fp.defaultRowHeight || 15) * PX_PER_PT), defaultColumnWidth: fp.defaultColWidth ? Math.round(fp.defaultColWidth * 7) : 64,
+      defaultStyle: { ff: 'Calibri', fs: 11 }, custom: { sheetlyDefaults: true } }
     if (view.state === 'frozen' && (view.xSplit || view.ySplit)) {
       // startRow / startColumn: first scrolling row / column (the pane's top-left cell, later than the split
       // when the sheet was scrolled before freezing).
@@ -285,10 +354,42 @@ export async function xlsxToSnapshot(buf) {
     if (tab) sheet.tabColor = tab
     if (ws.state === 'hidden') sheet.hidden = 1
     if (ws.state === 'veryHidden') sheet.hidden = 2
-    if (!settings.isDefault) sheet.custom = { sheetlyOutline: settings.value }
+    if (!settings.isDefault) sheet.custom.sheetlyOutline = settings.value
     sheets[id] = sheet
     order.push(id)
+    const rules = cfIn(ws, id)
+    if (rules.length) cfs[id] = rules
+    const vals = dvIn(ws, id)
+    if (vals.length) dvs[id] = vals
+    for (const t of tablesIn(ws)) tables.push({ sheetId: id, ...t })
+    const pics = imagesIn(wb, ws, sheet, 'wb')
+    if (pics.length) drawings[id] = { data: Object.fromEntries(pics.map((d) => [d.drawingId, d])), order: pics.map((d) => d.drawingId) }
   })
+  // Sparklines (x14 extension of the sheet).
+  for (const { sheetIndex, groups } of await readSparklines(buf)) {
+    const id = idByIndex[sheetIndex]
+    if (!id) continue
+    sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors,
+      items: g.items.filter((x) => idByName[x.sheetName]).map((x) => ({ row: x.row, col: x.col, sheetId: idByName[x.sheetName], source: x.source })) })).filter((g) => g.items.length)
+  }
+  // Charts: from the chart parts, as Sheetly charts linked to the same range.
+  let chartSeq = 0
+  for (const c of await readCharts(buf)) {
+    const id = idByIndex[c.sheetIndex], sourceId = idByName[c.spec.source.sheetName]
+    if (!id || !sourceId) continue
+    const spec = { ...c.spec, source: { sheetId: sourceId, range: c.spec.source.range } }
+    const drawingId = `chart${++chartSeq}_${Date.now().toString(36)}`
+    const d = placed(sheets[id], c.from, c.to, { unitId: 'wb', subUnitId: id, drawingId, drawingType: 8, componentKey: CHART_COMPONENT, data: spec, allowTransform: true })
+    const entry = (drawings[id] ??= { data: {}, order: [] })
+    entry.data[drawingId] = d; entry.order.push(drawingId)
+  }
+  // Hyperlinks become Univer link text: a rich-text cell whose text carries the URL; links into the workbook
+  // ("#Sheet2!A1") use Univer's "#gid=<sheet id>&range=A1" form.
+  for (const [o, url] of links) {
+    const m = /^#'?(.+?)'?!(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$/.exec(url)
+    const target = m && idByName[m[1]] ? `#gid=${idByName[m[1]]}&range=${m[2].replace(/\$/g, '')}` : url
+    o.p = linkDoc(String(o.v ?? url), target)
+  }
   const names = {}
   let n = 0
   for (const dn of wb.rawDefinedNames ?? []) {
@@ -301,7 +402,12 @@ export async function xlsxToSnapshot(buf) {
   const resources = []
   if (Object.keys(notes).length) resources.push({ name: NOTE, data: JSON.stringify(notes) })
   if (Object.keys(names).length) resources.push({ name: NAMES, data: JSON.stringify(names) })
-  return { id: 'wb', sheetOrder: order, sheets, resources }
+  if (Object.keys(cfs).length) resources.push({ name: CF, data: JSON.stringify(cfs) })
+  if (Object.keys(dvs).length) resources.push({ name: DV, data: JSON.stringify(dvs) })
+  if (Object.keys(drawings).length) resources.push({ name: DRAWINGS, data: JSON.stringify(drawings) })
+  epoch = EPOCH
+  // Tables are created through Univer's table API once the workbook exists (sheetlyTables, see main.js).
+  return { id: 'wb', sheetOrder: order, sheets, resources, ...(date1904 ? { dateSystem: 'date1904' } : {}), ...(tables.length ? { sheetlyTables: tables } : {}) }
 }
 
 /**
@@ -309,11 +415,15 @@ export async function xlsxToSnapshot(buf) {
  * ({si} without f, e.g. after fill-down) need their formula text: pass resolveFormulas(snap, api) first, or a
  * formulaOf(sheetId, row, col) callback here.
  */
-export async function snapshotToXlsx(snap, { formulaOf } = {}) {
+export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
   const wb = new ExcelJS.Workbook()
   const styleOf = (s) => (typeof s === 'string' ? snap.styles?.[s] : s) ?? null
-  const notes = resource(snap, NOTE)
-  for (const id of snap.sheetOrder) {
+  const notes = resource(snap, NOTE), cfs = resource(snap, CF), dvs = resource(snap, DV), allDrawings = resource(snap, DRAWINGS), allTables = resource(snap, TABLES)
+  if (snap.dateSystem === 'date1904') wb.properties.date1904 = true
+  // Excel recalculates on open: spilled ranges and anything Sheetly could not cache are filled in.
+  wb.calcProperties = { fullCalcOnLoad: true }
+  const charts = [], spills = new Set(), usedTableNames = new Set(), sparklines = []
+  for (const [sheetIndex, id] of snap.sheetOrder.entries()) {
     const s = snap.sheets[id], settings = outlineSettings(s.custom?.sheetlyOutline)
     const view = {}
     if (s.freeze && (s.freeze.xSplit > 0 || s.freeze.ySplit > 0)) {
@@ -324,6 +434,8 @@ export async function snapshotToXlsx(snap, { formulaOf } = {}) {
     if (s.showGridlines === 0) view.showGridLines = false
     if (settings.hideSymbols) view.showOutlineSymbols = false
     const props = {}
+    if (s.defaultRowHeight && s.defaultRowHeight !== 20) props.defaultRowHeight = Math.round((s.defaultRowHeight / PX_PER_PT) * 100) / 100
+    if (s.defaultColumnWidth && s.defaultColumnWidth !== 64) props.defaultColWidth = Math.round((s.defaultColumnWidth / 7) * 100) / 100
     if (argb(s.tabColor)) props.tabColor = { argb: argb(s.tabColor) }
     if (!settings.summaryBelow || !settings.summaryRight) props.outlineProperties = { summaryBelow: settings.summaryBelow, summaryRight: settings.summaryRight }
     const ws = wb.addWorksheet(s.name, { views: [view], properties: props })
@@ -337,10 +449,21 @@ export async function snapshotToXlsx(snap, { formulaOf } = {}) {
       if (!cell) continue
       const x = ws.getCell(+r + 1, +c + 1)
       const f = cell.f || (cell.si ? formulaOf?.(id, +r, +c) : null)
-      if (f) x.value = { formula: formulaOut(f.replace(/^=/, '')), result: typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined }
+      const spill = f ? arrayRangeOf?.(id, +r, +c) : null
+      const result = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined
+      if (f && spill && (spill.endRow > spill.startRow || spill.endColumn > spill.startColumn)) {
+        // A formula that spills: Excel's dynamic array (t="array" over the spill range, cm="1" added by finishPackage).
+        x.value = { formula: formulaOut(f.replace(/^=/, '')), result, shareType: 'array', ref: `${a1(spill.startRow, spill.startColumn)}:${a1(spill.endRow, spill.endColumn)}` }
+        spills.add(`${sheetIndex}!${a1(+r, +c)}`)
+      } else if (f) x.value = { formula: formulaOut(f.replace(/^=/, '')), result }
       else if (typeof cell.v === 'string' && ERRORS.has(cell.v) && cell.t !== 1) x.value = { error: cell.v }
       else if (cell.v !== undefined && cell.v !== null && cell.v !== '') x.value = cell.t === 3 ? !!cell.v : cell.v
-      else if (cell.p?.body?.dataStream) x.value = cell.p.body.dataStream.replace(/\r?\n$/, '').replace(/\r/g, '\n')
+      else if (cell.p?.body?.dataStream) x.value = docText(cell.p)
+      const url = linkOf(cell.p)
+      if (url && !f) {
+        const m = /^#gid=([^&]+)&range=(.+)$/.exec(url), target = m && snap.sheets[m[1]] ? `#'${snap.sheets[m[1]].name.replace(/'/g, "''")}'!${m[2]}` : url
+        x.value = { text: cell.p?.body?.dataStream ? docText(cell.p) : String(cell.v ?? url), hyperlink: target }
+      }
       const st = styleOf(cell.s)
       if (st || rowStyle(r) || colStyle(c)) {
         const style = styleOut(mergeStyles(colStyle(c), rowStyle(r), st))
@@ -369,6 +492,20 @@ export async function snapshotToXlsx(snap, { formulaOf } = {}) {
     if (maxRow) ws.properties.outlineLevelRow = maxRow
     if (maxCol) ws.properties.outlineLevelCol = maxCol
     for (const m of s.mergeData || []) ws.mergeCells(m.startRow + 1, m.startColumn + 1, m.endRow + 1, m.endColumn + 1)
+    const sg = s.custom?.sheetlySparklines ?? []
+    if (sg.length) sparklines.push({ sheetIndex, groups: sg.map((g) => ({ ...g, items: g.items.map((x) => ({ ...x, sheetName: snap.sheets[x.sheetId ?? id]?.name ?? s.name })) })) })
+    cfOut(ws, cfs[id])
+    dvOut(ws, dvs[id])
+    tablesOut(ws, allTables[id]?.tables, usedTableNames)
+    const list = Object.values(allDrawings[id]?.data ?? {})
+    imagesOut(wb, ws, list)
+    for (const d of list) {
+      if (d.componentKey !== CHART_COMPONENT || !d.data?.source || !d.sheetTransform) continue
+      const src = snap.sheets[d.data.source.sheetId]
+      if (!src) continue
+      const get = (r, c) => { const v = src.cellData?.[r]?.[c]; return v?.v ?? (v?.p?.body?.dataStream ? docText(v.p) : null) }
+      charts.push({ sheetIndex, spec: d.data, from: d.sheetTransform.from, to: d.sheetTransform.to, get, sourceName: src.name })
+    }
   }
   // Defined names go out as written (ranges, constants, formulas; sheet-scoped ones with localSheetId).
   const sheetIndex = Object.fromEntries(snap.sheetOrder.map((id, i) => [id, i]))
@@ -376,7 +513,9 @@ export async function snapshotToXlsx(snap, { formulaOf } = {}) {
     const local = dn.localSheetId && dn.localSheetId !== ALL_SHEETS ? sheetIndex[dn.localSheetId] : undefined
     return { name: dn.name, ranges: [formulaOut(dn.formulaOrRefString.replace(/^=/, ''))], ...(local != null ? { localSheetId: local } : {}) }
   })
-  return new Uint8Array(await wb.xlsx.writeBuffer())
+  const buf = new Uint8Array(await wb.xlsx.writeBuffer())
+  // Charts are written into the sheet named by their own source; chartXml uses that sheet's name in the refs.
+  return finishPackage(buf, { charts: charts.map((c) => ({ ...c, sheetName: c.sourceName })), spills, sparklines })
 }
 
 /** Fills in the formula text of shared-formula cells ({si} only) from the live workbook (FWorkbook). */

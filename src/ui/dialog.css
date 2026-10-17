@@ -67,3 +67,15 @@
 .sx-qa-item:focus-visible, .sx-qa-tab:focus-visible { outline: 2px solid var(--sx-accent); outline-offset: 1px; }
 .sx-qa-hint { color: var(--sx-muted); padding: 0 8px 6px; }
 .sx-qa-item[aria-disabled="true"] { opacity: .45; cursor: default; }
+.sx-task-pane { position: fixed; right: 0; top: 110px; bottom: 40px; width: min(300px, calc(100vw - 32px)); z-index: 900; background: var(--sx-bg); color: var(--sx-fg);
+  border-left: 1px solid var(--sx-border); box-shadow: -2px 0 8px rgba(0,0,0,.08); font: 12px/1.4 "Segoe UI", system-ui, sans-serif; display: flex; flex-direction: column; gap: 6px; padding: 8px; overflow: auto; box-sizing: border-box; }
+.sx-task-pane[hidden] { display: none; }
+.sx-pivot-title { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+.sx-pivot-hint { color: var(--sx-muted); }
+.sx-pivot-fields { border: 1px solid var(--sx-border); max-height: 35vh; overflow: auto; padding: 4px; }
+.sx-pivot-field { display: block; padding: 2px 4px; cursor: grab; }
+.sx-pivot-areas { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sx-pivot-area { border: 1px solid var(--sx-border); min-height: 70px; padding: 4px; }
+.sx-pivot-area-title { color: var(--sx-muted); font-weight: 600; margin-bottom: 2px; }
+.sx-pivot-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; justify-content: space-between; background: var(--sx-title); margin: 2px 0; padding: 2px 4px; cursor: grab; }
+.sx-pivot-item select { font: inherit; max-width: 100%; }

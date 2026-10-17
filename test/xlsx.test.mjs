@@ -2,7 +2,7 @@
 // through xlsxToSnapshot. Covers styles (incl. snapshot style ids), dates, shared formulas, errors, row heights,
 // freeze, tab colour, hidden sheets, defined names, notes and the outline settings.
 import ExcelJS from 'exceljs'
-import { xlsxToSnapshot, snapshotToXlsx } from '../src/xlsx.js'
+import { xlsxToSnapshot, snapshotToXlsx, formulaOut, formulaIn } from '../src/xlsx.js'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -65,7 +65,7 @@ const J = JSON.stringify
   check('round-trip: row height', s.rowData[3]?.h === 40 && s.rowData[3]?.ia === 0, J(s.rowData))
   check('round-trip: freeze', s.freeze?.ySplit === 2 && s.freeze?.startRow === 2 && s.freeze?.xSplit === 0, J(s.freeze))
   check('round-trip: tab colour', s.tabColor === '#00ff00')
-  check('round-trip: outline settings', J(s.custom?.sheetlyOutline) === J({ summaryBelow: false, summaryRight: true, hideSymbols: true }), J(s.custom))
+  check('round-trip: outline settings', J(s.custom?.sheetlyOutline) === J({ summaryBelow: false, summaryRight: true, hideSymbols: true, autoStyles: false }), J(s.custom))
   check('round-trip: hidden sheet', back.sheets[back.sheetOrder[1]].hidden === 1)
   const res = Object.fromEntries((back.resources ?? []).map((r) => [r.name, JSON.parse(r.data)]))
   check('round-trip: defined name', Object.values(res.SHEET_DEFINED_NAME_PLUGIN ?? {}).some((d) => d.name === 'MyName' && d.formulaOrRefString === 'Sheet1!$A$1'), J(res.SHEET_DEFINED_NAME_PLUGIN))
@@ -167,6 +167,31 @@ const J = JSON.stringify
   check('read: indexed colour', c[2][0].s?.bg?.rgb === '#ff0000', J(c[2][0].s))
   check('read: built-in format 14 shows as m/d/yyyy', c[3][0].s?.n?.pattern === 'm/d/yyyy', J(c[3][0].s))
   check('read: auto-fit row stays automatic, custom row fixed', rows[5]?.h === undefined && rows[0]?.h === 53 && rows[0]?.ia === 0, J(rows))
+}
+
+// ---- hyperlinks: web and in-workbook
+{
+  const link = (text, url) => ({ p: { id: 'd', body: { dataStream: text + '\r\n', paragraphs: [{ startIndex: text.length }], customRanges: [{ startIndex: 0, endIndex: text.length - 1, rangeType: 0, rangeId: 'r', properties: { url } }] } } })
+  const snap = { sheetOrder: ['s1', 's2'], sheets: {
+    s1: { id: 's1', name: 'Sheet1', cellData: { 0: { 0: link('site', 'https://example.com/'), 1: link('jump', '#gid=s2&range=B3') } } },
+    s2: { id: 's2', name: 'My Data', cellData: {} } } }
+  const buf = await snapshotToXlsx(snap)
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf)
+  const ws = wb.getWorksheet('Sheet1')
+  check('write: web hyperlink', ws.getCell('A1').value?.hyperlink === 'https://example.com/' && ws.getCell('A1').value?.text === 'site', J(ws.getCell('A1').value))
+  check('write: link into the workbook uses the sheet name', ws.getCell('B1').value?.hyperlink === "#'My Data'!B3", J(ws.getCell('B1').value))
+  const back = await xlsxToSnapshot(buf), c = back.sheets[back.sheetOrder[0]].cellData
+  const url = (x) => x?.p?.body?.customRanges?.[0]?.properties?.url
+  check('round-trip: web hyperlink', url(c[0][0]) === 'https://example.com/' && c[0][0].p.body.dataStream === 'site\r\n', J(c[0][0]))
+  check('round-trip: in-workbook link back to #gid form', url(c[0][1]) === `#gid=${back.sheetOrder[1]}&range=B3`, J(c[0][1]))
+}
+
+// ---- LET / LAMBDA parameters are stored as _xlpm.name (Excel would read a bare name as a defined name)
+{
+  const cases = [['LET(x,2,y,x*3,x+y)', '_xlfn.LET(_xlpm.x,2,_xlpm.y,_xlpm.x*3,_xlpm.x+_xlpm.y)'], ['BYROW(A1:A3,LAMBDA(r,SUM(r)))', '_xlfn.BYROW(A1:A3,_xlfn.LAMBDA(_xlpm.r,SUM(_xlpm.r)))'],
+    ['LET(x,"x",x&"x")', '_xlfn.LET(_xlpm.x,"x",_xlpm.x&"x")'], ['SUM(x1,A1)', 'SUM(x1,A1)'], ['LET(a1x,5,a1x+A1)', '_xlfn.LET(_xlpm.a1x,5,_xlpm.a1x+A1)']]
+  const bad = cases.filter(([f, want]) => formulaOut(f) !== want || formulaIn(formulaOut(f)) !== f)
+  check('write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare', !bad.length, J(bad.map(([f]) => [f, formulaOut(f)])))
 }
 
 const pass = out.filter((l) => l.startsWith('PASS')).length

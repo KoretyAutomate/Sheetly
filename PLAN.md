@@ -138,3 +138,65 @@ Not done from this round (deliberate or unverified):
   without _xlpm.; spills saved as anchor formulas; conditional formats, data validation, tables, hyperlinks and
   threaded comments are not written.
 - Opening a file given on the command line (file association) is not supported.
+
+## Next: close the remaining gaps (2026-10-16, rounds 3-6)
+Online-only functions (TRANSLATE, DETECTLANGUAGE, STOCKHISTORY -> #CONNECT!) and CUBE* (no OLAP server) stay as
+they are: Excel itself returns those errors without its services. Everything else below is in scope.
+
+R3 — files (.xlsx both ways unless noted)
+ a. Open a file given on the command line / from the file manager (and a second launch opens a new window, like
+    Excel's one-window-per-workbook); desktop entry gets the .xlsx MimeType back.
+ b. Conditional formats <-> resource SHEET_CONDITIONAL_FORMATTING_PLUGIN {sheetId: rule[]} (highlightCell
+    number/text/duplicate/unique/average/rank/timePeriod/formula, dataBar, colorScale, iconSet); ExcelJS
+    ws.addConditionalFormatting / ws.conditionalFormattings.
+ c. Data validation <-> SHEET_DATA_VALIDATION_PLUGIN {sheetId: [{uid, ranges, type, operator, formula1/2,
+    allowBlank, showErrorMessage, error, errorStyle, showInputMessage, prompt, promptTitle}]}.
+ d. Hyperlinks <-> cell rich text customRanges {properties:{url}} (incl. internal "#Sheet!A1").
+ e. Tables <-> FWorksheet.addTable / table resource; ExcelJS ws.addTable / ws.tables.
+ f. Pictures (over-grid images) <-> ExcelJS addImage / getImages.
+ g. Charts <-> chart parts written by post-processing the zip (drawingN.xml graphicFrame + xl/charts/chartN.xml,
+    rels, [Content_Types]); read back by parsing c:*Chart, series c:tx/c:cat/c:val refs.
+ h. Excel's defaults: Calibri 11 (Aptos for files that say so), row height 20 px (15 pt), column width 64 px
+    (8.43); date1904 workbooks; LAMBDA/LET parameters written with _xlpm.; dynamic-array formulas written as
+    spills (t="array" ref + cm="1" with xl/metadata.xml), read back as dynamic formulas.
+R4 — charts: live link to the source range (redraw on data change), types (clustered/stacked/100% column and bar,
+    line (+markers), pie, doughnut, area, scatter), Insert Chart dialog, Change Chart Type, Switch Row/Column,
+    title / axis titles / legend / data labels, Quick Analysis chart recommendations.
+R5 — PivotTables: Insert > PivotTable (Alt N V), Create PivotTable dialog (range or table, new / existing sheet),
+    PivotTable Fields task pane (Filters / Columns / Rows / Values, checkboxes + drag), Value Field Settings
+    (Sum, Count, Average, Max, Min, Product, Count Numbers, StdDev, Var), compact layout with Row Labels /
+    Grand Total, Refresh (Alt+F5) and Refresh All (Ctrl+Alt+F5), GETPIVOTDATA against it; saved as values +
+    definition (sheet custom); .xlsx: values (pivot cache not written — documented).
+R6 — sparklines (Line / Column / Win-Loss, Alt N S…, drawn in the cell, x14 sparklineGroups in .xlsx); Quick
+    Analysis live preview; outline Automatic styles / Apply Styles (RowLevel_n / ColLevel_n); Auto Outline on
+    the selection / current region; F6 KeyTips on the ribbon and the single-source KeyTip letters, both after
+    research; Quick Analysis Totals > Count semantics after research.
+Each round: tests driven in the app, all suites green, commit, push via a feature branch (Codex review), then main.
+Reviews (plan agent + research agent, 2026-10-16) adopted for R3-R6: Univer's clockwise text angle; ExcelJS patched
+for in-workbook hyperlinks (location only), CF gaps (duplicate/unique, equalAverage, text attr, beginsWith/endsWith/
+notContains, cfvo gte + formula values, dataBar showValue), DV kept per sqref (a whole-column rule had become a
+million entries) with raw numeric limits, tables' default headerRowCount; icon-set band order reversed between
+Univer and Excel; dxf fills via bgColor; Excel table names cleaned; picture anchors in EMU via native fields; chart
+parts with schema order, roundedCorners 0, caches; dynamic arrays with cm="1" + xl/metadata.xml; spilled values not
+kept as constants; 1904 date system kept (Univer dateSystem); .xlsm not offered (macros would be lost); File > Open
+over an edited workbook opens a new window; recalculation on open; Calibri via bundled Carlito (Aptos, Excel 365's
+font since 2023, has no free metric twin); charts: blanks are gaps, hidden rows/cols not plotted, ranges move with
+inserted / deleted rows and columns, axis in the source number format, Excel's automatic axis minimum; Quick
+Analysis tab letters F C O T S; outline Automatic styles / Apply Styles (RowLevel_1 bold, RowLevel_2 italic);
+PivotTable value fields default to Sum for numbers else Count; sparkline groups share the sheet's single extLst.
+Found while testing: Univer's FRange.getValue() returns the formatted text for formatted numbers ("$100"); Sheetly
+code that needs values (AutoSum, Ctrl+Shift+", Paste Special, Go To Special, Quick Analysis, charts) now reads
+getRawValue().
+
+Status 2026-10-16 (rounds 3-6): files (open from the command line; CF, DV, hyperlinks, tables, pictures, charts,
+sparklines, dynamic arrays, 1904 dates, Excel's default sizes and Calibri in .xlsx), charts (linked, 13 types,
+multi-level categories, elements, Change Type, Switch Row/Column, range shifting), PivotTables (fields pane,
+Value Field Settings, filters, refresh, GETPIVOTDATA), sparklines, outline styles, Auto Outline on the selection,
+LET/LAMBDA _xlpm. on save.
+Still open (and why):
+- Online functions (TRANSLATE, DETECTLANGUAGE, STOCKHISTORY) and CUBE*: need Microsoft services / an OLAP server.
+- PivotTables in .xlsx are written as values (no pivotCacheDefinition / pivotTable parts yet); GETPIVOTDATA is not
+  generated by clicking a PivotTable cell while typing a formula.
+- Chart sheets are saved as worksheets with a chart; Quick Analysis has no live preview.
+- Excel 365's Aptos font cannot be bundled; Calibri (Carlito) is the default.
+- KeyTip letters with one source, F6 KeyTip badges, Quick Analysis Count (COUNTA?) need a live Excel to confirm.

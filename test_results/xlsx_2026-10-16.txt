@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-16T21:55:55.504Z
+xlsx fidelity  2026-10-16T23:57:40.405Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
@@ -55,5 +55,10 @@ PASS  read: theme colour with tint (Accent 1, Lighter 40% = 95B3D7)
 PASS  read: indexed colour
 PASS  read: built-in format 14 shows as m/d/yyyy
 PASS  read: auto-fit row stays automatic, custom row fixed
+PASS  write: web hyperlink
+PASS  write: link into the workbook uses the sheet name
+PASS  round-trip: web hyperlink
+PASS  round-trip: in-workbook link back to #gid form
+PASS  write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare
 
-56/56 passed
+61/61 passed

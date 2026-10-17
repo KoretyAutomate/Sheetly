@@ -1,0 +1,21 @@
+pivot model  2026-10-16T23:57:40.731Z
+PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
+PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
+PASS  two row fields: compact form, subtotals on the group row, inner items indented
+PASS  two value fields side by side
+PASS  values only: caption and total
+PASS  report filter Product = A and Average of Sales
+PASS  filter cells: (All) / item / (Multiple Items)
+PASS  a new value field: Sum for numbers, Count for text
+PASS  aggregates: count counts non-blank, countNums numbers, stdDev / var
+PASS  blank header -> not a valid PivotTable source
+PASS  column field and two value fields: item row, then the value captions next to Row Labels
+PASS  GETPIVOTDATA("Sales", pt) = grand total 45
+PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
+PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
+PASS  GETPIVOTDATA: item not in the report -> #REF!
+PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
+PASS  GETPIVOTDATA: combination with no data -> #REF!
+PASS  GETPIVOTDATA: unknown data field -> #REF!
+
+18/18 passed

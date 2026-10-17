@@ -257,7 +257,10 @@ export function createOutline(api) {
     const ref = /(\$?)([A-Z]{1,3})(\$?)(\d+)(?::(\$?)([A-Z]{1,3})(\$?)(\d+))?/g
     const colNum = (L) => [...L].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
     const formulas = []
-    w.getCellMatrix().forValue((r, c, cell) => { if (typeof cell?.f === 'string' && cell.f.startsWith('=')) formulas.push([r, c, cell.f]) })
+    // With a range selected only that range is outlined (Excel); with one cell, the whole sheet's data.
+    const g = sel(), scoped = g.startRow !== g.endRow || g.startColumn !== g.endColumn
+    const inScope = (r, c) => !scoped || (r >= g.startRow && r <= g.endRow && c >= g.startColumn && c <= g.endColumn)
+    w.getCellMatrix().forValue((r, c, cell) => { if (typeof cell?.f === 'string' && cell.f.startsWith('=') && inScope(r, c)) formulas.push([r, c, cell.f]) })
     const refsOf = (f) => {
       // String literals and references into other sheets do not outline this one.
       const text = f.replace(/"(?:[^"]|"")*"/g, '""').replace(/'[^']*'![$A-Z0-9:]+|[A-Za-z_][\w.]*![$A-Z0-9:]+/g, '')
@@ -290,6 +293,7 @@ export function createOutline(api) {
         const changes = new Map([...levels].map(([i, L]) => [i, { level: L, flags: 0 }]))
         if (changes.size) apply(w, axis, changes, [], [])
       }
+      if (settingsOf(w).autoStyles) applyStyles()
       schedule()
       return true
     }
@@ -304,10 +308,29 @@ export function createOutline(api) {
   function settingsDialog() {
     const w = ws().getSheet(), st = settingsOf(w)
     const below = check('Summary rows &below detail', st.summaryBelow), right = check('Summary columns to &right of detail', st.summaryRight)
-    const dir = () => setDirection({ summaryBelow: below.input.checked, summaryRight: right.input.checked })
+    const auto = check('Automatic st&yles', st.autoStyles)
+    const dir = () => { setDirection({ summaryBelow: below.input.checked, summaryRight: right.input.checked }); writeSettings(w, { ...settingsOf(w).value, autoStyles: auto.input.checked }) }
     let d = null
     const create = button('&Create', () => { dir(); d.close(); autoOutline() })
-    d = openDialog({ title: 'Settings', width: 320, body: fieldset('Direction', below.node, right.node), extraButtons: [create], onOk: () => { dir() } })
+    const styles = button('Apply &Styles', () => { dir(); d.close(); applyStyles() })
+    d = openDialog({ title: 'Settings', width: 340, body: el('div', {}, fieldset('Direction', below.node, right.node), auto.node), extraButtons: [create, styles], onOk: () => { dir() } })
+    return true
+  }
+
+  // Apply Styles: Excel's RowLevel_n / ColLevel_n cell styles on the summary rows / columns — level 1 bold, level 2
+  // italic (levels 3-7 carry no formatting) — across the used part of the sheet.
+  function applyStyles() {
+    const w = ws().getSheet(), s = ws()
+    const used = { rows: Math.max(0, w.getLastRowWithContent?.() ?? 0), cols: Math.max(0, w.getLastColumnWithContent?.() ?? 0) }
+    for (const axis of ['row', 'col']) {
+      for (const g of outlineGroups(levelMap(w, axis))) {
+        if (g.level > 2) continue
+        const i = sumOf(w, axis, g)
+        if (i < 0) continue
+        const r = axis === 'row' ? s.getRange(i, 0, 1, used.cols + 1) : s.getRange(0, i, used.rows + 1, 1)
+        if (g.level === 1) r.setFontWeight('bold'); else r.setFontStyle('italic')
+      }
+    }
     return true
   }
 
@@ -510,6 +533,7 @@ export function createOutline(api) {
     'sheetly.outline.auto': (p) => autoOutline(p),
     'sheetly.outline.settings': () => settingsDialog(),
     'sheetly.outline.set-direction': (p) => setDirection(p),
+    'sheetly.outline.apply-styles': () => applyStyles(),
   }
   for (const [id, fn] of Object.entries(commandDefs)) commands.registerCommand({ id, type: CommandType.COMMAND, handler: (_a, p) => fn(p ?? {}) !== false })
 
@@ -545,7 +569,7 @@ export function createOutline(api) {
 
   return {
     group, ungroup, toggle, showLevel, hideDetail: () => detail(true), showDetail: () => detail(false), clearOutline, toggleSymbols, refresh,
-    autoOutline, settingsDialog, setDirection,
+    autoOutline, settingsDialog, setDirection, applyStyles,
     settings: () => settingsOf(ws().getSheet()).value,
     showSymbols: () => { const w = ws().getSheet(); if (settingsOf(w).hideSymbols) writeSettings(w, { ...settingsOf(w).value, hideSymbols: false }); schedule() },
     /** For tests: outline of the active sheet. */

@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron')
 contextBridge.exposeInMainWorld('sheetly', {
   openDialog: () => ipcRenderer.invoke('open'),
+  initialFile: () => ipcRenderer.invoke('initial-file'),
+  openInNewWindow: (p) => ipcRenderer.invoke('open-in-new-window', p),
   save: (data, saveAs) => ipcRenderer.invoke('save', data, saveAs),
   setCurrent: (p) => ipcRenderer.send('current', p),
   directory: () => ipcRenderer.sendSync('directory'),

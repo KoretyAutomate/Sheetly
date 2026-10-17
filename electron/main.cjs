@@ -4,13 +4,24 @@ const fs = require('fs'), path = require('path'), os = require('os')
 // One window per workbook, like Excel. Each window remembers its file.
 const files = new Map() // webContents.id -> path
 const fileOf = (e) => files.get(e.sender.id) ?? null
+const pending = new Map() // webContents.id -> path to load once the page asks for it
 
-function createWindow() {
+// Workbooks named on the command line (sheetly.sh book.xlsx, the file manager's "Open with").
+const workbookArgs = (argv, cwd) => argv.slice(1).filter((a) => !a.startsWith('-') && /\.xlsx$/i.test(a))
+  .map((a) => path.resolve(cwd ?? process.cwd(), a)).filter((p) => fs.existsSync(p))
+// Opening a workbook that is already open brings its window forward, as in Excel.
+function openWorkbook(p) {
+  for (const [id, f] of files) if (f === p) { const w = BrowserWindow.getAllWindows().find((x) => x.webContents.id === id); if (w) { if (w.isMinimized()) w.restore(); w.focus(); return w } }
+  return createWindow(p)
+}
+
+function createWindow(file) {
   const win = new BrowserWindow({ width: 1400, height: 900, title: 'Sheetly',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, spellcheck: true } })
   win.webContents.session.setSpellCheckerLanguages(['en-US'])
   const id = win.webContents.id
-  win.on('closed', () => files.delete(id))
+  if (file) pending.set(id, file)
+  win.on('closed', () => { files.delete(id); pending.delete(id) })
   const dev = process.env.SHEETLY_DEV_URL
   dev ? win.loadURL(dev) : win.loadFile(path.join(__dirname, '../dist/index.html'))
   return win
@@ -70,6 +81,15 @@ ipcMain.handle('save', async (e, data, saveAs) => {
   fs.writeFileSync(p, Buffer.from(data)); files.set(e.sender.id, p); return p
 })
 ipcMain.on('current', (e, p) => files.set(e.sender.id, p))
+// File > Open over an edited workbook: Excel keeps it and opens the file in a window of its own.
+ipcMain.handle('open-in-new-window', (e, p) => { files.delete(e.sender.id); openWorkbook(p) })
+// The page asks once it is ready whether this window was opened for a file.
+ipcMain.handle('initial-file', (e) => {
+  const p = pending.get(e.sender.id)
+  pending.delete(e.sender.id)
+  if (!p) return null
+  try { files.set(e.sender.id, p); return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) } } catch { files.delete(e.sender.id); return null }
+})
 // INFO("directory"): folder of the open workbook (else home), with a trailing separator like Excel.
 ipcMain.on('directory', (e) => { const p = fileOf(e); e.returnValue = (p ? path.dirname(p) : os.homedir()) + path.sep })
 ipcMain.on('osversion', (e) => { e.returnValue = `${os.type()} ${os.release()}` })
@@ -102,5 +122,20 @@ ipcMain.handle('print', async (_e, html, opts) => {
   return new Promise((resolve) => w.webContents.print({ silent: false, landscape: !!opts.landscape, pageSize: opts.pageSize }, (ok) => { w.close(); resolve(ok) }))
 })
 
-app.whenReady().then(createWindow)
+// One Sheetly process: a second launch hands its files to this one (each opens in its own window).
+// Tests run their own instances, so they skip the lock.
+// SHEETLY_USER_DATA gives a test its own profile (and so its own single-instance lock).
+if (process.env.SHEETLY_USER_DATA) app.setPath('userData', process.env.SHEETLY_USER_DATA)
+const single = process.env.SHEETLY_TEST_NO_DIALOGS || app.requestSingleInstanceLock()
+if (!single) app.quit()
+else {
+  app.on('second-instance', (_e, argv, cwd) => {
+    const list = workbookArgs(argv, cwd)
+    if (list.length) list.forEach(openWorkbook); else createWindow()
+  })
+  app.whenReady().then(() => {
+    const list = workbookArgs(process.argv)
+    if (list.length) list.forEach(openWorkbook); else createWindow()
+  })
+}
 app.on('window-all-closed', () => app.quit())

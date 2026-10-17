@@ -4,6 +4,7 @@ import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import enUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
+import './fonts/fonts.css'
 import { UniverSheetsFindReplacePreset } from '@univerjs/preset-sheets-find-replace'
 import findReplaceEnUS from '@univerjs/preset-sheets-find-replace/locales/en-US'
 import '@univerjs/preset-sheets-find-replace/lib/index.css'
@@ -34,10 +35,11 @@ import '@univerjs/preset-sheets-table/lib/index.css'
 import { UniverSheetsThreadCommentPreset } from '@univerjs/preset-sheets-thread-comment'
 import threadCommentEnUS from '@univerjs/preset-sheets-thread-comment/locales/en-US'
 import '@univerjs/preset-sheets-thread-comment/lib/index.css'
-import { IFunctionService } from '@univerjs/engine-formula'
+import { FormulaDataModel, IFunctionService } from '@univerjs/engine-formula'
 import { IContextMenuService, IShortcutService } from '@univerjs/ui'
-import { ICommandService, IContextService } from '@univerjs/core'
+import { ICommandService, IContextService, IUndoRedoService } from '@univerjs/core'
 import { IRenderManagerService } from '@univerjs/engine-render'
+import { IDrawingManagerService } from '@univerjs/drawing'
 import { HeaderUnhideRenderController, SheetSkeletonManagerService, whenSheetEditorFocused } from '@univerjs/sheets-ui'
 import { buildKeyTipTree } from './keytips-tree.js'
 import { pivotFunctions } from './groupby.js'
@@ -49,13 +51,16 @@ import { createExtras } from './excel-extras.js'
 import { createOutline } from './outline.js'
 import { installPanes } from './panes.js'
 import { createQuickAnalysis } from './quick-analysis.js'
+import { createPivots } from './pivot.js'
+import { createSparklines } from './sparklines.js'
 import { setDialogShortcutService } from './ui/dialog.js'
 import { xlsxToSnapshot, snapshotToXlsx, formulaResolver } from './xlsx.js'
 
 let univerAPI
 const getApi = () => univerAPI
+let pivots = null
 const extra = [pivotFunctions(getApi), excelFunctions(getApi, { directory: () => window.sheetly.directory(), osversion: () => window.sheetly.osversion(),
-  webservice: (url) => window.sheetly.webservice(url) })]
+  webservice: (url) => window.sheetly.webservice(url), pivotLookup: (...a) => pivots?.lookup(...a) ?? { error: '#REF!' } })]
 ;({ univerAPI } = createUniver({
   locale: LocaleType.EN_US,
   locales: { [LocaleType.EN_US]: mergeLocales(enUS, findReplaceEnUS, filterEnUS, hyperLinkEnUS, noteEnUS, sortEnUS, dataValidationEnUS, conditionalFormattingEnUS, drawingEnUS, tableEnUS, threadCommentEnUS) },
@@ -80,6 +85,7 @@ window.__IContextMenuService = IContextMenuService
 window.__IRenderManagerService = IRenderManagerService
 window.__SheetSkeletonManagerService = SheetSkeletonManagerService
 window.__HeaderUnhideRenderController = HeaderUnhideRenderController
+window.__IDrawingManagerService = IDrawingManagerService
 const shortcutSvc = univerAPI._injector.get(IShortcutService)
 window.__shortcuts = () => shortcutSvc.getAllShortcuts().map((x) => ({ id: x.id, b: x.binding, w: x.win, l: x.linux, d: shortcutSvc.getShortcutDisplay(x) }))
 window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExecutors().keys()]
@@ -89,12 +95,14 @@ setDialogShortcutService(shortcutSvc)
 const charts = createCharts(univerAPI, dialogs)
 const extras = createExtras(univerAPI)
 const outline = createOutline(univerAPI)
-const quickAnalysis = createQuickAnalysis(univerAPI, { dialogs, charts })
+const sparklines = createSparklines(univerAPI)
+const quickAnalysis = createQuickAnalysis(univerAPI, { dialogs, charts, sparklines })
+pivots = createPivots(univerAPI, { dialogs })
 const panes = installPanes(univerAPI)
-installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline, quickAnalysis)
-window.__sheetly = { dialogs, charts, extras, outline, keyTips: keyTipState, panes, quickAnalysis, xlsx: { xlsxToSnapshot, snapshotToXlsx, save: () => workbookToXlsx(univerAPI.getActiveWorkbook()) } }
+installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline, quickAnalysis, pivots)
+window.__sheetly = { untouched: () => untouched(), pivots, sparklines, dialogs, charts, extras, outline, keyTips: keyTipState, panes, quickAnalysis, xlsx: { xlsxToSnapshot, snapshotToXlsx, save: () => workbookToXlsx(univerAPI.getActiveWorkbook()), load: (data, name = 'Book.xlsx') => loadWorkbook({ data, name, path: null }) } }
 const contextService = univerAPI._injector.get(IContextService)
-setKeyTipTree(buildKeyTipTree(univerAPI, { dialogs, extras, charts, outline }), { canStart: () => whenSheetEditorFocused(contextService) })
+setKeyTipTree(buildKeyTipTree(univerAPI, { dialogs, extras, charts, outline, pivots, sparklines }), { canStart: () => whenSheetEditorFocused(contextService) || !!charts.selectedNow() })
 // Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which
 // Univer otherwise creates at 1,000 x 20.
 const commandService = univerAPI._injector.get(ICommandService)
@@ -102,28 +110,67 @@ const fitExcelGrid = () => {
   for (const s of univerAPI.getActiveWorkbook()?.getSheets() ?? []) {
     if (s.getMaxRows() < EXCEL_ROWS) s.setRowCount(EXCEL_ROWS)
     if (s.getMaxColumns() < EXCEL_COLS) s.setColumnCount(EXCEL_COLS)
+    // New sheets get Excel's default sizes and font (Univer's are 24 px rows, 88 px columns, Arial).
+    const cfg = s.getSheet().getConfig()
+    if (!cfg.custom?.sheetlyDefaults) {
+      Object.assign(cfg, { defaultRowHeight: EXCEL_SHEET.defaultRowHeight, defaultColumnWidth: EXCEL_SHEET.defaultColumnWidth })
+      if (!cfg.defaultStyle) cfg.defaultStyle = { ...EXCEL_SHEET.defaultStyle }
+      cfg.custom = { ...(cfg.custom ?? {}), sheetlyDefaults: true }
+    }
   }
 }
 commandService.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.command.insert-sheet' || cmd.id === 'sheet.command.copy-sheet') fitExcelGrid() })
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
+// Excel's sheet defaults: Calibri 11, rows 15 pt (20 px), columns 8.43 characters (64 px).
+export const EXCEL_SHEET = { defaultRowHeight: 20, defaultColumnWidth: 64, defaultStyle: { ff: 'Calibri', fs: 11 } }
 // Workbooks carry their own locale for number/date formatting; Univer's default is zh-CN.
 univerAPI.createWorkbook({ id: 'wb1', name: 'Book1', locale: LocaleType.EN_US, sheetOrder: ['sheet1'],
-  sheets: { sheet1: { id: 'sheet1', name: 'Sheet1', rowCount: EXCEL_ROWS, columnCount: EXCEL_COLS } } })
+  sheets: { sheet1: { id: 'sheet1', name: 'Sheet1', rowCount: EXCEL_ROWS, columnCount: EXCEL_COLS, ...structuredClone(EXCEL_SHEET), custom: { sheetlyDefaults: true } } } })
+// Univer measures text when it lays out the sheet; redraw once Calibri (Carlito) has loaded.
+document.fonts?.load('11pt Calibri').then(() => document.fonts.load('bold 11pt Calibri')).then(() => window.dispatchEvent(new Event('resize'))).catch(() => {})
 
+// Excel opens a file in place of Book1 only while Book1 is new and untouched; otherwise in a window of its own.
+let fromFile = false
+const untouched = () => {
+  const id = univerAPI.getActiveWorkbook()?.getId()
+  const st = id ? univerAPI._injector.get(IUndoRedoService).getUndoRedoStatus(id) : { undos: 0, redos: 0 }
+  return !fromFile && !st.undos && !st.redos
+}
 async function openFile() {
   const f = await window.sheetly.openDialog()
   if (!f) return
+  if (untouched()) await loadWorkbook(f)
+  else await window.sheetly.openInNewWindow(f.path)
+}
+async function loadWorkbook(f) {
+  fromFile = true
   const snap = await xlsxToSnapshot(f.data)
   univerAPI.disposeUnit(univerAPI.getActiveWorkbook().getId())
-  univerAPI.createWorkbook({ ...snap, name: f.name, locale: LocaleType.EN_US })
+  const { sheetlyTables = [], ...data } = snap
+  const book = univerAPI.createWorkbook({ ...data, name: f.name, locale: LocaleType.EN_US })
+  fitExcelGrid()
+  // Recalculate everything, as Excel does for a workbook saved by another program: dynamic arrays spill again
+  // (their spilled values are not kept from the file) and cached results are brought up to date.
+  univerAPI.getFormula().executeCalculation()
+  // Tables from the file, through Univer's table API.
+  for (const t of sheetlyTables) {
+    try { await book.getSheetBySheetId(t.sheetId)?.addTable(t.name, t.range, undefined, { showHeader: t.showHeader, showFooter: t.showFooter }) } catch (e) { console.warn('table', t.name, e) }
+  }
   window.sheetly.setCurrent(f.path)
 }
 // Filled-down formulas are kept by Univer as shared-formula ids; their text comes from the live workbook.
-const workbookToXlsx = (wb) => snapshotToXlsx(wb.save(), { formulaOf: formulaResolver(wb) })
+// Formulas that spill are written as Excel dynamic arrays over their spill range.
+const arrayRangeOf = (wb) => {
+  const model = univerAPI._injector.get(FormulaDataModel).getArrayFormulaRange?.() ?? {}
+  return (sheetId, r, c) => model[wb.getId()]?.[sheetId]?.[r]?.[c] ?? null
+}
+const workbookToXlsx = (wb) => snapshotToXlsx(wb.save(), { formulaOf: formulaResolver(wb), arrayRangeOf: arrayRangeOf(wb) })
 async function saveFile(saveAs) {
   const wb = univerAPI.getActiveWorkbook()
   const data = await workbookToXlsx(wb)
   await window.sheetly.save(data, saveAs)
 }
+// A window opened for a file (command line, file manager, second launch) loads it at start.
+window.sheetly.initialFile?.().then((f) => { if (f) loadWorkbook(f) })
 window.sheetly.onMenu((cmd) => ({ open: openFile, save: () => saveFile(false), saveAs: () => saveFile(true) })[cmd]?.())

@@ -1,4 +1,4 @@
-round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-16T21:56:31.467Z
+round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-16T23:58:26.609Z
 PASS  Ctrl+F1 collapses the ribbon to its tabs
 PASS  Ctrl+F1: the grid moves up into the space
 PASS  Ctrl+F1 again expands it
@@ -11,7 +11,7 @@ PASS  first option (Data Bars) has the focus
 PASS  Enter applies Data Bars to the selection
 PASS  Right then Enter applies Color Scale
 PASS  Left wraps to Clear Format, which clears the rules
-PASS  Tab moves to the Totals tab
+PASS  O jumps to the Totals tab
 PASS  Totals > Sum puts SUM formulas in the row below
 PASS  Totals > Running Total (columns) puts cumulative sums to the right
 PASS  Esc closes Quick Analysis
@@ -29,18 +29,22 @@ PASS  Esc also leaves Add to Selection
 PASS  switching to summary above moves the collapse flag to the row above the group
 PASS  summary above: clicking - on the row above collapses the group
 PASS  and + expands it
-PASS  Settings dialog shows the direction boxes
+PASS  Settings dialog shows the direction boxes and Automatic styles
 PASS  B + Enter sets summary rows below again
 PASS  Ctrl+8 is stored in the sheet (saved with the workbook)
 PASS  Ctrl+8 survives .xlsx (showOutlineSymbols)
 PASS  Ctrl+8 again shows them and clears the setting
 PASS  Auto Outline: subtotals, a grand total over subtotals (=A4+A7) and SUM(A1:A8) nest
+PASS  Auto Outline with A1:A4 selected outlines only that range
 PASS  Auto Outline over an outline asks "Modify existing outline?"
 PASS  no summary formulas -> "Cannot create an outline."
 PASS  =C2*2 (one adjacent cell) is not a summary
 PASS  Alt A G A runs Auto Outline
+PASS  Apply Styles makes the level-1 summary row bold (RowLevel_1)
 PASS  UI styles survive save + reopen (bold, italic, fill, colour, size, centre)
 PASS  Ctrl+D filled formulas are saved with their own formula text
+PASS  AutoSum finds currency-formatted numbers above
+PASS  Ctrl+Shift+" copies the value 600, not the text "$600"
 PASS  no page errors
 
-43/43 passed
+47/47 passed

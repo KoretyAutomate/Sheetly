@@ -11,7 +11,7 @@ const COMMA = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)'
 const H_ALIGN = { left: 1, center: 2, right: 3 }, V_ALIGN = { top: 1, middle: 2, bottom: 3 }
 const WRAP = 3, OVERFLOW = 1
 
-export function buildKeyTipTree(api, { dialogs, extras, charts, outline }) {
+export function buildKeyTipTree(api, { dialogs, extras, charts, outline, pivots, sparklines }) {
   const commands = api._injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook(), ws = () => wb().getActiveSheet(), cur = () => ws().getActiveRange(), sel = () => cur().getRange()
   const cmd = (id, params) => () => commands.executeCommand(id, params)
@@ -31,7 +31,7 @@ export function buildKeyTipTree(api, { dialogs, extras, charts, outline }) {
     else { const src = dc > 0 ? g.startColumn : g.endColumn; for (let r = g.startRow; r <= g.endRow; r++) copyCell(s, r, src, dc > 0 ? [src + 1, g.endColumn] : [g.startColumn, src - 1], 'col') }
   }
   function copyCell(s, r, c, [a, b], axis) {
-    const v = s.getRange(r, c).getValue(), f = s.getRange(r, c).getFormula()
+    const v = s.getRange(r, c).getRawValue(), f = s.getRange(r, c).getFormula()
     for (let i = a; i <= b; i++) { const t = axis === 'row' ? s.getRange(i, c) : s.getRange(r, i); if (f) t.setFormula(f); else t.setValue(v) }
   }
   // Insert as many rows / columns as are selected, before the selection (Excel's Insert Sheet Rows / Columns).
@@ -162,8 +162,14 @@ export function buildKeyTipTree(api, { dialogs, extras, charts, outline }) {
         n('G', 'Go To…', () => dialogs.goTo()), n('S', 'Go To Special…', () => dialogs.goToSpecial()),
         n('U', 'Formulas', () => dialogs.runGoToSpecial('formulas')), n('M', 'Notes', () => dialogs.runGoToSpecial('notes')),
         n('N', 'Constants', () => dialogs.runGoToSpecial('constants')))),
-    menu('N', 'Insert', n('T', 'Table', () => dialogs.createTable()), n('R', 'Recommended Charts', () => charts.embeddedChart()),
-      n('C1', 'Column Chart', () => charts.embeddedChart()), n('I', 'Link', cmd('sheet.operation.open-hyper-link-edit-panel'))),
+    menu('N', 'Insert', menu('V', 'PivotTable', n('T', 'From Table/Range…', () => pivots.createDialog())),
+      menu('S', 'Sparklines', n('L', 'Line', () => sparklines.dialog('line')), n('O', 'Column', () => sparklines.dialog('column')), n('W', 'Win/Loss', () => sparklines.dialog('winloss'))), n('T', 'Table', () => dialogs.createTable()), n('R', 'Recommended Charts…', () => charts.insertChartDialog()),
+      menu('C1', 'Insert Column or Bar Chart', n('C', 'Clustered Column', () => charts.embeddedChart('column')), n('S', 'Stacked Column', () => charts.embeddedChart('columnStacked')),
+        n('B', 'Clustered Bar', () => charts.embeddedChart('bar')), n('M', 'More Column Charts…', () => charts.insertChartDialog())),
+      menu('N1', 'Insert Line or Area Chart', n('L', 'Line', () => charts.embeddedChart('line')), n('M', 'Line with Markers', () => charts.embeddedChart('lineMarkers')),
+        n('A', 'Area', () => charts.embeddedChart('area'))),
+      menu('Q', 'Insert Pie or Doughnut Chart', n('P', 'Pie', () => charts.embeddedChart('pie')), n('D', 'Doughnut', () => charts.embeddedChart('doughnut'))),
+      n('D', 'Insert Scatter Chart', () => charts.embeddedChart('scatter')), n('I', 'Link', cmd('sheet.operation.open-hyper-link-edit-panel'))),
     menu('P', 'Page Layout', n('SP', 'Page Setup', () => dialogs.printPreview()), menu('V', 'View', n('G', 'Gridlines', cmd('sheet.command.toggle-gridlines')))),
     menu('M', 'Formulas', n('F', 'Insert Function', () => extras.insertFunction()), autoSumMenu('U'),
       n('N', 'Name Manager', cmd('sidebar.operation.defined-name', { value: 'open' })), n('C', 'Create from Selection', () => dialogs.createNames()),
@@ -182,6 +188,11 @@ export function buildKeyTipTree(api, { dialogs, extras, charts, outline }) {
       n('Q', 'Zoom…', zoomDialog), n('J', '100%', () => zoom(1)),
       menu('F', 'Freeze Panes', n('F', 'Freeze Panes', freezeToggle), n('R', 'Freeze Top Row', cmd('sheet.command.set-first-row-frozen')),
         n('C', 'Freeze First Column', cmd('sheet.command.set-first-column-frozen')))),
+    // Contextual tab while a chart is selected.
+    { ...menu('JC', 'Chart Design', n('C', 'Change Chart Type…', () => charts.changeTypeDialog()), n('W', 'Switch Row/Column', () => charts.switchRowColumn()),
+      menu('A', 'Add Chart Element', n('C', 'Chart Title', () => charts.toggle('title')), n('L', 'Legend', () => charts.toggle('legend')),
+        n('D', 'Data Labels', () => charts.toggle('dataLabels')), n('A', 'Axis Titles', () => charts.toggle('axisTitles')), n('E', 'More…', () => charts.elementsDialog()))),
+    when: () => !!charts.selectedNow?.() },
   ]
 
   // Office 2003 menus (letters no ribbon tab uses).
@@ -200,7 +211,7 @@ export function buildKeyTipTree(api, { dialogs, extras, charts, outline }) {
       menu('C', 'Column', n('W', 'Width…', colWidth), n('A', 'AutoFit Selection', cmd('sheet.command.set-col-auto-width')),
         n('H', 'Hide', cmd('sheetly.hide-columns')), n('U', 'Unhide', cmd('sheetly.unhide-columns'))),
       menu('H', 'Sheet', n('R', 'Rename', renameSheet), n('H', 'Hide', cmd('sheet.command.set-worksheet-hidden')), n('U', 'Unhide…', unhideSheet))),
-    menu('D', 'Data', n('S', 'Sort…', cmd('sheet.command.sort-range-custom')), menu('F', 'Filter', n('F', 'AutoFilter', cmd('sheet.command.smart-toggle-filter'))),
+    menu('D', 'Data', n('S', 'Sort…', cmd('sheet.command.sort-range-custom')), n('P', 'PivotTable and PivotChart Report…', () => pivots.createDialog()), menu('F', 'Filter', n('F', 'AutoFilter', cmd('sheet.command.smart-toggle-filter'))),
       menu('G', 'Group and Outline', n('G', 'Group…', () => outline.group()), n('U', 'Ungroup…', () => outline.ungroup()),
         n('H', 'Hide Detail', () => outline.hideDetail()), n('S', 'Show Detail', () => outline.showDetail()), n('A', 'Auto Outline', () => outline.autoOutline()),
         n('C', 'Clear Outline', () => outline.clearOutline()), n('E', 'Settings…', () => outline.settingsDialog())),

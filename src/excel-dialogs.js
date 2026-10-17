@@ -117,7 +117,7 @@ export function createDialogs(api) {
     return 'constant'
   }
   const valueKind = (r, c) => {
-    const v = ws().getRange(r, c).getValue()
+    const v = ws().getRange(r, c).getRawValue()
     if (typeof v === 'number') return 'numbers'
     if (typeof v === 'boolean' || cellRaw(r, c)?.t === 3) return 'logicals'
     if (typeof v === 'string' && /^#(NULL!|DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A|SPILL!|CALC!|CONNECT!|BLOCKED!|UNKNOWN!|FIELD!|BUSY!|GETTING_DATA)$/.test(v)) return 'errors'
@@ -180,8 +180,8 @@ export function createDialogs(api) {
       case 'formulas': each((r, c) => cellKind(r, c) === 'formula' && subtypes.includes(valueKind(r, c))); break
       case 'notes': each((r, c) => !!ws().getRange(r, c).getNote?.()); break
       case 'visible': each((r, c) => sheet.getRowVisible(r) && sheet.getColVisible(c)); break
-      case 'rowdiff': { const ac = s.startColumn; each((r, c) => c !== ac && String(ws().getRange(r, c).getValue()) !== String(ws().getRange(r, ac).getValue())); break }
-      case 'coldiff': { const ar = s.startRow; each((r, c) => r !== ar && String(ws().getRange(r, c).getValue()) !== String(ws().getRange(ar, c).getValue())); break }
+      case 'rowdiff': { const ac = s.startColumn; each((r, c) => c !== ac && String(ws().getRange(r, c).getRawValue()) !== String(ws().getRange(r, ac).getRawValue())); break }
+      case 'coldiff': { const ar = s.startRow; each((r, c) => r !== ar && String(ws().getRange(r, c).getRawValue()) !== String(ws().getRange(ar, c).getRawValue())); break }
       case 'precedents': {
         const f = cellRaw(s.startRow, s.startColumn)?.f ?? ''
         const ranges = [...f.matchAll(/(?<![\w.!$])\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?(?![\w(])/g)]
@@ -246,7 +246,7 @@ export function createDialogs(api) {
   }
   function createNames() {
     const g = sel()
-    const isText = (r, c) => typeof ws().getRange(r, c).getValue() === 'string' && ws().getRange(r, c).getValue() !== ''
+    const isText = (r, c) => typeof ws().getRange(r, c).getRawValue() === 'string' && ws().getRange(r, c).getRawValue() !== ''
     const top = check('Top row', g.endRow > g.startRow && isText(g.startRow, Math.min(g.startColumn + 1, g.endColumn)))
     const left = check('Left column', g.endColumn > g.startColumn && isText(Math.min(g.startRow + 1, g.endRow), g.startColumn))
     const bottom = check('Bottom row'), right = check('Right column')
@@ -266,12 +266,12 @@ export function createDialogs(api) {
       try { wb().insertDefinedName(name, `${sheet}!${rangeA1(range, true)}`) } catch { /* invalid name */ }
     }
     for (let c = c0; c <= c1; c++) {
-      if (o.top) add(ws().getRange(g.startRow, c).getValue(), { startRow: r0, endRow: r1, startColumn: c, endColumn: c })
-      if (o.bottom) add(ws().getRange(g.endRow, c).getValue(), { startRow: r0, endRow: r1, startColumn: c, endColumn: c })
+      if (o.top) add(ws().getRange(g.startRow, c).getRawValue(), { startRow: r0, endRow: r1, startColumn: c, endColumn: c })
+      if (o.bottom) add(ws().getRange(g.endRow, c).getRawValue(), { startRow: r0, endRow: r1, startColumn: c, endColumn: c })
     }
     for (let r = r0; r <= r1; r++) {
-      if (o.left) add(ws().getRange(r, g.startColumn).getValue(), { startRow: r, endRow: r, startColumn: c0, endColumn: c1 })
-      if (o.right) add(ws().getRange(r, g.endColumn).getValue(), { startRow: r, endRow: r, startColumn: c0, endColumn: c1 })
+      if (o.left) add(ws().getRange(r, g.startColumn).getRawValue(), { startRow: r, endRow: r, startColumn: c0, endColumn: c1 })
+      if (o.right) add(ws().getRange(r, g.endColumn).getRawValue(), { startRow: r, endRow: r, startColumn: c0, endColumn: c1 })
     }
   }
 
@@ -280,7 +280,7 @@ export function createDialogs(api) {
     const s = sel()
     const g = s.startRow === s.endRow && s.startColumn === s.endColumn ? currentRegion(s.startRow, s.startColumn) : s
     const input = el('input', { type: 'text', value: '=' + rangeA1(g, true), 'aria-label': 'Where is the data for your table?' })
-    const firstRowText = [...Array(g.endColumn - g.startColumn + 1)].every((_, i) => typeof ws().getRange(g.startRow, g.startColumn + i).getValue() === 'string')
+    const firstRowText = [...Array(g.endColumn - g.startColumn + 1)].every((_, i) => typeof ws().getRange(g.startRow, g.startColumn + i).getRawValue() === 'string')
     const headers = check('My table has headers', firstRowText && g.endRow > g.startRow)
     openDialog({ title: 'Create Table', width: 300, initialFocus: input,
       body: el('div', {}, field('Where is the data for your table?', input), headers.node),
@@ -315,7 +315,7 @@ export function createDialogs(api) {
       const row = []
       for (let c = g.startColumn; c <= g.endColumn; c++) {
         const range = sheet.getRange(r, c)
-        row.push({ raw: sheet.getSheet().getCellRaw(r, c) ?? null, value: range.getValue(), style: range.getCellStyleData?.() ?? null, numfmt: range.getNumberFormat?.() })
+        row.push({ raw: sheet.getSheet().getCellRaw(r, c) ?? null, value: range.getRawValue(), style: range.getCellStyleData?.() ?? null, numfmt: range.getNumberFormat?.() })
       }
       cells.push(row)
     }
@@ -361,7 +361,7 @@ export function createDialogs(api) {
       if (withValues) {
         const formula = s.raw?.f
         if (op !== 'none' && typeof s.value === 'number' && !formula) {
-          const cur = target.getValue()
+          const cur = target.getRawValue()
           const base = typeof cur === 'number' ? cur : (cur == null || cur === '' ? 0 : null)
           if (base != null) {
             const v = op === 'add' ? base + s.value : op === 'subtract' ? base - s.value : op === 'multiply' ? base * s.value : (s.value === 0 ? '#DIV/0!' : base / s.value)
@@ -393,7 +393,7 @@ export function createDialogs(api) {
   function formatCells(startTab = 'Number') {
     const range = ws().getActiveRange()
     const style = range.getCellStyleData?.() ?? {}
-    const value = range.getValue()
+    const value = range.getRawValue()
     const tabs = ['Number', 'Alignment', 'Font', 'Border', 'Fill', 'Protection']
     const panels = {}, apply = []
     // Number
@@ -606,7 +606,7 @@ export function createDialogs(api) {
       for (let c = g.startColumn; c <= g.endColumn; c++) {
         if (!sheet.getColVisible(c)) continue
         const range = s.getRange(r, c), st = range.getCellStyleData?.() ?? {}
-        const v = range.getValue()
+        const v = range.getValue() // the formatted value, as printed
         tr.append(el('td', { style: {
           fontWeight: st.bl ? 'bold' : '', fontStyle: st.it ? 'italic' : '', textDecoration: [st.ul?.s && 'underline', st.st?.s && 'line-through'].filter(Boolean).join(' '),
           color: st.cl?.rgb ?? '', background: st.bg?.rgb ?? '', fontSize: st.fs ? st.fs + 'pt' : '', fontFamily: st.ff ?? '',

@@ -1,0 +1,183 @@
+// PivotTable model (no DOM / Univer): reads a source list, lays the report out as Excel's default Compact Form,
+// and answers GETPIVOTDATA. Used by pivot.js and the GETPIVOTDATA function.
+//
+// Definition: { name, rows: [field], cols: [field], values: [{ field, fn, name? }], filters: [{ field, items: null | [item] }] }
+// Fields are source column headers. Layout (Excel's defaults): row and column items sorted A to Z with "(blank)"
+// last, subtotals at the top of each outer row group, column subtotals "<item> Total" after each outer column group,
+// Grand Total row and column, several value fields shown side by side as an innermost column level ("Values").
+
+export const FUNCS = ['sum', 'count', 'average', 'max', 'min', 'product', 'countNums', 'stdDev', 'stdDevp', 'var', 'varp']
+// Excel's caption prefixes; Count Numbers is captioned "Count of" too.
+export const FN_LABEL = { sum: 'Sum', count: 'Count', average: 'Average', max: 'Max', min: 'Min', product: 'Product', countNums: 'Count', stdDev: 'StdDev', stdDevp: 'StdDevp', var: 'Var', varp: 'Varp' }
+export const FN_MENU = { sum: 'Sum', count: 'Count', average: 'Average', max: 'Max', min: 'Min', product: 'Product', countNums: 'Count Numbers', stdDev: 'StdDev', stdDevp: 'StdDevp', var: 'Var', varp: 'Varp' }
+export const BLANK = '(blank)'
+export const valueName = (v) => v.name || `${FN_LABEL[v.fn] ?? 'Sum'} of ${v.field}`
+
+const isBlank = (x) => x == null || x === ''
+const label = (x) => (isBlank(x) ? BLANK : x)
+const cmpItems = (a, b) => {
+  if (a === BLANK) return b === BLANK ? 0 : 1
+  if (b === BLANK) return -1
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (typeof a === 'number') return -1
+  if (typeof b === 'number') return 1
+  return String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
+}
+const same = (a, b) => (typeof a === 'number' || typeof b === 'number' ? Number(a) === Number(b) : String(a).toLowerCase() === String(b).toLowerCase())
+
+/** Source list: the first row holds the field names. Returns null when a header is blank (Excel refuses those). */
+export function readSource(get, g) {
+  const fields = []
+  for (let c = g.startColumn; c <= g.endColumn; c++) fields.push(get(g.startRow, c))
+  if (fields.some(isBlank)) return null
+  const records = []
+  for (let r = g.startRow + 1; r <= g.endRow; r++) {
+    const rec = []
+    for (let c = g.startColumn; c <= g.endColumn; c++) rec.push(get(r, c) ?? null)
+    if (rec.some((x) => !isBlank(x))) records.push(rec)
+  }
+  return { fields: fields.map(String), records }
+}
+
+/** A field's values: numbers when every non-blank value is a number. */
+export const isNumericField = (src, field) => {
+  const i = src.fields.indexOf(field)
+  const vals = src.records.map((r) => r[i]).filter((x) => !isBlank(x))
+  return vals.length > 0 && vals.every((x) => typeof x === 'number')
+}
+
+/** Excel's choice for a value field added from the list: Sum for numbers, Count otherwise. */
+export const defaultFn = (src, field) => (isNumericField(src, field) ? 'sum' : 'count')
+
+export function aggregate(fn, values) {
+  const nums = values.filter((x) => typeof x === 'number')
+  const n = nums.length, sum = nums.reduce((a, b) => a + b, 0)
+  const varOf = (pop) => { if (n < (pop ? 1 : 2)) return null; const m = sum / n; return nums.reduce((a, b) => a + (b - m) ** 2, 0) / (pop ? n : n - 1) }
+  switch (fn) {
+    case 'count': { const k = values.filter((x) => !isBlank(x)).length; return k || null }
+    case 'countNums': return n || null
+    case 'average': return n ? sum / n : null
+    case 'max': return n ? Math.max(...nums) : null
+    case 'min': return n ? Math.min(...nums) : null
+    case 'product': return n ? nums.reduce((a, b) => a * b, 1) : null
+    case 'stdDev': { const v = varOf(false); return v == null ? null : Math.sqrt(v) }
+    case 'stdDevp': { const v = varOf(true); return v == null ? null : Math.sqrt(v) }
+    case 'var': return varOf(false)
+    case 'varp': return varOf(true)
+    default: return values.length ? sum : null
+  }
+}
+
+/** Records left after the report filters. */
+export function filtered(def, src) {
+  const idx = (f) => src.fields.indexOf(f)
+  return src.records.filter((rec) => (def.filters ?? []).every((fl) => !fl.items || fl.items.some((it) => same(label(rec[idx(fl.field)]), it))))
+}
+
+// Item tree of some fields over records: [{ item, path, children }].
+function tree(fields, records, src, path = []) {
+  if (!fields.length) return []
+  const i = src.fields.indexOf(fields[0])
+  const items = [...new Map(records.map((r) => [typeof label(r[i]) === 'string' ? String(label(r[i])).toLowerCase() : label(r[i]), label(r[i])])).values()].sort(cmpItems)
+  return items.map((item) => {
+    const sub = records.filter((r) => same(label(r[i]), item))
+    return { item, path: [...path, item], children: tree(fields.slice(1), sub, src, [...path, item]) }
+  })
+}
+const matches = (rec, src, fields, path) => path.every((it, k) => same(label(rec[src.fields.indexOf(fields[k])]), it))
+
+/**
+ * The report as a grid of cells { v, kind, indent? } plus where things are:
+ * kind: 'corner' | 'colHeader' | 'rowHeader' | 'rowLabel' | 'value' | 'subtotal' | 'grand' | 'filterLabel' | 'filterValue'
+ */
+export function layout(def, src) {
+  const recs = filtered(def, src)
+  const V = (def.values ?? []).filter((v) => src.fields.includes(v.field))
+  const rowF = (def.rows ?? []).filter((f) => src.fields.includes(f)), colF = (def.cols ?? []).filter((f) => src.fields.includes(f))
+  const valueOf = (rpath, cpath, v) => {
+    const vi = src.fields.indexOf(v.field)
+    const sel = recs.filter((r) => matches(r, src, rowF, rpath) && matches(r, src, colF, cpath))
+    return aggregate(v.fn, sel.map((r) => r[vi]))
+  }
+  // Column leaves: each a { cpath, v, kind } — items, subtotals of outer groups, the grand total, per value field.
+  const colTree = tree(colF, recs, src)
+  const cols = []
+  const walkCols = (nodes, depth) => {
+    for (const n of nodes) {
+      if (n.children.length) { walkCols(n.children, depth + 1); for (const v of V.length ? V : [null]) cols.push({ cpath: n.path, v, kind: 'subtotal', label: `${n.item} Total` }) }
+      else for (const v of V.length ? V : [null]) cols.push({ cpath: n.path, v, kind: 'value' })
+    }
+  }
+  walkCols(colTree, 0)
+  // Outer-level subtotals only between groups: the innermost level has none.
+  if (colF.length <= 1) for (let i = cols.length - 1; i >= 0; i--) if (cols[i].kind === 'subtotal') cols.splice(i, 1)
+  if (!colF.length) for (const v of V) cols.push({ cpath: [], v, kind: 'value' })
+  else for (const v of V.length ? V : [null]) cols.push({ cpath: [], v, kind: 'grand', label: V.length > 1 ? `Total ${valueName(v)}` : 'Grand Total' })
+  const grid = []
+  // Header rows: one per column field, plus the value captions when there are several value fields. With no column
+  // field the value captions share the Row Labels row.
+  const headerLevels = colF.length ? colF.length + (V.length > 1 ? 1 : 0) : 0
+  if (!rowF.length && !colF.length && V.length) {
+    // Values only: one header row of value names and one row of totals.
+    grid.push(V.map((v) => ({ v: valueName(v), kind: 'colHeader' })))
+    grid.push(V.map((v) => ({ v: valueOf([], [], v), kind: 'grand' })))
+    return { grid, rows: rowF, cols: colF, values: V }
+  }
+  if (headerLevels) {
+    grid.push([{ v: V.length === 1 ? valueName(V[0]) : null, kind: 'corner' }, { v: 'Column Labels', kind: 'colHeader' }, ...cols.slice(1).map(() => ({ v: null, kind: 'colHeader' }))])
+    for (let lvl = 0; lvl < headerLevels; lvl++) {
+      const last = lvl === headerLevels - 1
+      const row = [{ v: last ? (rowF.length ? 'Row Labels' : null) : null, kind: 'rowHeader' }]
+      let prev = null
+      for (const c of cols) {
+        let text = null
+        if (lvl < colF.length) {
+          if (c.kind === 'grand') text = lvl === 0 ? c.label : null
+          else if (c.kind === 'subtotal') text = lvl === c.cpath.length - 1 ? c.label : null
+          else { const key = c.cpath.slice(0, lvl + 1).join('\u0001'); text = key !== prev ? c.cpath[lvl] : null; prev = key }
+        } else text = c.kind === 'grand' ? null : c.v ? valueName(c.v) : null
+        row.push({ v: text, kind: 'colHeader' })
+      }
+      grid.push(row)
+    }
+  } else grid.push([{ v: rowF.length ? 'Row Labels' : null, kind: 'rowHeader' }, ...cols.map((c) => ({ v: c.v ? valueName(c.v) : null, kind: 'colHeader' }))])
+  // Body: compact form, one column of row labels indented by level, subtotals on the group's own row.
+  const walkRows = (nodes, depth) => {
+    for (const n of nodes) {
+      const outer = n.children.length > 0
+      grid.push([{ v: n.item, kind: outer ? 'subtotalLabel' : 'rowLabel', indent: depth },
+        ...cols.map((c) => ({ v: c.v ? valueOf(n.path, c.cpath, c.v) : null, kind: outer ? 'subtotal' : 'value' }))])
+      if (outer) walkRows(n.children, depth + 1)
+    }
+  }
+  walkRows(tree(rowF, recs, src), 0)
+  // The totals row: "Grand Total" under row items; with column fields only, the one values row has no label.
+  if (rowF.length || colF.length) grid.push([{ v: rowF.length ? 'Grand Total' : null, kind: 'grandLabel' }, ...cols.map((c) => ({ v: c.v ? valueOf([], c.cpath, c.v) : null, kind: 'grand' }))])
+  return { grid, rows: rowF, cols: colF, values: V }
+}
+
+/** Report filter cells above the report: [field, "(All)" | item | "(Multiple Items)"]. */
+export const filterCells = (def) => (def.filters ?? []).map((f) => [f.field, !f.items ? '(All)' : f.items.length === 1 ? f.items[0] : '(Multiple Items)'])
+
+/**
+ * GETPIVOTDATA(data_field, pivot, field1, item1, ...): the value for a combination of items shown in the report.
+ * data_field is the value field's caption ("Sum of Sales") or its source field ("Sales"). Fields must be on rows or
+ * columns and items must be in the report, else #REF! (as in Excel).
+ */
+export function getPivotData(def, src, dataField, pairs) {
+  const V = (def.values ?? [])
+  const v = V.find((x) => same(valueName(x), dataField)) ?? V.find((x) => same(x.field, dataField))
+  if (!v) return { error: '#REF!' }
+  const shown = [...(def.rows ?? []), ...(def.cols ?? [])]
+  const recs = filtered(def, src)
+  let sel = recs
+  for (const [field, item] of pairs) {
+    const f = shown.find((x) => same(x, field))
+    if (!f) return { error: '#REF!' }
+    const i = src.fields.indexOf(f)
+    sel = sel.filter((r) => same(label(r[i]), item))
+    if (!recs.some((r) => same(label(r[i]), item))) return { error: '#REF!' }
+  }
+  const out = aggregate(v.fn, sel.map((r) => r[src.fields.indexOf(v.field)]))
+  return out == null ? { error: '#REF!' } : { value: out }
+}

@@ -1,0 +1,8 @@
+/* Calibri, Excel's default font (2013-2021), drawn with Carlito: a free font with the same metrics (SIL OFL 1.1, see
+   OFL.txt), so text widths, AutoFit and row heights match Excel. An installed Calibri is used when present. */
+@font-face { font-family: 'Calibri'; font-style: normal; font-weight: 400; src: local('Calibri'), url('./Carlito-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Calibri'; font-style: normal; font-weight: 700; src: local('Calibri Bold'), local('Calibri-Bold'), url('./Carlito-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Calibri'; font-style: italic; font-weight: 400; src: local('Calibri Italic'), local('Calibri-Italic'), url('./Carlito-Italic.ttf') format('truetype'); }
+@font-face { font-family: 'Calibri'; font-style: italic; font-weight: 700; src: local('Calibri Bold Italic'), local('Calibri-BoldItalic'), url('./Carlito-BoldItalic.ttf') format('truetype'); }
+@font-face { font-family: 'Carlito'; font-style: normal; font-weight: 400; src: local('Carlito'), url('./Carlito-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Carlito'; font-style: normal; font-weight: 700; src: local('Carlito Bold'), url('./Carlito-Bold.ttf') format('truetype'); }

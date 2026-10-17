@@ -1,5 +1,5 @@
 diff --git a/node_modules/exceljs/dist/exceljs.js b/node_modules/exceljs/dist/exceljs.js
-index ab2c9d6..78ebef1 100644
+index ab2c9d6..5d7d75a 100644
 --- a/node_modules/exceljs/dist/exceljs.js
 +++ b/node_modules/exceljs/dist/exceljs.js
 @@ -1273,6 +1273,7 @@ class Column {
@@ -87,7 +87,255 @@ index ab2c9d6..78ebef1 100644
      };
      if (this._parsedLocalSheetId !== undefined) {
        this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
-@@ -11463,6 +11480,10 @@ class RowXform extends BaseXform {
+@@ -9683,8 +9700,15 @@ const getTextFormula = model => {
+     tl
+   } = range;
+   switch (model.operator) {
+-    case 'containsText':
++        case 'containsText':
+       return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
++    // Sheetly: the other text rules.
++    case 'notContainsText':
++      return `ISERROR(SEARCH("${model.text}",${tl}))`;
++    case 'beginsWith':
++      return `LEFT(${tl},LEN("${model.text}"))="${model.text}"`;
++    case 'endsWith':
++      return `RIGHT(${tl},LEN("${model.text}"))="${model.text}"`;
+     case 'containsBlanks':
+       return `LEN(TRIM(${tl}))=0`;
+     case 'notContainsBlanks':
+@@ -9739,11 +9763,14 @@ const opType = attributes => {
+     case 'containsText':
+     case 'containsBlanks':
+     case 'notContainsBlanks':
+-    case 'containsErrors':
++        case 'containsErrors':
+     case 'notContainsErrors':
++    case 'notContainsText':
++    case 'beginsWith':
++    case 'endsWith':
+       return {
+         type: 'containsText',
+-        operator: type
++        operator: type,
+       };
+     default:
+       return {
+@@ -9801,9 +9828,18 @@ class CfRuleXform extends CompositeXform {
+       case 'containsText':
+         this.renderText(xmlStream, model);
+         break;
+-      case 'timePeriod':
++            case 'timePeriod':
+         this.renderTimePeriod(xmlStream, model);
+         break;
++      // Sheetly: Duplicate / Unique Values.
++      case 'duplicateValues':
++      case 'uniqueValues':
++        xmlStream.leafNode(this.tag, {
++          type: model.type,
++          dxfId: model.dxfId,
++          priority: model.priority,
++        });
++        break;
+     }
+   }
+   renderExpression(xmlStream, model) {
+@@ -9842,7 +9878,9 @@ class CfRuleXform extends CompositeXform {
+       type: 'aboveAverage',
+       dxfId: model.dxfId,
+       priority: model.priority,
+-      aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true)
++            aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true),
++      // Sheetly: "equal to or above / below average".
++      equalAverage: BaseXform.toBoolAttribute(model.equalAverage, false),
+     });
+   }
+   renderDataBar(xmlStream, model) {
+@@ -9875,11 +9913,13 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.closeNode();
+   }
+   renderText(xmlStream, model) {
++        // Sheetly: Excel's operator for "does not contain" is notContains; the text itself goes in the text attribute.
+     xmlStream.openNode(this.tag, {
+       type: model.operator,
+       dxfId: model.dxfId,
+       priority: model.priority,
+-      operator: BaseXform.toStringAttribute(model.operator, 'containsText')
++      operator: model.operator === 'notContainsText' ? 'notContains' : BaseXform.toStringAttribute(model.operator, 'containsText'),
++      text: ['containsText', 'notContainsText', 'beginsWith', 'endsWith'].includes(model.operator) ? model.text : undefined,
+     });
+     const formula = getTextFormula(model);
+     if (formula) {
+@@ -9912,7 +9952,9 @@ class CfRuleXform extends CompositeXform {
+       percent: BaseXform.toBoolValue(attributes.percent),
+       bottom: BaseXform.toBoolValue(attributes.bottom),
+       rank: BaseXform.toIntValue(attributes.rank),
+-      aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage)
++            aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),
++      equalAverage: BaseXform.toBoolValue(attributes.equalAverage),
++      text: attributes.text,
+     };
+   }
+   onParserClose(name, parser) {
+@@ -9943,16 +9985,21 @@ class CfvoXform extends BaseXform {
+     return 'cfvo';
+   }
+   render(xmlStream, model) {
+-    xmlStream.leafNode(this.tag, {
++        xmlStream.leafNode(this.tag, {
+       type: model.type,
+-      val: model.value
++      val: model.value,
++      // Sheetly: gte="0" (strictly greater than) for icon-set thresholds.
++      gte: model.gte === false ? '0' : undefined,
+     });
+   }
+   parseOpen(node) {
++        // Sheetly: formula values (val="$A$1" etc.) stay text; gte="0" is kept.
++    const val = node.attributes.val;
+     this.model = {
+       type: node.attributes.type,
+-      value: BaseXform.toFloatValue(node.attributes.val)
++      value: val !== undefined && val !== '' && !isNaN(Number(val)) ? Number(val) : val,
+     };
++    if (node.attributes.gte === '0') this.model.gte = false;
+   }
+   parseClose(name) {
+     return name !== this.tag;
+@@ -10141,18 +10188,23 @@ class DatabarXform extends CompositeXform {
+     return 'dataBar';
+   }
+   render(xmlStream, model) {
+-    xmlStream.openNode(this.tag);
++        // Sheetly: showValue="0" hides the cell value behind the bar.
++    xmlStream.openNode(this.tag, model.showValue === false ? {showValue: '0'} : undefined);
++
+     model.cfvo.forEach(cfvo => {
+       this.cfvoXform.render(xmlStream, cfvo);
+     });
+     this.colorXform.render(xmlStream, model.color);
+     xmlStream.closeNode();
+   }
+-  createNewModel() {
+-    return {
+-      cfvo: []
++    createNewModel(node) {
++    const model = {
++      cfvo: [],
+     };
++    if (node && node.attributes && node.attributes.showValue === '0') model.showValue = false;
++    return model;
+   }
++
+   onParserClose(name, parser) {
+     switch (name) {
+       case 'cfvo':
+@@ -10426,8 +10478,16 @@ function optimiseDataValidations(model) {
+     }
+     return true;
+   };
+-  return dvList.map(dv => {
+-    if (!dv.marked) {
++    return dvList
++    .map(dv => {
++      // Sheetly: a key that is already a sqref (ranges separated by spaces) is written as it is.
++      if (/\s/.test(dv.address)) {
++        return {
++          ...dv.dataValidation,
++          sqref: dv.address,
++        };
++      }
++      if (!dv.marked) {
+       const addr = colCache.decodeEx(dv.address);
+       if (addr.dimensions) {
+         dvMap[addr.dimensions].marked = true;
+@@ -10520,8 +10580,9 @@ class DataValidationsXform extends BaseXform {
+         xmlStream.addAttribute('sqref', value.sqref);
+         (value.formulae || []).forEach((formula, index) => {
+           xmlStream.openNode(`formula${index + 1}`);
+-          if (value.type === 'date') {
+-            xmlStream.writeText(utils.dateToExcel(new Date(formula)));
++                    // Sheetly: dates may be given as serial numbers or formulas, written as they are.
++                    if (value.type === 'date' && formula instanceof Date) {
++            xmlStream.writeText(utils.dateToExcel(formula));
+           } else {
+             xmlStream.writeText(formula);
+           }
+@@ -10589,38 +10650,27 @@ class DataValidationsXform extends BaseXform {
+             delete this._dataValidation.formulae;
+             delete this._dataValidation.operator;
+           }
+-          // The four known cases: 1. E4:L9 N4:U9  2.E4 L9  3. N4:U9  4. E4
+-          const list = this._address.split(/\s+/g) || [];
+-          list.forEach(addr => {
+-            if (addr.includes(':')) {
+-              const range = new Range(addr);
+-              range.forEachAddress(address => {
+-                this.model[address] = this._dataValidation;
+-              });
+-            } else {
+-              this.model[addr] = this._dataValidation;
+-            }
+-          });
+-          return true;
++                  // Sheetly: kept under its sqref as written ("A1:A1048576", "E4:L9 N4:U9"): expanding it cell by cell made a
++        // million entries for a whole-column rule.
++        this.model[this._address] = this._dataValidation;
++        return true;
+         }
+       case 'formula1':
+       case 'formula2':
+         {
+           let formula = this._formula.join('');
+-          switch (this._dataValidation.type) {
+-            case 'whole':
+-            case 'textLength':
+-              formula = parseInt(formula, 10);
+-              break;
+-            case 'decimal':
+-              formula = parseFloat(formula);
+-              break;
+-            case 'date':
+-              formula = utils.excelToDate(parseFloat(formula));
+-              break;
+-            default:
+-              break;
+-          }
++                  // Sheetly: numbers stay numbers (date serials too); references and formulas stay text.
++        switch (this._dataValidation.type) {
++          case 'whole':
++          case 'textLength':
++          case 'decimal':
++          case 'date':
++          case 'time':
++            if (formula !== '' && !isNaN(Number(formula))) formula = Number(formula);
++            break;
++          default:
++            break;
++        }
+           this._dataValidation.formulae.push(formula);
+           this._formula = undefined;
+           return true;
+@@ -10899,7 +10949,16 @@ class HyperlinkXform extends BaseXform {
+   get tag() {
+     return 'hyperlink';
+   }
+-  render(xmlStream, model) {
++    render(xmlStream, model) {
++    // Sheetly: a target starting with '#' is a place in the workbook: written as location only (no relationship).
++    if (model.target && model.target[0] === '#') {
++      xmlStream.leafNode('hyperlink', {
++        ref: model.address,
++        tooltip: model.tooltip,
++        location: model.target.slice(1),
++      });
++      return;
++    }
+     if (this.isInternalLink(model)) {
+       xmlStream.leafNode('hyperlink', {
+         ref: model.address,
+@@ -11463,6 +11522,10 @@ class RowXform extends BaseXform {
        if (node.attributes.ht) {
          model.height = parseFloat(node.attributes.ht);
        }
@@ -98,7 +346,7 @@ index ab2c9d6..78ebef1 100644
        if (node.attributes.outlineLevel) {
          model.outlineLevel = parseInt(node.attributes.outlineLevel, 10);
        }
-@@ -11768,6 +11789,7 @@ class SheetViewXform extends BaseXform {
+@@ -11768,6 +11831,7 @@ class SheetViewXform extends BaseXform {
      add('showRuler', '0', model.showRuler === false);
      add('showRowColHeaders', '0', model.showRowColHeaders === false);
      add('showGridLines', '0', model.showGridLines === false);
@@ -106,7 +354,7 @@ index ab2c9d6..78ebef1 100644
      add('zoomScale', model.zoomScale, model.zoomScale);
      add('zoomScaleNormal', model.zoomScaleNormal, model.zoomScaleNormal);
      add('view', model.style, model.style);
-@@ -11833,6 +11855,7 @@ class SheetViewXform extends BaseXform {
+@@ -11833,6 +11897,7 @@ class SheetViewXform extends BaseXform {
            showRuler: !(node.attributes.showRuler === '0'),
            showRowColHeaders: !(node.attributes.showRowColHeaders === '0'),
            showGridLines: !(node.attributes.showGridLines === '0'),
@@ -114,7 +362,7 @@ index ab2c9d6..78ebef1 100644
            zoomScale: parseInt(node.attributes.zoomScale || '100', 10),
            zoomScaleNormal: parseInt(node.attributes.zoomScaleNormal || '100', 10),
            style: node.attributes.view
-@@ -11880,6 +11903,7 @@ class SheetViewXform extends BaseXform {
+@@ -11880,6 +11945,7 @@ class SheetViewXform extends BaseXform {
              showRuler: this.sheetView.showRuler,
              showRowColHeaders: this.sheetView.showRowColHeaders,
              showGridLines: this.sheetView.showGridLines,
@@ -122,7 +370,7 @@ index ab2c9d6..78ebef1 100644
              zoomScale: this.sheetView.zoomScale,
              zoomScaleNormal: this.sheetView.zoomScaleNormal
            };
-@@ -11901,6 +11925,7 @@ class SheetViewXform extends BaseXform {
+@@ -11901,6 +11967,7 @@ class SheetViewXform extends BaseXform {
              showRuler: this.sheetView.showRuler,
              showRowColHeaders: this.sheetView.showRowColHeaders,
              showGridLines: this.sheetView.showGridLines,
@@ -130,6 +378,41 @@ index ab2c9d6..78ebef1 100644
              zoomScale: this.sheetView.zoomScale,
              zoomScaleNormal: this.sheetView.zoomScaleNormal
            };
+@@ -12118,7 +12185,9 @@ class WorkSheetXform extends BaseXform {
+     function nextRid(r) {
+       return `rId${r.length + 1}`;
+     }
+-    model.hyperlinks.forEach(hyperlink => {
++        model.hyperlinks.forEach(hyperlink => {
++      // Sheetly: in-workbook links ('#Sheet!A1') have no relationship.
++      if (hyperlink.target && hyperlink.target[0] === '#') return;
+       const rId = nextRid(rels);
+       hyperlink.rId = rId;
+       rels.push({
+@@ -12404,8 +12473,11 @@ class WorkSheetXform extends BaseXform {
+       return h;
+     }, {});
+     options.hyperlinkMap = (model.hyperlinks || []).reduce((h, hyperlink) => {
+-      if (hyperlink.rId) {
++            if (hyperlink.rId) {
+         h[hyperlink.address] = rels[hyperlink.rId].Target;
++      } else if (hyperlink.target) {
++        // Sheetly: location-only links (how Excel stores links into the workbook) come back as '#location'.
++        h[hyperlink.address] = `#${hyperlink.target}`;
+       }
+       return h;
+     }, {});
+@@ -15418,8 +15490,8 @@ class TableXform extends BaseXform {
+           displayName: attributes.displayName || attributes.name,
+           tableRef: attributes.ref,
+           totalsRow: attributes.totalsRowCount === '1',
+-          headerRow: attributes.headerRowCount === '1'
+-        };
++          // Sheetly: headerRowCount defaults to 1 and Excel leaves it out.
++          headerRow: attributes.headerRowCount !== '0',};
+         break;
+       default:
+         this.parser = this.map[node.name];
 diff --git a/node_modules/exceljs/lib/doc/column.js b/node_modules/exceljs/lib/doc/column.js
 index c7fc282..e13503a 100644
 --- a/node_modules/exceljs/lib/doc/column.js
@@ -243,6 +526,227 @@ index 9ed8fec..9bad67d 100644
      };
      if (this._parsedLocalSheetId !== undefined) {
        this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
+index 22b3e44..c51401b 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
+@@ -25,6 +25,13 @@ const getTextFormula = model => {
+   switch (model.operator) {
+     case 'containsText':
+       return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
++    // Sheetly: the other text rules.
++    case 'notContainsText':
++      return `ISERROR(SEARCH("${model.text}",${tl}))`;
++    case 'beginsWith':
++      return `LEFT(${tl},LEN("${model.text}"))="${model.text}"`;
++    case 'endsWith':
++      return `RIGHT(${tl},LEN("${model.text}"))="${model.text}"`;
+     case 'containsBlanks':
+       return `LEN(TRIM(${tl}))=0`;
+     case 'notContainsBlanks':
+@@ -79,6 +86,9 @@ const opType = attributes => {
+     case 'notContainsBlanks':
+     case 'containsErrors':
+     case 'notContainsErrors':
++    case 'notContainsText':
++    case 'beginsWith':
++    case 'endsWith':
+       return {
+         type: 'containsText',
+         operator: type,
+@@ -145,6 +155,15 @@ class CfRuleXform extends CompositeXform {
+       case 'timePeriod':
+         this.renderTimePeriod(xmlStream, model);
+         break;
++      // Sheetly: Duplicate / Unique Values.
++      case 'duplicateValues':
++      case 'uniqueValues':
++        xmlStream.leafNode(this.tag, {
++          type: model.type,
++          dxfId: model.dxfId,
++          priority: model.priority,
++        });
++        break;
+     }
+   }
+ 
+@@ -192,6 +211,8 @@ class CfRuleXform extends CompositeXform {
+       dxfId: model.dxfId,
+       priority: model.priority,
+       aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true),
++      // Sheetly: "equal to or above / below average".
++      equalAverage: BaseXform.toBoolAttribute(model.equalAverage, false),
+     });
+   }
+ 
+@@ -235,11 +256,13 @@ class CfRuleXform extends CompositeXform {
+   }
+ 
+   renderText(xmlStream, model) {
++    // Sheetly: Excel's operator for "does not contain" is notContains; the text itself goes in the text attribute.
+     xmlStream.openNode(this.tag, {
+       type: model.operator,
+       dxfId: model.dxfId,
+       priority: model.priority,
+-      operator: BaseXform.toStringAttribute(model.operator, 'containsText'),
++      operator: model.operator === 'notContainsText' ? 'notContains' : BaseXform.toStringAttribute(model.operator, 'containsText'),
++      text: ['containsText', 'notContainsText', 'beginsWith', 'endsWith'].includes(model.operator) ? model.text : undefined,
+     });
+ 
+     const formula = getTextFormula(model);
+@@ -276,6 +299,8 @@ class CfRuleXform extends CompositeXform {
+       bottom: BaseXform.toBoolValue(attributes.bottom),
+       rank: BaseXform.toIntValue(attributes.rank),
+       aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),
++      equalAverage: BaseXform.toBoolValue(attributes.equalAverage),
++      text: attributes.text,
+     };
+   }
+ 
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cfvo-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cfvo-xform.js
+index f509901..97d7048 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cfvo-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cfvo-xform.js
+@@ -9,14 +9,19 @@ class CfvoXform extends BaseXform {
+     xmlStream.leafNode(this.tag, {
+       type: model.type,
+       val: model.value,
++      // Sheetly: gte="0" (strictly greater than) for icon-set thresholds.
++      gte: model.gte === false ? '0' : undefined,
+     });
+   }
+ 
+   parseOpen(node) {
++    // Sheetly: formula values (val="$A$1" etc.) stay text; gte="0" is kept.
++    const val = node.attributes.val;
+     this.model = {
+       type: node.attributes.type,
+-      value: BaseXform.toFloatValue(node.attributes.val),
++      value: val !== undefined && val !== '' && !isNaN(Number(val)) ? Number(val) : val,
+     };
++    if (node.attributes.gte === '0') this.model.gte = false;
+   }
+ 
+   parseClose(name) {
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/databar-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/databar-xform.js
+index 3cc13b6..2b5c56b 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/databar-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/databar-xform.js
+@@ -18,7 +18,8 @@ class DatabarXform extends CompositeXform {
+   }
+ 
+   render(xmlStream, model) {
+-    xmlStream.openNode(this.tag);
++    // Sheetly: showValue="0" hides the cell value behind the bar.
++    xmlStream.openNode(this.tag, model.showValue === false ? {showValue: '0'} : undefined);
+ 
+     model.cfvo.forEach(cfvo => {
+       this.cfvoXform.render(xmlStream, cfvo);
+@@ -28,10 +29,12 @@ class DatabarXform extends CompositeXform {
+     xmlStream.closeNode();
+   }
+ 
+-  createNewModel() {
+-    return {
++  createNewModel(node) {
++    const model = {
+       cfvo: [],
+     };
++    if (node && node.attributes && node.attributes.showValue === '0') model.showValue = false;
++    return model;
+   }
+ 
+   onParserClose(name, parser) {
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/data-validations-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/data-validations-xform.js
+index 58d6f09..3203dab 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/data-validations-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/data-validations-xform.js
+@@ -42,6 +42,13 @@ function optimiseDataValidations(model) {
+   };
+   return dvList
+     .map(dv => {
++      // Sheetly: a key that is already a sqref (ranges separated by spaces) is written as it is.
++      if (/\s/.test(dv.address)) {
++        return {
++          ...dv.dataValidation,
++          sqref: dv.address,
++        };
++      }
+       if (!dv.marked) {
+         const addr = colCache.decodeEx(dv.address);
+         if (addr.dimensions) {
+@@ -140,8 +147,9 @@ class DataValidationsXform extends BaseXform {
+         xmlStream.addAttribute('sqref', value.sqref);
+         (value.formulae || []).forEach((formula, index) => {
+           xmlStream.openNode(`formula${index + 1}`);
+-          if (value.type === 'date') {
+-            xmlStream.writeText(utils.dateToExcel(new Date(formula)));
++          // Sheetly: dates may be given as serial numbers or formulas, written as they are.
++          if (value.type === 'date' && formula instanceof Date) {
++            xmlStream.writeText(utils.dateToExcel(formula));
+           } else {
+             xmlStream.writeText(formula);
+           }
+@@ -213,33 +221,22 @@ class DataValidationsXform extends BaseXform {
+           delete this._dataValidation.formulae;
+           delete this._dataValidation.operator;
+         }
+-        // The four known cases: 1. E4:L9 N4:U9  2.E4 L9  3. N4:U9  4. E4
+-        const list = this._address.split(/\s+/g) || [];
+-        list.forEach(addr => {
+-          if (addr.includes(':')) {
+-            const range = new Range(addr);
+-            range.forEachAddress(address => {
+-              this.model[address] = this._dataValidation;
+-            });
+-          } else {
+-            this.model[addr] = this._dataValidation;
+-          }
+-        });
++        // Sheetly: kept under its sqref as written ("A1:A1048576", "E4:L9 N4:U9"): expanding it cell by cell made a
++        // million entries for a whole-column rule.
++        this.model[this._address] = this._dataValidation;
+         return true;
+       }
+       case 'formula1':
+       case 'formula2': {
+         let formula = this._formula.join('');
++        // Sheetly: numbers stay numbers (date serials too); references and formulas stay text.
+         switch (this._dataValidation.type) {
+           case 'whole':
+           case 'textLength':
+-            formula = parseInt(formula, 10);
+-            break;
+           case 'decimal':
+-            formula = parseFloat(formula);
+-            break;
+           case 'date':
+-            formula = utils.excelToDate(parseFloat(formula));
++          case 'time':
++            if (formula !== '' && !isNaN(Number(formula))) formula = Number(formula);
+             break;
+           default:
+             break;
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/hyperlink-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/hyperlink-xform.js
+index 88f4ee2..e3ac55a 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/hyperlink-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/hyperlink-xform.js
+@@ -6,6 +6,15 @@ class HyperlinkXform extends BaseXform {
+   }
+ 
+   render(xmlStream, model) {
++    // Sheetly: a target starting with '#' is a place in the workbook: written as location only (no relationship).
++    if (model.target && model.target[0] === '#') {
++      xmlStream.leafNode('hyperlink', {
++        ref: model.address,
++        tooltip: model.tooltip,
++        location: model.target.slice(1),
++      });
++      return;
++    }
+     if (this.isInternalLink(model)) {
+       xmlStream.leafNode('hyperlink', {
+         ref: model.address,
 diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js
 index 890a0fc..3cfd999 100644
 --- a/node_modules/exceljs/lib/xlsx/xform/sheet/row-xform.js
@@ -294,3 +798,40 @@ index f53fdcd..7c41bd4 100644
              zoomScale: this.sheetView.zoomScale,
              zoomScaleNormal: this.sheetView.zoomScaleNormal,
            };
+diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/worksheet-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/worksheet-xform.js
+index b389300..01b277b 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/sheet/worksheet-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/sheet/worksheet-xform.js
+@@ -156,6 +156,8 @@ class WorkSheetXform extends BaseXform {
+     }
+ 
+     model.hyperlinks.forEach(hyperlink => {
++      // Sheetly: in-workbook links ('#Sheet!A1') have no relationship.
++      if (hyperlink.target && hyperlink.target[0] === '#') return;
+       const rId = nextRid(rels);
+       hyperlink.rId = rId;
+       rels.push({
+@@ -469,6 +471,9 @@ class WorkSheetXform extends BaseXform {
+     options.hyperlinkMap = (model.hyperlinks || []).reduce((h, hyperlink) => {
+       if (hyperlink.rId) {
+         h[hyperlink.address] = rels[hyperlink.rId].Target;
++      } else if (hyperlink.target) {
++        // Sheetly: location-only links (how Excel stores links into the workbook) come back as '#location'.
++        h[hyperlink.address] = `#${hyperlink.target}`;
+       }
+       return h;
+     }, {});
+diff --git a/node_modules/exceljs/lib/xlsx/xform/table/table-xform.js b/node_modules/exceljs/lib/xlsx/xform/table/table-xform.js
+index 002fbda..15bf409 100644
+--- a/node_modules/exceljs/lib/xlsx/xform/table/table-xform.js
++++ b/node_modules/exceljs/lib/xlsx/xform/table/table-xform.js
+@@ -66,7 +66,8 @@ class TableXform extends BaseXform {
+           displayName: attributes.displayName || attributes.name,
+           tableRef: attributes.ref,
+           totalsRow: attributes.totalsRowCount === '1',
+-          headerRow: attributes.headerRowCount === '1',
++          // Sheetly: headerRowCount defaults to 1 and Excel leaves it out.
++          headerRow: attributes.headerRowCount !== '0',
+         };
+         break;
+       default:

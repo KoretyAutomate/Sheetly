@@ -4,7 +4,7 @@
 // Window capture listeners, so they work wherever the focus is; inactive while a Sheetly dialog is open.
 import { ILayoutService } from '@univerjs/ui'
 
-const RIBBON = 'header[data-u-comp="headerbar"]', TASK_PANE = '[data-u-comp="right-sidebar"]', STATUS = 'footer'
+const RIBBON = 'header[data-u-comp="headerbar"]', TASK_PANE = '[data-u-comp="right-sidebar"], .sx-task-pane:not([hidden])', STATUS = 'footer'
 const STORE = 'sheetly.ribbonCollapsed'
 
 export function installPanes(api) {

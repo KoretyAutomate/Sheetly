@@ -1,0 +1,18 @@
+pivot tables  2026-10-17T00:18:59.418Z
+PASS  Alt N V T opens Create PivotTable with the current region
+PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
+PASS  the pane lists the source fields
+PASS  checking Region and Sales: Row Labels / Sum of Sales, sorted, Grand Total
+PASS  header row bold on the light blue band
+PASS  Move to Column Labels: Column Labels header, items A, B, Grand Total column
+PASS  GETPIVOTDATA reads the report (20, grand total 45, #REF! for an item not shown)
+PASS  Value Field Settings > Average: caption "Average of Sales", East 15, total 9
+PASS  GETPIVOTDATA after the change: "Sales" still finds the field (East/B = 20), the old caption "Sum of Sales" is #REF!
+PASS  report filter: Region / West above the report; only West is summarised
+PASS  the report does not follow the source until Alt+F5 refreshes it
+PASS  the PivotTable definition is saved with the sheet
+PASS  the fields pane closes outside the PivotTable and comes back inside it
+PASS  a source with a blank header is refused with Excel's message
+PASS  no page errors
+
+15/15 passed

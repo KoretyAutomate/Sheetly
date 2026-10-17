@@ -1,71 +1,178 @@
-// Charts for F11 (chart sheet) and Alt+F1 (embedded chart): Excel's default clustered column chart
-// of the current region, drawn with Chart.js in Univer's floating-DOM layer.
-import { BarController, BarElement, CategoryScale, Chart, Legend, LinearScale, Title, Tooltip } from 'chart.js'
-import { createElement, useEffect, useRef } from 'react'
+// Charts, drawn with Chart.js in Univer's floating-DOM layer. A chart is linked to its source range, as in Excel:
+// it is redrawn whenever the sheet changes. The drawing's data holds the chart definition (spec), so it is saved
+// with the workbook:
+//   { v: 2, type, source: { sheetId, range }, plotBy: 'cols' | 'rows', title: null (automatic) | string,
+//     legend: 'bottom' | 'right' | 'top' | 'left' | 'none', dataLabels, axisTitles: { x, y } | null }
+// Charts made before the spec existed carry {labels, series, title} and are drawn as they were saved.
+// F11 makes a chart sheet, Alt+F1 an embedded chart (Excel's default clustered column); Insert Chart and Change
+// Chart Type dialogs; Switch Row/Column and chart elements act on the selected chart.
+import { ArcElement, BarController, BarElement, CategoryScale, Chart, DoughnutController, Filler, Legend, LinearScale, LineController,
+  LineElement, PieController, PointElement, ScatterController, Title, Tooltip } from 'chart.js'
+import { CommandType, ICommandService, numfmt } from '@univerjs/core'
+import { IDrawingManagerService } from '@univerjs/drawing'
+import { createElement, useEffect, useReducer, useRef } from 'react'
+import { el, openDialog, radios, check } from './ui/dialog.js'
+import { chartTitle, seriesFrom } from './chart-model.js'
 
-Chart.register(BarController, BarElement, CategoryScale, LinearScale, Legend, Title, Tooltip)
-// Office theme accent colors, in Excel's series order.
-const SERIES_COLORS = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47']
-const COMPONENT = 'sheetly-chart'
+Chart.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Filler, Legend, LinearScale, LineController,
+  LineElement, PieController, PointElement, ScatterController, Title, Tooltip)
+// Office theme accents in Excel's series order; series 7-12 use the accents darkened, 13-18 lightened.
+const ACCENTS = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47']
+const shade = (hex, f) => '#' + [1, 3, 5].map((i) => Math.round(Math.min(255, Math.max(0, f < 0 ? parseInt(hex.slice(i, i + 2), 16) * (1 + f) : parseInt(hex.slice(i, i + 2), 16) + (255 - parseInt(hex.slice(i, i + 2), 16)) * f))).toString(16).padStart(2, '0')).join('')
+export const seriesColor = (i) => { const base = ACCENTS[i % 6], round = Math.floor(i / 6) % 3; return round === 0 ? base : round === 1 ? shade(base, -0.4) : shade(base, 0.4) }
+export const COMPONENT = 'sheetly-chart'
+// The next frame, or a short timer when the window is in the background (Chromium holds animation frames back there).
+const soon = (fn) => { let done = false; const run = () => { if (!done) { done = true; fn() } }; requestAnimationFrame(run); setTimeout(run, 60) }
+
+
+/** Chart types offered, in Excel's Insert Chart order. */
+export const CHART_TYPES = [
+  ['column', 'Clustered Column', 'Column'], ['columnStacked', 'Stacked Column', 'Column'], ['columnStacked100', '100% Stacked Column', 'Column'],
+  ['line', 'Line', 'Line'], ['lineMarkers', 'Line with Markers', 'Line'],
+  ['pie', 'Pie', 'Pie'], ['doughnut', 'Doughnut', 'Pie'],
+  ['bar', 'Clustered Bar', 'Bar'], ['barStacked', 'Stacked Bar', 'Bar'], ['barStacked100', '100% Stacked Bar', 'Bar'],
+  ['area', 'Area', 'Area'], ['areaStacked', 'Stacked Area', 'Area'],
+  ['scatter', 'Scatter', 'X Y (Scatter)'],
+]
+const typeName = (t) => CHART_TYPES.find((x) => x[0] === t)?.[1] ?? t
+
+let apiRef = null
+const num = (x) => (typeof x === 'number' ? x : Number(x) || 0)
+
+export { seriesFrom }
+
+/** Live data of a spec from the workbook (falls back to saved data for old charts). */
+function dataOf(spec) {
+  if (!spec?.source) return { labels: spec?.labels ?? [], series: spec?.series ?? [], title: spec?.title ?? '' }
+  const sheet = apiRef?.getActiveWorkbook()?.getSheetBySheetId(spec.source.sheetId)
+  if (!sheet) return { labels: [], series: [], title: spec.title ?? '' }
+  const w = sheet.getSheet()
+  const d = seriesFrom((r, c) => sheet.getRange(r, c).getRawValue(), spec.source.range, spec.plotBy,
+    { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
+  // The value axis shows numbers in the source's number format (sourceLinked, as in Excel).
+  const pattern = d.series.length ? sheet.getRange(d.byCols ? d.r0 : d.series[0].line, d.byCols ? d.series[0].line : d.c0).getNumberFormat?.() : null
+  return { ...d, title: chartTitle(spec, d), pattern: pattern && pattern !== 'General' ? pattern : null }
+}
+
+/** Chart.js configuration for a spec and its data. */
+export function chartConfig(spec, d) {
+  const type = spec?.type ?? 'column'
+  const pie = type === 'pie' || type === 'doughnut', horizontal = type.startsWith('bar'), stacked = /Stacked/.test(type), pct = /100$/.test(type)
+  const totals = d.labels.map((_, i) => d.series.reduce((s, x) => s + Math.abs(x.values[i] ?? 0), 0))
+  const values = (s) => (pct ? s.values.map((x, i) => (x == null ? null : totals[i] ? (x / totals[i]) * 100 : 0)) : s.values)
+  const base = { line: 'line', lineMarkers: 'line', area: 'line', areaStacked: 'line', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' }[type] ?? 'bar'
+  let datasets
+  if (pie) {
+    const s = d.series[0] ?? { name: '', values: [] }
+    datasets = [{ label: s.name, data: s.values, backgroundColor: d.labels.map((_, i) => seriesColor(i)), borderColor: '#fff', borderWidth: 1 }]
+  } else if (type === 'scatter') {
+    // X values come from the first series (Excel uses the first column as X when there is no label column).
+    const xs = d.series.length > 1 ? d.series[0].values : d.labels.map((l, i) => num(l) || i + 1)
+    const ys = d.series.length > 1 ? d.series.slice(1) : d.series
+    datasets = ys.map((s, i) => ({ label: s.name, data: s.values.map((y, k) => ({ x: xs[k], y })), backgroundColor: seriesColor(i), borderColor: seriesColor(i), pointRadius: 4 }))
+  } else {
+    datasets = d.series.map((s, i) => ({ label: s.name, data: values(s), backgroundColor: seriesColor(i), borderColor: seriesColor(i),
+      ...(base === 'line' ? { borderWidth: 2.25, pointRadius: type === 'lineMarkers' ? 4 : 0, fill: type.startsWith('area') ? (stacked && i > 0 ? '-1' : 'origin') : false, tension: 0 } : {}),
+      // Excel's default gap width 219% / overlap -27% (clustered) or 100% (stacked), approximated.
+      ...(base === 'bar' ? { categoryPercentage: stacked ? 0.6 : 0.62, barPercentage: stacked ? 1 : 0.85 } : {}) }))
+  }
+  const legend = spec?.legend ?? (pie || d.series.length > 1 ? 'bottom' : 'none')
+  const axisTitle = (t) => (t ? { display: true, text: t } : { display: false })
+  // Excel starts the value axis at 0 unless the data are all on one side of 0 and their spread is under a sixth of
+  // the largest magnitude.
+  const all = d.series.flatMap((x) => x.values).filter((x) => x != null)
+  const lo = Math.min(...all), hi = Math.max(...all)
+  const zero = stacked || !all.length || !(lo > 0 ? hi - lo < hi / 6 : hi < 0 ? hi - lo < -lo / 6 : false)
+  const fmt = (x) => { try { return d.pattern ? numfmt.format(d.pattern, x) : x } catch { return x } }
+  const valueAxis = { stacked, beginAtZero: zero, grid: { color: '#d9d9d9' }, border: { display: false },
+    ticks: { callback: pct ? (x) => `${x}%` : (x) => fmt(x) }, ...(pct ? { max: 100 } : {}) }
+  const catAxis = { stacked, grid: { display: false } }
+  const scales = pie ? {} : type === 'scatter'
+    ? { x: { type: 'linear', grid: { color: '#d9d9d9' }, title: axisTitle(spec?.axisTitles?.x) }, y: { ...valueAxis, title: axisTitle(spec?.axisTitles?.y) } }
+    : horizontal ? { x: { ...valueAxis, title: axisTitle(spec?.axisTitles?.y) }, y: { ...catAxis, title: axisTitle(spec?.axisTitles?.x) } }
+      : { x: { ...catAxis, title: axisTitle(spec?.axisTitles?.x) }, y: { ...valueAxis, title: axisTitle(spec?.axisTitles?.y) } }
+  return {
+    type: base,
+    // Multi-level categories: the inner label with the outer ones under it (shown once per group).
+    data: { labels: type === 'scatter' ? undefined : d.levels?.length ? d.labels.map((l, i) => [l, ...d.levels.map((x) => x[i])]) : d.labels, datasets },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: horizontal ? 'y' : 'x', scales,
+      plugins: { title: { display: spec?.title !== '', text: d.title, font: { size: 14, weight: 'normal' }, color: '#595959' },
+        legend: { display: legend !== 'none', position: legend === 'none' ? 'bottom' : legend }, tooltip: { enabled: true } } },
+    plugins: spec?.dataLabels ? [dataLabelsPlugin] : [],
+  }
+}
+// Data labels: the value at each bar / point / slice.
+const dataLabelsPlugin = {
+  id: 'sheetlyDataLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart
+    ctx.save(); ctx.font = '11px Calibri, Carlito, sans-serif'; ctx.fillStyle = '#404040'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
+    chart.data.datasets.forEach((ds, i) => chart.getDatasetMeta(i).data.forEach((elem, k) => {
+      const v = ds.data[k], p = elem.tooltipPosition()
+      if (v == null) return
+      ctx.fillText(String(typeof v === 'object' ? v.y : Math.round(v * 100) / 100), p.x, p.y - 2)
+    }))
+    ctx.restore()
+  },
+}
 
 function ChartView({ data }) {
   const ref = useRef(null)
+  const [tick, redraw] = useReducer((x) => x + 1, 0)
+  // Redraw when the workbook changes (values, formula results), batched per frame.
+  useEffect(() => {
+    if (!data?.source || !apiRef) return undefined
+    let pending = false
+    const sub = apiRef._injector.get(ICommandService).onCommandExecuted((cmd) => {
+      if (cmd.type !== CommandType.MUTATION || pending) return
+      pending = true
+      soon(() => { pending = false; redraw() })
+    })
+    return () => sub.dispose()
+  }, [data])
   useEffect(() => {
     if (!ref.current || !data) return undefined
-    const chart = new Chart(ref.current, {
-      type: 'bar',
-      data: { labels: data.labels, datasets: data.series.map((s, i) => ({ label: s.name, data: s.values, backgroundColor: SERIES_COLORS[i % SERIES_COLORS.length] })) },
-      options: { responsive: true, maintainAspectRatio: false, animation: false,
-        plugins: { title: { display: true, text: data.title }, legend: { position: 'bottom', display: data.series.length > 1 || !!data.series[0]?.name } } },
-    })
+    const chart = new Chart(ref.current, chartConfig(data, dataOf(data)))
+    ref.current.__chart = chart
     return () => chart.destroy()
-  }, [data])
-  return createElement('div', { className: 'sx-chart', role: 'img', 'aria-label': data?.title || 'Chart',
+  }, [data, tick])
+  const d = data?.source ? dataOf(data) : data
+  return createElement('div', { className: 'sx-chart', role: 'img', 'aria-label': `${typeName(data?.type ?? 'column')} chart: ${d?.title || 'Chart'}`,
+    'data-chart-type': data?.type ?? 'column',
     style: { width: '100%', height: '100%', background: '#fff', border: '1px solid #d9d9d9', boxSizing: 'border-box', padding: '6px' } },
   createElement('canvas', { ref }))
 }
 
 export function createCharts(api, dialogs) {
+  apiRef = api
   api.registerComponent(COMPONENT, ChartView)
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
+  const drawings = (() => { try { return api._injector.get(IDrawingManagerService) } catch { return null } })()
 
-  /** Builds Excel-style series from the selection (or the current region of a single cell). */
-  function chartData() {
+  /** Source range of a new chart: the selection, or the current region of a single cell. */
+  function sourceRange() {
     const g0 = ws().getActiveRange().getRange()
-    const g = g0.startRow === g0.endRow && g0.startColumn === g0.endColumn ? dialogs.currentRegion(g0.startRow, g0.startColumn) : g0
-    const v = (r, c) => ws().getRange(r, c).getValue()
-    const isNum = (x) => typeof x === 'number'
-    const headerRow = [...Array(g.endColumn - g.startColumn + 1)].some((_, i) => i > 0 && !isNum(v(g.startRow, g.startColumn + i)) && v(g.startRow, g.startColumn + i) != null)
-    const labelCol = [...Array(g.endRow - g.startRow + 1)].some((_, i) => i > 0 && !isNum(v(g.startRow + i, g.startColumn)) && v(g.startRow + i, g.startColumn) != null)
-    const r0 = g.startRow + (headerRow ? 1 : 0), c0 = g.startColumn + (labelCol ? 1 : 0)
-    const rows = g.endRow - r0 + 1, cols = g.endColumn - c0 + 1
-    // Excel plots series by columns when there are at least as many rows as columns.
-    const byCols = rows >= cols
-    const labels = [], series = []
-    if (byCols) {
-      for (let r = r0; r <= g.endRow; r++) labels.push(labelCol ? String(v(r, g.startColumn) ?? '') : String(r - r0 + 1))
-      for (let c = c0; c <= g.endColumn; c++) series.push({ name: headerRow ? String(v(g.startRow, c) ?? '') : `Series${c - c0 + 1}`, values: labels.map((_, i) => num(v(r0 + i, c))) })
-    } else {
-      for (let c = c0; c <= g.endColumn; c++) labels.push(headerRow ? String(v(g.startRow, c) ?? '') : String(c - c0 + 1))
-      for (let r = r0; r <= g.endRow; r++) series.push({ name: labelCol ? String(v(r, g.startColumn) ?? '') : `Series${r - r0 + 1}`, values: labels.map((_, i) => num(v(r, c0 + i))) })
-    }
-    const title = series.length === 1 ? series[0].name : 'Chart Title'
-    return { data: { labels, series, title }, range: g }
+    return g0.startRow === g0.endRow && g0.startColumn === g0.endColumn ? dialogs.currentRegion(g0.startRow, g0.startColumn) : g0
   }
-  const num = (x) => (typeof x === 'number' ? x : Number(x) || 0)
+  const newSpec = (type = 'column') => {
+    const range = sourceRange()
+    const { startRow, endRow, startColumn, endColumn } = range
+    return { v: 2, type, source: { sheetId: ws().getSheetId(), range: { startRow, endRow, startColumn, endColumn } }, plotBy: null, title: null, legend: null, dataLabels: false, axisTitles: null }
+  }
+  /** For tests and Quick Analysis: the series Excel would plot from the selection. */
+  function chartData() { const spec = newSpec(); return { data: dataOf(spec), range: spec.source.range, spec } }
   const colX = (s, c) => { let x = 0; for (let i = 0; i < c; i++) x += s.getColumnWidth(i); return x }
   const rowY = (s, r) => { let y = 0; for (let i = 0; i < r; i++) y += s.getRowHeight(i); return y }
 
-  function embeddedChart() {
-    const { data, range } = chartData()
-    const s = ws()
+  function embeddedChart(type = 'column') {
+    const spec = newSpec(type), s = ws(), range = spec.source.range
     const x = colX(s, range.endColumn + 2), y = rowY(s, range.startRow)
-    s.addFloatDomToPosition({ componentKey: COMPONENT, allowTransform: true, data, initPosition: { startX: x, endX: x + 480, startY: y, endY: y + 288 } })
-    return true
+    // Excel's default embedded chart: 5 x 3 inches (480 x 288 px).
+    return s.addFloatDomToPosition({ componentKey: COMPONENT, allowTransform: true, data: spec, initPosition: { startX: x, endX: x + 480, startY: y, endY: y + 288 } })?.id ?? null
   }
   function chartSheet() {
-    const { data } = chartData()
+    const spec = newSpec('column')
     const w = wb(), names = new Set(w.getSheets().map((s) => s.getSheetName()))
     let n = 1
     while (names.has(`Chart${n}`)) n++
@@ -73,9 +180,87 @@ export function createCharts(api, dialogs) {
     const sheet = w.insertSheet(`Chart${n}`, { index })
     w.setActiveSheet(sheet)
     sheet.setHiddenGridlines?.(true)
-    setTimeout(() => sheet.addFloatDomToPosition({ componentKey: COMPONENT, allowTransform: false, data,
+    setTimeout(() => sheet.addFloatDomToPosition({ componentKey: COMPONENT, allowTransform: false, data: spec,
       initPosition: { startX: 0, endX: Math.max(640, window.innerWidth - 80), startY: 0, endY: Math.max(400, window.innerHeight - 200) } }), 0)
     return true
   }
-  return { chartData, embeddedChart, chartSheet }
+
+  // ---- series ranges move with inserted / deleted rows and columns of their source sheet (undo replays the
+  // opposite mutation, so it moves them back).
+  const SHIFT = { 'sheet.mutation.insert-row': ['row', 1], 'sheet.mutation.remove-rows': ['row', -1], 'sheet.mutation.insert-col': ['col', 1], 'sheet.mutation.remove-col': ['col', -1] }
+  function shifted(g, axis, sign, s, e) {
+    const [a, b] = axis === 'row' ? ['startRow', 'endRow'] : ['startColumn', 'endColumn']
+    const n = e - s + 1, out = { ...g }
+    if (sign > 0) { if (s <= g[a]) { out[a] += n; out[b] += n } else if (s <= g[b]) out[b] += n; return out }
+    const gone = (x) => Math.max(0, Math.min(e, x) - s + 1) // deleted indexes at or before x
+    out[a] = g[a] - gone(g[a] - 1); out[b] = g[b] - gone(g[b])
+    return out
+  }
+  api._injector.get(ICommandService).onCommandExecuted((cmd) => {
+    const how = SHIFT[cmd.id], p = cmd.params
+    if (!how || !p?.range) return
+    const [axis, sign] = how
+    const [s, e] = axis === 'row' ? [p.range.startRow, p.range.endRow] : [p.range.startColumn, p.range.endColumn]
+    queueMicrotask(() => {
+      const book = api.getUnit?.(p.unitId) ?? wb()
+      for (const sheet of book?.getSheets?.() ?? []) for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
+        const spec = c.data
+        if (spec?.source?.sheetId !== p.subUnitId) continue
+        const next = shifted(spec.source.range, axis, sign, s, e)
+        if (JSON.stringify(next) !== JSON.stringify(spec.source.range)) sheet.updateFloatDom(c.id, { data: { ...spec, source: { ...spec.source, range: next } } })
+      }
+    })
+  })
+
+  // ---- the selected chart (a focused chart drawing, else the only chart on the sheet)
+  const charts = () => (ws().getAllFloatDoms?.() ?? []).filter((d) => d.componentKey === COMPONENT)
+  let lastFocused = null
+  drawings?.focus$?.subscribe((list) => { const f = (list ?? []).find((d) => d.componentKey === COMPONENT); if (f) lastFocused = f.drawingId })
+  function selected() {
+    const all = charts()
+    const focus = (drawings?.getFocusDrawings?.() ?? []).find((d) => d.componentKey === COMPONENT)
+    return all.find((c) => c.id === focus?.drawingId) ?? all.find((c) => c.id === lastFocused) ?? (all.length === 1 ? all[0] : null)
+  }
+  /** The chart drawing that is selected right now (for the contextual Chart Design KeyTips). */
+  const selectedNow = () => { const f = (drawings?.getFocusDrawings?.() ?? []).find((d) => d.componentKey === COMPONENT); return f ? charts().find((c) => c.id === f.drawingId) ?? null : null }
+  const message = (text) => { openDialog({ title: 'Sheetly', width: 300, body: el('p', { style: { margin: 0 } }, text), cancelLabel: 'Close' }); return true }
+  function update(change) {
+    const c = selected()
+    if (!c) return message('Select a chart first.')
+    const spec = c.data?.source ? { ...c.data } : { ...newSpec(), ...c.data }
+    ws().updateFloatDom(c.id, { data: { ...spec, ...change(spec) } })
+    return true
+  }
+  const setType = (type) => update(() => ({ type }))
+  // Switch Row/Column swaps what the series are made of.
+  const switchRowColumn = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols' }))
+  const toggle = (what) => update((s) => (what === 'title' ? { title: s.title === '' ? null : '' }
+    : what === 'legend' ? { legend: (s.legend ?? 'bottom') === 'none' ? 'bottom' : 'none' }
+      : what === 'dataLabels' ? { dataLabels: !s.dataLabels }
+        : { axisTitles: s.axisTitles ? null : { x: 'Axis Title', y: 'Axis Title' } }))
+
+  function typeDialog(title, current, onPick) {
+    const r = radios('chart-type', CHART_TYPES.map(([id, name]) => [id, name]), current)
+    const groups = []
+    let last = null
+    CHART_TYPES.forEach(([, , group], i) => { if (group !== last) { groups.push(el('div', { style: { fontWeight: 600, marginTop: groups.length ? '6px' : 0 } }, group)); last = group } groups.push(r.nodes[i]) })
+    openDialog({ title, width: 300, body: el('div', { style: { maxHeight: '60vh', overflow: 'auto' } }, ...groups), onOk: () => { onPick(r.value) } })
+    return true
+  }
+  const insertChartDialog = () => typeDialog('Insert Chart', 'column', (t) => embeddedChart(t))
+  const changeTypeDialog = () => { const c = selected(); if (!c) return message('Select a chart first.'); return typeDialog('Change Chart Type', c.data?.type ?? 'column', setType) }
+  function elementsDialog() {
+    const c = selected()
+    if (!c) return message('Select a chart first.')
+    const s = c.data ?? {}
+    const boxes = { title: check('Chart &Title', s.title !== ''), legend: check('&Legend', (s.legend ?? 'bottom') !== 'none'),
+      dataLabels: check('&Data Labels', !!s.dataLabels), axisTitles: check('&Axis Titles', !!s.axisTitles) }
+    openDialog({ title: 'Chart Elements', width: 260, body: el('div', {}, ...Object.values(boxes).map((b) => b.node)), onOk: () => {
+      update((sp) => ({ title: boxes.title.input.checked ? (sp.title === '' ? null : sp.title) : '', legend: boxes.legend.input.checked ? (sp.legend && sp.legend !== 'none' ? sp.legend : 'bottom') : 'none',
+        dataLabels: boxes.dataLabels.input.checked, axisTitles: boxes.axisTitles.input.checked ? (sp.axisTitles ?? { x: 'Axis Title', y: 'Axis Title' }) : null }))
+    } })
+    return true
+  }
+
+  return { chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts }
 }

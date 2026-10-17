@@ -1,13 +1,13 @@
 // Ctrl+Q Quick Analysis: a gallery at the bottom-right of the selection with Excel's tabs — Formatting, Charts,
 // Totals, Tables. Left/Right move between the options of a tab, Tab / Shift+Tab move between tabs, Enter (or a
-// click) applies the option, Esc closes. A single cell expands to its current region; an empty one does nothing.
+// click) applies the option, F / C / O / T / S jump to a tab, Esc closes. A single cell expands to its current region; an empty one does nothing.
 import { ILayoutService } from '@univerjs/ui'
 import { el, openDialog, field } from './ui/dialog.js'
 
 // Excel's default "Light Red Fill with Dark Red Text" highlight.
 const LIGHT_RED = '#FFC7CE', DARK_RED = '#9C0006'
 
-export function createQuickAnalysis(api, { dialogs, charts }) {
+export function createQuickAnalysis(api, { dialogs, charts, sparklines }) {
   const ws = () => api.getActiveWorkbook().getActiveSheet()
   const a1 = (r, c, r2 = r, c2 = c) => ws().getRange(r, c, r2 - r + 1, c2 - c + 1).getA1Notation()
   const abs = (r, c) => ws().getRange(r, c).getA1Notation().replace(/^([A-Z]+)(\d+)$/, '$$$1$$$2')
@@ -21,7 +21,7 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
   const average = (g) => {
     let sum = 0, n = 0
     for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) {
-      const v = ws().getRange(r, c).getValue()
+      const v = ws().getRange(r, c).getRawValue()
       if (typeof v === 'number') { sum += v; n++ }
     }
     return n ? Math.round((sum / n) * 100) / 100 : 0
@@ -44,7 +44,7 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
     }
   }
   const hasNumbers = (g) => {
-    for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (typeof ws().getRange(r, c).getValue() === 'number') return true
+    for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (typeof ws().getRange(r, c).getRawValue() === 'number') return true
     return false
   }
   const clearFormat = (g) => { ws().getRange(g.startRow, g.startColumn, g.endRow - g.startRow + 1, g.endColumn - g.startColumn + 1).clearConditionalFormatRules(); return true }
@@ -89,7 +89,7 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
       ['Top 10%', cf((b) => b.setRank({ isBottom: false, isPercent: true, value: 10 }).setBackground(LIGHT_RED).setFontColor(DARK_RED))],
       ['Clear Format', clearFormat],
     ]],
-    ['Charts', [['Clustered Column', () => charts.embeddedChart()]]],
+    ['Charts', []], // filled per selection: Excel's recommended charts for the data
     ['Totals', [
       ['Sum', totals('sum', true)], ['Average', totals('average', true)], ['Count', totals('count', true)],
       ['% Total', totals('percent', true)], ['Running Total', totals('running', true)],
@@ -97,10 +97,21 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
       ['% Total (columns)', totals('percent', false)], ['Running Total (columns)', totals('running', false)],
     ]],
     ['Tables', [['Table', () => dialogs.createTable()]]],
-    // Excel's fifth tab; Sheetly has no sparklines, so its options are shown unavailable.
-    ['Sparklines', [['Line', null], ['Column', null], ['Win/Loss', null]]],
+    // Sparklines in the column right of the selection, one per row.
+    ['Sparklines', [['Line', (g) => spark('line', g)], ['Column', (g) => spark('column', g)], ['Win/Loss', (g) => spark('winloss', g)]]],
   ]
   const NUMBER_FORMATTING = TABS[0][1]
+  // Recommended charts: clustered column and bar always; line for several categories; pie for one series;
+  // stacked column for several series; scatter when there are no category labels and at least two series.
+  function recommendedCharts() {
+    const { data } = charts.chartData(), n = data.series.length
+    const list = [['Clustered Column', 'column'], ['Clustered Bar', 'bar']]
+    if (data.labels.length > 2) list.push(['Line', 'line'])
+    if (n === 1) list.push(['Pie', 'pie'])
+    if (n > 1) list.push(['Stacked Column', 'columnStacked'])
+    if (n > 1 && !data.labelCol) list.push(['Scatter', 'scatter'])
+    return [...list.map(([name, type]) => [name, () => charts.embeddedChart(type)]), ['More Charts', () => charts.insertChartDialog()]]
+  }
   // Formatting options for text (Excel offers these when the selection holds no numbers).
   const TEXT_FORMATTING = [
     ['Text Contains', textRule('Text That Contains', 'Format cells that contain the text:', (b, v) => b.whenTextContains(v))],
@@ -111,13 +122,20 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
   ]
 
   const focusGrid = () => api._injector.get(ILayoutService).focus()
+  function spark(type, g) {
+    const loc = `${colLetter(g.endColumn + 1)}${g.startRow + 1}:${colLetter(g.endColumn + 1)}${g.endRow + 1}`
+    const data = ws().getRange(g.startRow, g.startColumn, g.endRow - g.startRow + 1, g.endColumn - g.startColumn + 1).getA1Notation()
+    sparklines.add(type, data, loc)
+    return true
+  }
+  const colLetter = (c) => { let s = ''; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s }
   function close() { panel?.remove(); panel = null }
 
   function open() {
     close()
     let g = ws().getActiveRange().getRange()
     if (g.startRow === g.endRow && g.startColumn === g.endColumn) {
-      const v = ws().getRange(g.startRow, g.startColumn).getValue()
+      const v = ws().getRange(g.startRow, g.startColumn).getRawValue()
       if (v == null || v === '') return true
       g = dialogs.currentRegion(g.startRow, g.startColumn)
       if (g.startRow === g.endRow && g.startColumn === g.endColumn) return true
@@ -125,6 +143,7 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
     }
     let tab = 0, item = 0
     TABS[0][1] = hasNumbers(g) ? NUMBER_FORMATTING : TEXT_FORMATTING
+    TABS[1][1] = recommendedCharts()
     const tabsRow = el('div', { class: 'sx-qa-tabs', role: 'tablist' })
     const items = el('div', { class: 'sx-qa-items', role: 'toolbar' })
     const run = (i) => { const fn = TABS[tab][1][i][1]; if (!fn) return true; close(); focusGrid(); fn(g); return true }
@@ -146,6 +165,8 @@ export function createQuickAnalysis(api, { dialogs, charts }) {
       else if (e.key === 'ArrowLeft') { e.preventDefault(); item = (item - 1 + n) % n; render() }
       else if (e.key === 'Tab') { e.preventDefault(); tab = (tab + (e.shiftKey ? -1 : 1) + TABS.length) % TABS.length; item = 0; render() }
       else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(item) }
+      // Tab letters: F Formatting, C Charts, O Totals, T Tables, S Sparklines.
+      else if (!e.ctrlKey && !e.altKey && !e.metaKey && 'FCOTS'.includes(e.key.toUpperCase()) && e.key.length === 1) { e.preventDefault(); tab = 'FCOTS'.indexOf(e.key.toUpperCase()); item = 0; render() }
     })
     for (const t of ['keyup', 'keypress']) panel.addEventListener(t, (e) => e.stopPropagation())
     document.body.append(panel)

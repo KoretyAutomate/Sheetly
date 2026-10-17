@@ -22,8 +22,9 @@ export function outlineGroups(levels) {
  *  detail, summary columns to the right, outline symbols shown. */
 export function outlineSettings(v) {
   const summaryBelow = v?.summaryBelow !== false, summaryRight = v?.summaryRight !== false, hideSymbols = v?.hideSymbols === true
-  return { summaryBelow, summaryRight, hideSymbols, isDefault: summaryBelow && summaryRight && !hideSymbols,
-    value: { summaryBelow, summaryRight, hideSymbols } }
+  const autoStyles = v?.autoStyles === true
+  return { summaryBelow, summaryRight, hideSymbols, autoStyles, isDefault: summaryBelow && summaryRight && !hideSymbols && !autoStyles,
+    value: { summaryBelow, summaryRight, hideSymbols, autoStyles } }
 }
 
 /** Index of a group's summary row/column: after the group (below / right) or before it (above / left). */

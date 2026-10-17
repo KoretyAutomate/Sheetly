@@ -53,9 +53,24 @@ export function excelFunctions(getApi, env = {}) {
       return StringValueObject.create(x.isNull() ? '' : String(x.getValue()))
     }, 'Extracts the phonetic (furigana) characters from a text string.', { needsReferenceObject: true }],
 
-    // Sheetly has no PivotTables, and Excel returns #REF! when pivot_table is not one.
-    ['GETPIVOTDATA', FunctionType.Lookup, 2, 254, () => err('#REF!'),
-      'Returns data stored in a PivotTable report.'],
+    // GETPIVOTDATA(data_field, pivot_table, [field1, item1], ...): a value from a Sheetly PivotTable; #REF! when
+    // pivot_table is not in one, or the field / item combination is not shown in it (as in Excel).
+    ['GETPIVOTDATA', FunctionType.Lookup, 2, 254, function (dataField, table, ...pairs) {
+      if (!table?.isReferenceObject?.() || !env.pivotLookup) return err('#REF!')
+      const df = first(dataField)
+      if (df?.isError?.()) return df
+      if (pairs.length % 2) return err('#REF!')
+      const items = []
+      for (let i = 0; i < pairs.length; i += 2) {
+        const f = first(pairs[i]), it = first(pairs[i + 1])
+        if (f?.isError?.()) return f
+        if (it?.isError?.()) return it
+        items.push([String(f.getValue()), it.isNumber() ? +it.getValue() : String(it.getValue())])
+      }
+      const g = table.getRangeData()
+      const res = env.pivotLookup(table.getForcedSheetId() || table.getDefaultSheetId(), g.startRow, g.startColumn, String(df.getValue()), items)
+      return res.error ? err(res.error) : NumberValueObject.create(res.value)
+    }, 'Returns data stored in a PivotTable report.', { needsReferenceObject: true }],
 
     ['AMORDEGRC', FunctionType.Financial, 6, 7, function (cost, purchased, firstPeriod, salvage, period, rate, basis) {
       const a = [cost, purchased, firstPeriod, salvage, period, rate, basis ?? NumberValueObject.create(0)].map(num)

@@ -70,9 +70,9 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   check('Right then Enter applies Color Scale', (await ev(`return S().getConditionalFormattingRules().map(r=>r.rule.type).sort().join(',')`)) === 'colorScale,dataBar', await ev(`return S().getConditionalFormattingRules().map(r=>r.rule.type).join(',')`))
   await key('Control+q'); await key('ArrowLeft'); await key('Enter'); await settle()
   check('Left wraps to Clear Format, which clears the rules', (await ev(`return S().getConditionalFormattingRules().length`)) === 0)
-  await key('Control+q'); await key('Tab'); await key('Tab'); await settle()
+  await key('Control+q'); await key('o'); await settle()
   const totals = await ev(`return document.querySelector('.sx-qa-tab[aria-selected=true]')?.textContent + ':' + [...document.querySelectorAll('.sx-qa-item')].slice(0,5).map(b=>b.textContent).join('|')`)
-  check('Tab moves to the Totals tab', totals === 'TOTALS:Sum|Average|Count|% Total|Running Total', totals)
+  check('O jumps to the Totals tab', totals === 'TOTALS:Sum|Average|Count|% Total|Running Total', totals)
   await key('Enter'); await settle(500)
   const sums = await ev(`return [S().getRange('A4').getFormula(), S().getRange('B4').getFormula(), S().getRange('A4').getValue(), S().getRange('B4').getValue()].join('|')`)
   check('Totals > Sum puts SUM formulas in the row below', sums === '=SUM(A1:A3)|=SUM(B1:B3)|9|12', sums)
@@ -157,7 +157,7 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   // Settings dialog with access keys: B toggles "Summary rows below detail", Enter = OK
   await ev(`O.settingsDialog()`); await settle()
   const labels = await ev(`return [...document.querySelectorAll('.sx-dialog label')].map(l=>l.textContent+':'+l.querySelector('input').checked).join('|')`)
-  check('Settings dialog shows the direction boxes', labels === 'Summary rows below detail:false|Summary columns to right of detail:true', labels)
+  check('Settings dialog shows the direction boxes and Automatic styles', labels === 'Summary rows below detail:false|Summary columns to right of detail:true|Automatic styles:false', labels)
   await key('b'); await key('Enter'); await settle()
   check('B + Enter sets summary rows below again', (await ev(`return O.settings().summaryBelow`)) === true)
   await ev(`O.clearOutline()`)
@@ -186,6 +186,9 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   await ev(`O.autoOutline()`); await settle(400)
   const lv = await ev(`return Array.from({length:9},(_, i)=>O.levelOf('row', i)).join('')`)
   check('Auto Outline: subtotals, a grand total over subtotals (=A4+A7) and SUM(A1:A8) nest', lv === '333233210', lv)
+  await ev(`O.clearOutline(); S().getRange('A1:A4').activate(); O.autoOutline(); S().getRange('A1').activate()`); await settle(400)
+  const scoped = await ev(`return Array.from({length:9},(_, i)=>O.levelOf('row', i)).join('')`)
+  check('Auto Outline with A1:A4 selected outlines only that range', scoped === '111000000', scoped)
   await ev(`O.autoOutline()`); await settle()
   const ask = await ev(`return document.querySelector('.sx-dialog p')?.textContent`)
   check('Auto Outline over an outline asks "Modify existing outline?"', ask === 'Modify existing outline?', ask)
@@ -204,6 +207,9 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   await ev(`S().getRange('B1:B3').setValues([[1],[2],[3]]); S().getRange('B4').setFormula('=SUM(B1:B3)'); S().getRange('A1').activate()`); await settle()
   await key('Alt'); await key('a'); await key('g'); await key('a'); await settle(400)
   check('Alt A G A runs Auto Outline', (await ev(`return [0,1,2,3].map(i=>O.levelOf('row', i)).join('')`)) === '1110')
+  await ev(`O.applyStyles()`); await settle()
+  check('Apply Styles makes the level-1 summary row bold (RowLevel_1)', (await ev(`return S().getRange('B4').getCellStyleData()?.bl`)) === 1 && !(await ev(`return S().getRange('B3').getCellStyleData()?.bl`)))
+  await ev(`S().getRange('B4').setFontWeight('normal')`)
   await ev(`O.clearOutline(); S().getRange('B1:B4').clear()`)
 }
 
@@ -228,6 +234,20 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   const back = await ev(`const r=await X.xlsx.xlsxToSnapshot(await X.xlsx.save()); const c=r.sheets[r.sheetOrder[0]].cellData; return [c[1]?.[5]?.f, c[2]?.[5]?.f].join('|')`)
   check('Ctrl+D filled formulas are saved with their own formula text', back === '=E2*2|=E3*2', `${raw} -> ${back}`)
   await ev(`S().getRange('E1:F3').clear()`)
+}
+
+// ---- formatted numbers are still numbers (Univer's getValue() returns "$100" for a currency cell)
+{
+  await grid()
+  await ev(`S().getRange('G1:G3').setValues([[100],[200],[300]]); S().getRange('G1:G3').setNumberFormat('$#,##0'); S().getRange('G4').activate()`); await settle()
+  await key('Alt+='); await settle(300)
+  const f = await ev(`return S().getRange('G4').getFormula()`)
+  await key('Enter'); await settle(300)
+  check('AutoSum finds currency-formatted numbers above', f === '=SUM(G1:G3)' && (await ev(`return S().getRange('G4').getRawValue()`)) === 600, `${f} ${await ev(`return S().getRange('G4').getRawValue()`)}`)
+  await ev(`S().getRange('G5').activate()`); await settle()
+  await key('Control+Shift+Quote'); await key('Enter'); await settle(300)
+  check('Ctrl+Shift+" copies the value 600, not the text "$600"', (await ev(`return S().getRange('G5').getRawValue()`)) === 600, String(await ev(`return JSON.stringify(S().getRange('G5').getRawValue())`)))
+  await ev(`S().getRange('G1:G5').clear()`)
 }
 
 check('no page errors', errors.length === 0, errors.join(' | '))

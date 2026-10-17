@@ -1,0 +1,25 @@
+charts  2026-10-17T00:18:07.159Z
+PASS  Alt+F1: clustered column, series by columns with the header row as names
+PASS  the chart follows its data: B2 = 99 redraws it
+PASS  formula results feed the chart too
+PASS  Change Chart Type to Line
+PASS  Switch Row/Column: series become the rows
+PASS  Legend can be turned off
+PASS  Data Labels can be turned on
+PASS  100% Stacked Column scales each category to 100% (North = 10 of 90 in Q1, 20 of 120 in Q2)
+PASS  Alt N Q P inserts a pie, one colour per slice
+PASS  Alt N C1 B inserts a clustered bar (horizontal)
+PASS  Insert Chart lists the chart types and inserts the chosen one
+PASS  Quick Analysis Charts recommends for one series: Column, Bar, Line, Pie, More
+PASS  choosing Pie from Quick Analysis inserts it
+PASS  Chart Design (JC) KeyTips only while a chart is selected; J C C opens Change Chart Type
+PASS  rows inserted above the data move the chart range; deleting a data row (North) shrinks it
+PASS  undo moves it back
+PASS  a column inserted inside the data widens the range
+PASS  value axis: Excel-style automatic minimum (data 100-102 do not start at 0) and the cells' $ format
+PASS  Region and Product (text) label the axis in two levels; only Sales is plotted
+PASS  saved chart: multi-level categories over both label columns
+PASS  the chart definition is saved (type + source range)
+PASS  no page errors
+
+22/22 passed

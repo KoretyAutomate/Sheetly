@@ -1,0 +1,23 @@
+files (open / save objects in the app)  2026-10-17T00:18:40.397Z
+PASS  a new workbook has Excel's sizes: columns 64 px, rows 20 px
+PASS  Calibri (bundled Carlito metrics) is the sheet font and is loaded
+PASS  a new, untouched Book1 may be replaced by File > Open
+PASS  opened: sheet names
+PASS  opened: the conditional format is active
+PASS  opened: the list validation is on C2:C4
+PASS  opened: the table exists
+PASS  opened: the picture is on the sheet
+PASS  opened: the chart is drawn, linked to B2:B4
+PASS  the opened chart follows its data
+PASS  opened: the dynamic array spills (A10:A12 = 1,2,3)
+PASS  opened: hyperlinks (web and to Other!C5)
+PASS  an opened file is not replaced by File > Open (it opens in a new window)
+PASS  saved: conditional format and validation
+PASS  saved: the table
+PASS  saved: the picture
+PASS  saved: the chart part (line over Data!$B$2:$B$4, current value 50 cached)
+PASS  saved: the spilling formula as a dynamic array
+PASS  saved: links (external and in-workbook)
+PASS  no page errors
+
+20/20 passed
