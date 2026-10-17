@@ -60,7 +60,7 @@ export function chartXml(spec, sheetName, get) {
   } else if (t === 'scatter') {
     const xs = ex ? null : d.series.length > 1 ? d.series[0] : null, ys = xs ? d.series.slice(1) : d.series
     // series picked one by one: each its own X values (else the shared categories)
-    const xRef = (k) => { const own = ex ? spec.source.series[k]?.xValues : null; return own ? `<c:xVal>${numRef(span(own), d.series[k]?.xs ?? [])}</c:xVal>` : ex && catRef ? `<c:xVal>${numRef(catRef, d.labels.map(Number))}</c:xVal>` : '' }
+    const xRef = (k) => { const own = ex ? spec.source.series[k]?.xValues : null; return own ? `<c:xVal>${numRef(span(own), d.series[k]?.xs ?? [])}</c:xVal>` : catRef ? `<c:xVal>${numRef(catRef, d.labels.map(Number))}</c:xVal>` : '' }
     const sers = ys.map((s, i) => { const k = xs ? i + 1 : i; return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill></c:spPr></c:marker>${dLbls(labels)}`
       + `${xs ? `<c:xVal>${numRef(lineRef(xs, 0), xs.values)}</c:xVal>` : xRef(k)}<c:yVal>${numRef(lineRef(s, k), s.values)}</c:yVal><c:smooth val="0"/></c:ser>` }).join('')
     plot = `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:scatterChart>`

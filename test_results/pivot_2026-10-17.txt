@@ -1,5 +1,4 @@
-DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"3Vth2x"},[["001",10],["002",20]]]
-pivot tables  2026-10-17T08:15:01.353Z
+pivot tables  2026-10-17T08:54:22.534Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -29,7 +28,10 @@ PASS  GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20
 PASS  a table's totals row is left out (Grand Total 30, not 60); "001" stays the text 001
 PASS  a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)
 PASS  after the table is renamed and grown, Refresh still reads all of it (30)
+PASS  an error from the source is written as an error value and saved as one (#DIV/0!)
+PASS  Refresh on a copied sheet reads the copy's own table (100), the original keeps 1
+PASS  a PivotTable whose rows were deleted is not drawn again by Refresh All, nor found there
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-31/31 passed
+34/34 passed

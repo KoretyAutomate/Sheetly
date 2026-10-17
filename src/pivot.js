@@ -57,7 +57,13 @@ export function createPivots(api, { dialogs, refs }) {
     if (t) return { sheetId: t.sheet.getSheetId(), range: t.range }
     return p.sourceRef ? refs?.resolve(p.sourceRef) : { sheetId: p.source.sheetId, range: p.source.range }
   }
-  const anchorAt = (p) => { const a = p.anchorRef ? refs?.resolve(p.anchorRef) : null; return a ? { row: a.range.startRow, col: a.range.startColumn } : p.anchor }
+  // A tracked place whose cells were deleted is gone (null) until Undo brings it back; stored coordinates are only for
+  // definitions without one.
+  const anchorAt = (p) => {
+    if (!p.anchorRef) return p.anchor
+    const a = refs?.resolve(p.anchorRef)
+    return a ? { row: a.range.startRow, col: a.range.startColumn } : null
+  }
   // Like Excel's PivotCache: the records a report was built from are kept with it (p.cache). Layout changes and
   // GETPIVOTDATA use them; only creating and refreshing read the source again.
   const readLive = (p) => {
@@ -77,11 +83,12 @@ export function createPivots(api, { dialogs, refs }) {
       return { row: w.range.startRow, col: w.range.startColumn, rows: w.range.endRow - w.range.startRow + 1, cols: w.range.endColumn - w.range.startColumn + 1 }
     }
     const a = anchorAt(p)
+    if (!a) return null
     return { row: a.row + e.dRow - e.filterRows, col: a.col, rows: e.rows + e.filterRows, cols: e.cols }
   }
   // An empty report shows Excel's placeholder area (A3:C20) for the fields pane.
-  const footprint = (p) => written(p) ?? { ...anchorAt(p), rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols }
-  const inside = (p, r, c) => { const f = footprint(p); return r >= f.row && r < f.row + f.rows && c >= f.col && c < f.col + f.cols }
+  const footprint = (p) => { const a = anchorAt(p); return a ? written(p) ?? { ...a, rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols } : null }
+  const inside = (p, r, c) => { const f = footprint(p); return !!f && r >= f.row && r < f.row + f.rows && c >= f.col && c < f.col + f.cols }
   /** The PivotTable the active cell is in (on the active sheet). */
   function active() {
     const g = ws().getActiveRange()?.getRange()
@@ -92,6 +99,8 @@ export function createPivots(api, { dialogs, refs }) {
 
   // ---- writing a report: only the cells it wrote last time are cleared; other data in the way needs consent.
   function render(sheet, p, { refresh = false, force = false } = {}) {
+    // a report whose cells were deleted is not written again (Refresh All skips it)
+    if (!anchorAt(p)) return { gone: true }
     if (refresh || !p.cache) p.cache = readLive(p)
     const src = p.cache
     const old = written(p)
@@ -372,7 +381,11 @@ export function createPivots(api, { dialogs, refs }) {
         if (!at || at.sheetId === sheet.getSheetId()) return p
         changed = true
         const here = (name) => { const r = name ? refs?.resolve(name) : null; return r && r.sheetId === at.sheetId ? refs?.track(sheet.getSheetId(), r.range) ?? name : name }
-        return { ...p, id: `${p.id}c`, anchorRef: here(p.anchorRef), writtenRef: here(p.writtenRef), sourceRef: here(p.sourceRef) }
+        // A source table on the original sheet: the copy's own table at the same place (Copy Sheet copies tables).
+        const orig = p.sourceTableId ? wb().getTableInfo?.(p.sourceTableId) : null
+        const copy = orig && orig.subUnitId === at.sheetId ? wb().getTableList?.()?.find((t) => t.subUnitId === sheet.getSheetId() && JSON.stringify(t.range) === JSON.stringify(orig.range)) : null
+        const table = !orig || orig.subUnitId !== at.sheetId ? {} : copy ? { sourceTable: copy.name, sourceTableId: copy.id } : { sourceTable: undefined, sourceTableId: undefined }
+        return { ...p, id: `${p.id}c`, anchorRef: here(p.anchorRef), writtenRef: here(p.writtenRef), sourceRef: here(p.sourceRef), ...table }
       })
       if (changed) store(sheet, next)
     }

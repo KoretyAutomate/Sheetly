@@ -1,4 +1,4 @@
-open file from the command line  2026-10-17T08:14:05.665Z
+open file from the command line  2026-10-17T08:53:15.092Z
 PASS  a workbook named on the command line opens at start
 PASS  its sheet name comes from the file
 PASS  the second launch exits (hands over to the running Sheetly)

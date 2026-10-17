@@ -1,6 +1,8 @@
 // PivotTables in the app: Alt N V T and the Create PivotTable dialog, the fields pane (check boxes, areas, menus),
 // the report in cells, Value Field Settings, a report filter, Refresh (Alt+F5), GETPIVOTDATA, saved definitions.
 import { _electron as electron } from 'playwright'
+import ExcelJS from 'exceljs'
+const J = JSON.stringify
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -169,7 +171,6 @@ await ev(`await S().addTable('WithTotals', { startRow: 0, endRow: 3, startColumn
 const totalsOn = await ev(`try { return !!JSON.parse(W().save().resources.find(r=>r.name==='SHEET_TABLE_PLUGIN').data)[S().getSheetId()].tables.find(t=>t.name==='WithTotals')?.options?.showFooter } catch { return false }`)
 await ev(`P.create('WithTotals', 'existing', S().getSheetName() + '!AH3')`); await settle(500)
 await ev(`P.place('Code', 'rows'); P.place('Amt', 'values')`); await settle(700)
-console.log('DBG', await ev(`return JSON.stringify([S().getSheet().getCellRaw(3,33), S().getSheet().getCellRaw(2,33), P.list().slice(-1)[0]?.cache?.records?.slice(0,2)])`))
 const tt = await ev(`const v=(a)=>S().getRange(a).getCalculatedValue(); return JSON.stringify([v('AH4'), v('AH5'), S().getSheet().getCellRaw(3,33)?.t, v('AI6')])`)
 check('a table\'s totals row is left out (Grand Total 30, not 60); "001" stays the text 001', !totalsOn || tt === JSON.stringify(['001', '002', 1, 30]), `${totalsOn} ${tt}`)
 
@@ -190,6 +191,31 @@ await ev(`S().getRange('AQ4').activate()`); await settle(300)
 await key('Alt+F5'); await settle(800)
 const after3 = await ev(`return S().getRange('AQ4').getCalculatedValue()`)
 check('after the table is renamed and grown, Refresh still reads all of it (30)', after3 === 30, `${after3} ${await ev(`return JSON.stringify(W().getTableList().map(t=>[t.name,t.range]))`)}`)
+
+// ---- review round 17: source errors saved as errors; a copied sheet's PivotTable reads the copy's table; a deleted report stays gone
+await ev(`const sh = W().insertSheet('R17'); W().setActiveSheet(sh); S().getRange('A1:B2').setValues([['K','N'],['a',1]]); S().getRange('A3').setValue('b'); S().getRange('B3').setFormula('=1/0'); await S().addTable('Errs', { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 })`); await settle(600)
+await ev(`for (let i = 0; i < 100 && S().getRange('B3').getCalculatedValue() !== '#DIV/0!'; i++) await new Promise((r) => setTimeout(r, 100))`)
+await ev(`P.create('Errs', 'existing', 'R17!E10')`); await settle(500)
+await ev(`P.place('K', 'rows')`); await settle(400)
+await ev(`P.place('N', 'values')`); await settle(800)
+// (a column holding an error is not all numbers, so it starts as Count, as in Excel; Sum shows the error)
+await ev(`S().getRange('F11').activate(); P.setValueField(0, 'sum')`); await settle(800)
+const errCell = await ev(`return JSON.stringify(S().getSheet().getCellRaw(11, 5))`)
+const buf17 = Buffer.from(await ev(`return Array.from(await X.xlsx.save())`))
+const w17 = new ExcelJS.Workbook(); await w17.xlsx.load(buf17)
+check('an error from the source is written as an error value and saved as one (#DIV/0!)', J(w17.getWorksheet('R17').getCell('F12').value) === J({ error: '#DIV/0!' }), `${errCell} ${J(w17.getWorksheet('R17').getCell('F12').value)}`)
+const ids17 = await ev(`return W().getSheets().map(s=>s.getSheetId()).join(',')`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('sheet.command.copy-sheet', { unitId: W().getId(), subUnitId: S().getSheetId() })`); await settle(900)
+await ev(`const before='${ids17}'.split(','); W().setActiveSheet(W().getSheets().find(s=>!before.includes(s.getSheetId())))`); await settle(400)
+await ev(`S().getRange('B2').setValue(100); S().getRange('E11').activate()`); await settle(400)
+await ev(`P.refresh(false)`); await settle(800)
+const copyVal = await ev(`return S().getRange('F11').getCalculatedValue()`), origVal = await ev(`return W().getSheetByName('R17').getRange('F11').getCalculatedValue()`)
+check('Refresh on a copied sheet reads the copy\'s own table (100), the original keeps 1', copyVal === 100 && origVal === 1, `${copyVal} ${origVal} ${await ev(`return JSON.stringify(P.list().filter(p=>p.sourceTable).map(p=>[p.sheet,p.sourceTable]))`)}`)
+await ev(`S().deleteRows(9, 6)`); await settle(600)
+await ev(`P.refresh(true)`); await settle(800)
+const after17 = await ev(`return JSON.stringify(S().getRange('E10:F14').getValues().flat().filter((v)=>v!==null&&v!==''))`)
+const active17 = await ev(`S().getRange('E10').activate(); await new Promise(r=>setTimeout(r,300)); return P.active()?.name ?? null`)
+check('a PivotTable whose rows were deleted is not drawn again by Refresh All, nor found there', after17 === '[]' && active17 === null, `${after17} ${active17}`)
 
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()

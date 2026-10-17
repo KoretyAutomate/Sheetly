@@ -534,6 +534,9 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
   }
   for (const [sheetIndex, id] of snap.sheetOrder.entries()) {
     const s = snap.sheets[id], settings = outlineSettings(s.custom?.sheetlyOutline)
+    // A PivotTable report is written as values; an error text in it is an error the report shows (from its source).
+    const pivotAreas = (s.custom?.sheetlyPivots ?? []).map((p) => (p.writtenRef ? resolveName(p.writtenRef)?.range : null)).filter(Boolean)
+    const inPivot = (r, c) => pivotAreas.some((g) => r >= g.startRow && r <= g.endRow && c >= g.startColumn && c <= g.endColumn)
     const view = {}
     if (s.freeze && (s.freeze.xSplit > 0 || s.freeze.ySplit > 0)) {
       const xSplit = s.freeze.xSplit || 0, ySplit = s.freeze.ySplit || 0
@@ -570,7 +573,7 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
         spills.add(`${sheetIndex}!${a1(+r, +c)}`)
       } else if (pivotRead) x.value = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.t === 3 ? !!cell.v : cell.v
       else if (f) x.value = { formula: formulaOut(f.replace(/^=/, '')), result }
-      else if (typeof cell.v === 'string' && ERRORS.has(cell.v) && cell.t !== 1) x.value = { error: cell.v }
+      else if (typeof cell.v === 'string' && ERRORS.has(cell.v) && (cell.t !== 1 || inPivot(+r, +c))) x.value = { error: cell.v }
       else if (cell.v !== undefined && cell.v !== null && cell.v !== '') x.value = cell.t === 3 ? !!cell.v : cell.v
       else if (cell.p?.body?.dataStream) x.value = docText(cell.p)
       const url = linkOf(cell.p)

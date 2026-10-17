@@ -370,6 +370,13 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('column sparklines are written with negative="1" (their negative points are coloured); a group with it off keeps it off', /type="column"[^>]*negative="1"/.test(x19) && !/type="stacked"[^>]*negative="1"/.test(x19) && sp19[0].negative === true && sp19[1].negative === false, x19.match(/<x14:sparklineGroup[^>]*>/g)?.join(' '))
 }
 
+// ---- review round 17: a scatter chart over a label column keeps those numbers as X values
+{
+  const g = [[null, 'Sales'], [2020, 10], [2021, 20], [2022, 30]]
+  const x = writeChartXml({ type: 'scatter', title: null, source: { sheetId: 's1', range: R(0, 0, 3, 1) } }, 'Data', (r, c) => g[r]?.[c] ?? null)
+  check('scatter with years in the first column: written with them as X values', /<c:xVal><c:numRef><c:f>Data!\$A\$2:\$A\$4<\/c:f>[\s\S]*?<c:v>2020<\/c:v>/.test(x), (x.match(/<c:xVal>[\s\S]{0,140}/) ?? ['none'])[0])
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true
