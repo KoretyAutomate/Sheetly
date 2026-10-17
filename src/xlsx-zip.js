@@ -339,9 +339,11 @@ export function specFromXml(raw) {
   const legendPos = attr(xml, 'c:legendPos', 'val')
   const legend = /<c:legend>/.test(xml) ? ({ b: 'bottom', r: 'right', t: 'top', l: 'left', tr: 'right' }[legendPos] ?? 'bottom') : 'none'
   const dataLabels = /<c:showVal val="1"\/>/.test(plot)
-  const axisTitle = (tag) => texts(new RegExp(`<c:${tag}>[\\s\\S]*?<c:title>([\\s\\S]*?)<\\/c:title>[\\s\\S]*?<\\/c:${tag}>`).exec(plot)?.[1])
-  const ax = /<c:catAx>/.test(plot) ? axisTitle('catAx') : axisTitle('valAx'), ay = axisTitle('valAx')
-  const axisTitles = ax || (ay && /<c:catAx>/.test(plot)) ? { x: ax || '', y: /<c:catAx>/.test(plot) ? ay : '' } : null
+  // Axis titles: the category axis (or, in a scatter chart, the bottom value axis) is x; the other value axis is y.
+  const axes = [...plot.matchAll(/<c:(catAx|valAx|dateAx)>([\s\S]*?)<\/c:\1>/g)].map((m) => ({ kind: m[1], pos: attr(m[2], 'c:axPos', 'val'), title: texts(/<c:title>([\s\S]*?)<\/c:title>/.exec(m[2])?.[1]) }))
+  const horizontalAxis = (a) => a.pos === 'b' || a.pos === 't'
+  const xAxis = axes.find((a) => a.kind !== 'valAx') ?? axes.find(horizontalAxis), yAxis = axes.find((a) => a !== xAxis && a.kind === 'valAx')
+  const axisTitles = xAxis?.title || yAxis?.title ? { x: xAxis?.title || '', y: yAxis?.title || '' } : null
   const serXml = [...plot.matchAll(/<c:ser>([\s\S]*?)<\/c:ser>/g)].map((m) => m[1])
   // A reference inside one element only (<c:tx>, <c:cat>, <c:val>, ...), never one from the next element.
   const inner = (x, tag) => new RegExp(`<c:${tag}>([\\s\\S]*?)<\\/c:${tag}>`).exec(x)?.[1] ?? null

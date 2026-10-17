@@ -342,18 +342,21 @@ export function createPivots(api, { dialogs, refs }) {
   }
   commands.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.operation.set-selections' || cmd.id.startsWith('sheet.operation.set-worksheet-active')) soon(showPane) })
 
-  /** After Copy Sheet: the copy's PivotTables get their own place (and source, when it was on the copied sheet). */
-  function remapCopy(fromId, sheet) {
-    const list = listOf(sheet)
-    if (!list.length) return
-    const re = (name, fallbackSheet, range, onCopy) => {
-      const at = name ? refs?.resolve(name) : range ? { sheetId: fallbackSheet, range } : null
-      if (!at) return name
-      return refs?.track(onCopy || at.sheetId === fromId ? sheet.getSheetId() : at.sheetId, at.range) ?? name
+  /** A PivotTable's place is on its own sheet. A sheet holding PivotTables placed by references to another sheet
+   *  (a copied sheet, also on redo) gets them pointed at itself, with the source too when it was on that sheet. */
+  function fixLocal() {
+    for (const sheet of wb()?.getSheets?.() ?? []) {
+      const list = listOf(sheet)
+      let changed = false
+      const next = list.map((p) => {
+        const at = p.anchorRef ? refs?.resolve(p.anchorRef) : null
+        if (!at || at.sheetId === sheet.getSheetId()) return p
+        changed = true
+        const here = (name) => { const r = name ? refs?.resolve(name) : null; return r && r.sheetId === at.sheetId ? refs?.track(sheet.getSheetId(), r.range) ?? name : name }
+        return { ...p, id: `${p.id}c`, anchorRef: here(p.anchorRef), writtenRef: here(p.writtenRef), sourceRef: here(p.sourceRef) }
+      })
+      if (changed) store(sheet, next)
     }
-    store(sheet, list.map((p) => ({ ...p, id: `${p.id}c`, sourceRef: re(p.sourceRef, p.source.sheetId, p.source.range, false),
-      anchorRef: re(p.anchorRef, fromId, { startRow: p.anchor.row, endRow: p.anchor.row, startColumn: p.anchor.col, endColumn: p.anchor.col }, true),
-      writtenRef: p.writtenRef ? re(p.writtenRef, fromId, null, true) : undefined })))
   }
 
   /** GETPIVOTDATA: the PivotTable at (sheetId, row, col) answers for data_field and field/item pairs. */
@@ -365,6 +368,6 @@ export function createPivots(api, { dialogs, refs }) {
     return src ? getPivotData(p, src, dataField, pairs) : { error: '#REF!' }
   }
 
-  return { remapCopy, createDialog, create, active, place, toggleField, removeAt, moveTo, moveWithin, setFilter, setValueField, valueFieldSettings, refresh, lookup, showPane,
+  return { fixLocal, createDialog, create, active, place, toggleField, removeAt, moveTo, moveWithin, setFilter, setValueField, valueFieldSettings, refresh, lookup, showPane,
     list: () => allPivots().map(({ sheet, p }) => ({ sheet: sheet.getSheetName(), ...p })) }
 }

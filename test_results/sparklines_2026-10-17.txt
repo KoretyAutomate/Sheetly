@@ -1,4 +1,4 @@
-sparklines  2026-10-17T02:54:28.724Z
+sparklines  2026-10-17T03:21:14.469Z
 PASS  Alt N S L opens Create Sparklines with the selection as the Data Range
 PASS  one line sparkline per row in F2:F4
 PASS  the sparkline is drawn in F2 (its cell looks different from before)
@@ -14,7 +14,8 @@ PASS  a deleted sparkline row is gone, and Undo brings the sparkline back
 PASS  adding sparklines is one undo step (undo removes, redo puts back)
 PASS  Clear can be undone
 PASS  a copied sheet keeps its sparklines, reading its own data
+PASS  after Copy Sheet, Undo and Redo the copy keeps its own sparklines
 PASS  Clear removes the selected sparklines
 PASS  no page errors
 
-17/17 passed
+18/18 passed

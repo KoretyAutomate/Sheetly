@@ -120,15 +120,16 @@ export function createSparklines(api, refs) {
       }
     }
   }
-  const installed = new Set()
+  // Per render unit (a workbook opened later can reuse a disposed workbook's id).
+  const installed = new WeakSet()
   function install() {
     const book = wb()
-    if (!book || installed.has(book.getId())) return
+    if (!book) return
     const render = injector.get(IRenderManagerService).getRenderUnitById(book.getId())
     const main = render?.components.get('__SpreadsheetRender__')
-    if (!main) return
+    if (!main || installed.has(render)) return
     main.register(new SparklineExt())
-    installed.add(book.getId())
+    installed.add(render)
   }
   const redraw = () => {
     install()
@@ -184,27 +185,27 @@ export function createSparklines(api, refs) {
     redraw()
     return true
   }
-  /** After Copy Sheet: the copy's sparklines get references of their own (their cells, and data that was on the
-   *  copied sheet), instead of the original's. */
-  function remapCopy(fromId, sheet) {
-    const w = sheet.getSheet ? sheet.getSheet() : sheet
-    const groups = groupsOf(w)
-    if (!groups.length) return
-    const toCopy = (name, fallbackSheet, range) => {
-      const at = name ? refs?.resolve(name) : { sheetId: fallbackSheet, range }
-      if (!at) return { name, ...{} }
-      return { sheetId: at.sheetId === fromId ? w.getSheetId() : at.sheetId, range: at.range }
+  /** A sparkline's cell is on its own sheet. When a sheet holds sparklines whose cell references point at another
+   *  sheet (a copied sheet, also when Copy Sheet is redone), they are pointed at this sheet, and so is their data
+   *  when it was on that other sheet. Runs after a sheet is inserted; no undo step of its own. */
+  function fixLocal() {
+    for (const sheet of wb()?.getSheets?.() ?? []) {
+      const w = sheet.getSheet(), groups = groupsOf(w)
+      let changed = false
+      const next = groups.map((g) => ({ ...g, items: g.items.map((it) => {
+        const at = it.cellRef ? refs?.resolve(it.cellRef) : null
+        if (!at || at.sheetId === w.getSheetId()) return it
+        changed = true
+        const src = it.sourceRef ? refs?.resolve(it.sourceRef) : null
+        const srcSheet = src && src.sheetId === at.sheetId ? w.getSheetId() : src?.sheetId
+        return { ...it, sheetId: srcSheet ?? it.sheetId, cellRef: refs?.track(w.getSheetId(), at.range) ?? it.cellRef,
+          sourceRef: src ? refs?.track(srcSheet, src.range) ?? it.sourceRef : it.sourceRef }
+      }) }))
+      if (changed) store(w, next)
     }
-    const next = groups.map((g) => ({ ...g, items: g.items.map((it) => {
-      const cell = toCopy(it.cellRef, w.getSheetId(), { startRow: it.row, endRow: it.row, startColumn: it.col, endColumn: it.col })
-      const src = toCopy(it.sourceRef, it.sheetId ?? fromId, it.source)
-      if (!cell?.range || !src?.range) return it
-      return { ...it, sheetId: src.sheetId, cellRef: refs?.track(w.getSheetId(), cell.range) ?? undefined, sourceRef: refs?.track(src.sheetId, src.range) ?? undefined }
-    }) }))
-    store(w, next)
     redraw()
   }
   /** Groups with each sparkline where it is now (null items: deleted cells, kept for undo). */
   const groups = () => { const w = ws().getSheet(); return groupsOf(w).map((g) => ({ ...g, items: g.items.map((x) => placeOf(w, x)).filter(Boolean) })) }
-  return { dialog, add, clear, groups, redraw, remapCopy }
+  return { dialog, add, clear, groups, redraw, fixLocal }
 }

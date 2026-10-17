@@ -223,6 +223,16 @@ export function dvIn(ws, sheetId) {
 }
 
 // ---- tables
+// The text a cell shows: plain values, rich text, a link's text, a formula's result.
+const cellText = (v) => {
+  if (v == null) return ''
+  if (typeof v !== 'object') return String(v)
+  if (Array.isArray(v.richText)) return v.richText.map((t) => t.text).join('')
+  if ('hyperlink' in v) return cellText(v.text)
+  if ('formula' in v || 'sharedFormula' in v) return cellText(v.result)
+  if ('error' in v) return v.error
+  return String(v.text ?? '')
+}
 const tableName = (s, used) => {
   // Excel allows letters of any script, digits, _ and . (first: a letter or _); only invalid characters change.
   let n = String(s || 'Table').replace(/[^\p{L}\p{N}_.]/gu, '_').replace(/^([^\p{L}_])/u, '_$1')
@@ -241,7 +251,7 @@ export function tablesOut(ws, tables = [], used = new Set()) {
     const columns = []
     for (let c = g.startColumn; c <= g.endColumn; c++) {
       const col = t.columns?.[c - g.startColumn]
-      const name = header ? String(ws.getCell(g.startRow + 1, c + 1).value ?? col?.displayName ?? `Column${c - g.startColumn + 1}`) : col?.displayName ?? `Column${c - g.startColumn + 1}`
+      const name = header ? (cellText(ws.getCell(g.startRow + 1, c + 1).value) || col?.displayName || `Column${c - g.startColumn + 1}`) : col?.displayName ?? `Column${c - g.startColumn + 1}`
       columns.push({ name, filterButton: t.options?.showAutoFilter !== false })
     }
     const rows = []
@@ -254,6 +264,8 @@ export function tablesOut(ws, tables = [], used = new Set()) {
     const styles = []
     for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) styles.push([r, c, ws.getCell(r + 1, c + 1).style])
     // The totals row as it is (labels, SUBTOTAL formulas and their results): ExcelJS would write its defaults.
+    // The header row as it is too (a header may be a link or rich text; ExcelJS would write the plain name).
+    const headerCells = header ? Array.from({ length: g.endColumn - g.startColumn + 1 }, (_, i) => [g.startRow, g.startColumn + i, ws.getCell(g.startRow + 1, g.startColumn + i + 1).value]) : []
     const footerCells = footer ? Array.from({ length: g.endColumn - g.startColumn + 1 }, (_, i) => [g.endRow, g.startColumn + i, ws.getCell(g.endRow + 1, g.startColumn + i + 1).value]) : []
     footerCells.forEach(([, , v], i) => {
       if (typeof v === 'string') columns[i].totalsRowLabel = v
@@ -263,7 +275,7 @@ export function tablesOut(ws, tables = [], used = new Set()) {
       style: { theme: 'TableStyleMedium2', showRowStripes: true }, columns, rows })
     // addTable rewrites the cells; their own formatting and the totals row are put back.
     for (const [r, c, st] of styles) ws.getCell(r + 1, c + 1).style = st
-    for (const [r, c, v] of footerCells) ws.getCell(r + 1, c + 1).value = v
+    for (const [r, c, v] of [...headerCells, ...footerCells]) ws.getCell(r + 1, c + 1).value = v
   }
 }
 /** ExcelJS tables -> [{name, range, showHeader, showFooter}] for FWorksheet.addTable after the workbook loads. */

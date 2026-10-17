@@ -80,7 +80,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     ['precedents', CTRL | BRACKET_L, () => dialogs.runGoToSpecial('precedents') || true],
     ['dependents', CTRL | BRACKET_R, () => dialogs.runGoToSpecial('dependents') || true],
     // ---- editing
-    ['insert-date', CTRL | SEMICOLON, () => { const r = cur(); r.setValue(excelSerial(new Date())); r.setNumberFormat('m/d/yyyy'); return true }],
+    // (a workbook in the 1904 date system counts days from 1904-01-01: 1,462 fewer)
+    ['insert-date', CTRL | SEMICOLON, () => { const r = cur(); r.setValue(excelSerial(new Date()) - (wb().getWorkbook?.().getDateSystem?.() === 'date1904' ? 1462 : 0)); r.setNumberFormat('m/d/yyyy'); return true }],
     ['insert-time', CTRL | SHIFT | SEMICOLON, () => { const r = cur(); r.setValue(dayFraction(new Date())); r.setNumberFormat('h:mm AM/PM'); return true }],
     ['copy-formula-above', CTRL | QUOTE, () => copyAbove(true)],
     ['copy-value-above', CTRL | SHIFT | QUOTE, () => copyAbove(false)],

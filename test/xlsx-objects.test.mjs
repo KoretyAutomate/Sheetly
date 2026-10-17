@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { SaxesParser } from 'saxes'
 import { xlsxToSnapshot, snapshotToXlsx } from '../src/xlsx.js'
-import { specFromXml } from '../src/xlsx-zip.js'
+import { specFromXml, chartXml as writeChartXml } from '../src/xlsx-zip.js'
 import { explicitSeries } from '../src/chart-model.js'
 
 const out = []
@@ -271,6 +271,20 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const back = await xlsxToSnapshot(await zc.generateAsync({ type: 'uint8array' }))
   const ch = Object.values(res(back, 'SHEET_DRAWING_PLUGIN')[back.sheetOrder[0]]?.data ?? {}).filter((d) => d.drawingType === 8)
   check('a chart written with another namespace prefix (ch:) is still read', ch.length === 1 && ch[0].data.type === 'column', String(ch.length))
+}
+
+// ---- review round 7: scatter axis titles, a linked table header
+{
+  const spec = { v: 2, type: 'scatter', title: null, axisTitles: { x: 'Time', y: 'Distance' }, source: { sheetId: 's', range: R(0, 0, 3, 1) } }
+  const grid = [['t', 'd'], [1, 5], [2, 6], [3, 7]]
+  const back = specFromXml(writeChartXml(spec, 'Data', (r, c) => grid[r]?.[c] ?? null))
+  check('scatter: both axis titles survive (x Time, y Distance)', back?.axisTitles?.x === 'Time' && back.axisTitles.y === 'Distance', J(back?.axisTitles))
+  const link = { p: { id: 'd', body: { dataStream: 'Site\r\n', paragraphs: [{ startIndex: 4 }], customRanges: [{ startIndex: 0, endIndex: 3, rangeType: 0, rangeId: 'r', properties: { url: 'https://example.com/' } }] } } }
+  const s11 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_TABLE_PLUGIN', data: J({ s1: { tables: [{ id: 't', name: 'Links', range: R(0, 0, 2, 1), options: { showHeader: true } }] } }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: link, 1: { v: 'Qty', t: 1 } }, 1: { 0: { v: 'a', t: 1 }, 1: { v: 1, t: 2 } }, 2: { 0: { v: 'b', t: 1 }, 1: { v: 2, t: 2 } } } } } }
+  const w11 = new ExcelJS.Workbook(); await w11.xlsx.load(await snapshotToXlsx(s11))
+  const ws11 = w11.getWorksheet('Data'), tb = ws11.getTables()[0], m = tb?.table ?? tb
+  check('a table header that is a link keeps its text as the column name and stays a link', J((m?.columns ?? []).map((c) => c.name)) === J(['Site', 'Qty']) && ws11.getCell('A1').value?.hyperlink === 'https://example.com/', J([m?.columns?.map((c) => c.name), ws11.getCell('A1').value]))
 }
 
 // ---- 1904 date system

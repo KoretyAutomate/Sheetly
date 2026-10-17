@@ -73,6 +73,18 @@ check('saved: the chart part (line over Data!$B$2:$B$4, current value 50 cached)
 check('saved: the spilling formula as a dynamic array', /<c r="A10"[^>]*cm="1"[^>]*><f t="array" ref="A10:A12">_xlfn.SEQUENCE\(3\)<\/f>/.test(sheetXml), sheetXml.match(/<c r="A10"[^>]*>.{0,60}/)?.[0])
 check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperlink === 'https://example.com/' && /location="(&apos;|')Other(&apos;|')!C5"/.test(sheetXml), J([ws.getCell('D1').value, sheetXml.match(/<hyperlink [^>]*>/g)]))
 
+// Ctrl+; in a 1904 workbook writes today's 1904 serial
+{
+  const w = new ExcelJS.Workbook(); w.properties.date1904 = true; w.addWorksheet('D').getCell('A1').value = 1
+  const b = Array.from(new Uint8Array(await w.xlsx.writeBuffer()))
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'd1904.xlsx')`, b); await win.waitForTimeout(1500)
+  await ev(`S().getRange('B2').activate()`); await win.waitForTimeout(200)
+  await win.keyboard.press('Control+;'); await win.waitForTimeout(300)
+  const today = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000 - Date.UTC(1899, 11, 30)) / 864e5) - 1462
+  const got = await ev(`return S().getRange('B2').getRawValue()`)
+  check('Ctrl+; in a 1904 workbook writes the 1904 serial for today', got === today, `${got} vs ${today}`)
+}
+
 check('no page errors', errors.length === 0, errors.join(' | '))
 await app.close()
 const pass = out.filter((l) => l.startsWith('PASS')).length

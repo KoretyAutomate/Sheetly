@@ -174,7 +174,8 @@ export function createCharts(api, dialogs, refs) {
     const { startRow, endRow, startColumn, endColumn } = range
     const g = { startRow, endRow, startColumn, endColumn }
     // The source range lives on as a hidden defined name, so it moves with inserted and deleted rows and columns.
-    return { v: 2, type, source: { sheetId: ws().getSheetId(), range: g, ref: refs?.track(ws().getSheetId(), g) ?? undefined }, plotBy: null, title: null, legend: null, dataLabels: false, axisTitles: null }
+    // local: the data is on the chart's own sheet (true for an embedded chart; F11's chart sheet sets it false).
+    return { v: 2, type, source: { sheetId: ws().getSheetId(), range: g, ref: refs?.track(ws().getSheetId(), g) ?? undefined, local: true }, plotBy: null, title: null, legend: null, dataLabels: false, axisTitles: null }
   }
   /** For tests and Quick Analysis: the series Excel would plot from the selection. */
   function chartData() { const spec = newSpec(); return { data: dataOf(spec), range: spec.source.range, spec } }
@@ -189,6 +190,7 @@ export function createCharts(api, dialogs, refs) {
   }
   function chartSheet() {
     const spec = newSpec('column')
+    spec.source.local = false
     const w = wb(), names = new Set(w.getSheets().map((s) => s.getSheetName()))
     let n = 1
     while (names.has(`Chart${n}`)) n++
@@ -253,33 +255,39 @@ export function createCharts(api, dialogs, refs) {
     return true
   }
 
-  /** After Copy Sheet: the copy's charts read the copy's data (references into other sheets stay). The drawing is
-   *  updated through its mutation alone, so this is part of the copy, not an undo step of its own. */
-  function remapCopy(fromId, sheet) {
-    const unitId = wb().getId(), subUnitId = sheet.getSheetId()
-    const drawingsSvc = api._injector.get(ISheetDrawingService)
-    for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
-      const src = c.data?.source
-      if (!src) continue
-      const re = (name, sheetId, range) => {
-        const at = name ? refs?.resolve(name) : range ? { sheetId, range } : null
-        if (!at || at.sheetId !== fromId) return name
-        return refs?.track(subUnitId, at.range) ?? name
+  /** A chart whose data is on its own sheet (source.local) keeps it there: on a sheet whose such charts point at
+   *  another sheet (a copied sheet, also on redo) they are pointed at this sheet. The drawing is updated through its
+   *  mutation alone, so this is part of the copy, not an undo step of its own. */
+  function fixLocal() {
+    const book = wb()
+    if (!book) return
+    const unitId = book.getId(), drawingsSvc = api._injector.get(ISheetDrawingService)
+    for (const sheet of book.getSheets()) {
+      const subUnitId = sheet.getSheetId()
+      for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
+        const src = c.data?.source
+        if (!src?.local) continue
+        const main = src.ref ? refs?.resolve(src.ref) : { sheetId: src.sheetId, range: src.range }
+        if (!main || main.sheetId === subUnitId) continue
+        const from = main.sheetId
+        // A copy leaves the original chart on the original sheet; a chart cut to another sheet keeps its data there.
+        const original = book.getSheetBySheetId(from)
+        if (!(original?.getAllFloatDoms?.() ?? []).some((x) => x.componentKey === COMPONENT && x.data?.source?.ref === src.ref)) continue
+        const re = (name, range) => { const at = name ? refs?.resolve(name) : range ? { sheetId: from, range } : null; return at && at.sheetId === from ? refs?.track(subUnitId, at.range) ?? name : name }
+        const next = { ...src, sheetId: subUnitId, ref: re(src.ref, src.range) }
+        if (src.series) {
+          next.series = src.series.map((x) => ({ ...x, valuesRef: re(x.valuesRef, x.values), xValuesRef: x.xValuesRef || x.xValues ? re(x.xValuesRef, x.xValues) : undefined, nameRef: x.nameRef ? re(x.nameRef) : undefined }))
+          next.categoriesRef = src.categoriesRef || src.categories ? re(src.categoriesRef, src.categories) : undefined
+        }
+        const drawing = drawingsSvc.getDrawingByParam?.({ unitId, subUnitId, drawingId: c.id })
+        if (!drawing) continue
+        const { redo, objects } = drawingsSvc.getBatchUpdateOp([{ ...drawing, data: { ...drawing.data, source: next } }])
+        commands.syncExecuteCommand(SetDrawingApplyMutation.id, { unitId, subUnitId, type: DrawingApplyType.UPDATE, op: redo, objects })
       }
-      const next = { ...src, sheetId: src.sheetId === fromId ? subUnitId : src.sheetId, ref: re(src.ref, src.sheetId, src.range) }
-      if (src.series) {
-        next.series = src.series.map((x) => ({ ...x, valuesRef: re(x.valuesRef, src.sheetId, x.values), xValuesRef: x.xValuesRef || x.xValues ? re(x.xValuesRef, src.sheetId, x.xValues) : undefined,
-          nameRef: x.nameRef ? re(x.nameRef) : undefined }))
-        next.categoriesRef = src.categoriesRef || src.categories ? re(src.categoriesRef, src.sheetId, src.categories) : undefined
-      }
-      const drawing = drawingsSvc.getDrawingByParam?.({ unitId, subUnitId, drawingId: c.id })
-      if (!drawing) continue
-      const { redo, objects } = drawingsSvc.getBatchUpdateOp([{ ...drawing, data: { ...drawing.data, source: next } }])
-      commands.syncExecuteCommand(SetDrawingApplyMutation.id, { unitId, subUnitId, type: DrawingApplyType.UPDATE, op: redo, objects })
     }
   }
 
-  return { remapCopy, chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts,
+  return { fixLocal, chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts,
     /** Where a chart's data is now (its references follow structural edits). */
     sourceOf: (c) => liveSource(c?.data?.source) }
 }

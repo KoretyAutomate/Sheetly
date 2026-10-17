@@ -421,8 +421,11 @@ export function createOutline(api) {
   // Univer's services and render controllers are created after this module and after the first render, so
   // installation is retried on each refresh until they exist (the lookups that can fail run first).
   function install(unitId) {
-    if (installed.has(unitId)) return installed.get(unitId)
     const render = renders.getRenderUnitById(unitId)
+    // A workbook opened later can reuse the id of a disposed one: only an entry for the current render unit counts.
+    const known = installed.get(unitId)
+    if (known && known.render === render) return known
+    if (known) { known.corner?.remove(); installed.delete(unitId) }
     const rowHeader = render?.components.get('__SpreadsheetRowHeader__'), colHeader = render?.components.get('__SpreadsheetColumnHeader__')
     if (!rowHeader || !colHeader) return null
     let unhide, sk

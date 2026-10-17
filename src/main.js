@@ -54,7 +54,7 @@ import { createQuickAnalysis } from './quick-analysis.js'
 import { createPivots } from './pivot.js'
 import { createSparklines } from './sparklines.js'
 import { createRefs } from './refs.js'
-import { setDialogShortcutService } from './ui/dialog.js'
+import { el, openDialog, setDialogShortcutService } from './ui/dialog.js'
 import { xlsxToSnapshot, snapshotToXlsx, formulaResolver } from './xlsx.js'
 
 let univerAPI
@@ -122,19 +122,15 @@ const fitExcelGrid = () => {
   }
 }
 commandService.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.command.insert-sheet' || cmd.id === 'sheet.command.copy-sheet') fitExcelGrid() })
-// Copy Sheet copies the sheet's objects with references to the original; the copies get their own.
-let sheetsBeforeCopy = null
-let copiedFrom = null
-commandService.beforeCommandExecuted((cmd) => {
-  if (cmd.id !== 'sheet.command.copy-sheet') return
-  sheetsBeforeCopy = new Set(univerAPI.getActiveWorkbook().getSheets().map((s) => s.getSheetId()))
-  copiedFrom = cmd.params?.subUnitId ?? univerAPI.getActiveWorkbook().getActiveSheet().getSheetId()
-})
+// Objects bound to their own sheet (sparkline cells, PivotTable places, charts over their own sheet's data) are
+// pointed back at it whenever sheets or drawings are inserted: a copied sheet (Copy Sheet, and its redo, which
+// replays the saved sheet) arrives with references to the original.
+let fixPending = false
 commandService.onCommandExecuted((cmd) => {
-  if (cmd.id !== 'sheet.command.copy-sheet' || !sheetsBeforeCopy) return
-  const fromId = copiedFrom
-  for (const s of univerAPI.getActiveWorkbook().getSheets()) if (!sheetsBeforeCopy.has(s.getSheetId())) { sparklines.remapCopy(fromId, s); pivots.remapCopy(fromId, s); charts.remapCopy(fromId, s) }
-  sheetsBeforeCopy = null
+  if (cmd.id !== 'sheet.mutation.insert-sheet' && cmd.id !== 'sheet.mutation.set-drawing-apply') return
+  if (fixPending) return
+  fixPending = true
+  setTimeout(() => { fixPending = false; sparklines.fixLocal(); pivots.fixLocal(); charts.fixLocal() }, 0)
 })
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
@@ -160,8 +156,14 @@ async function openFile() {
   else await window.sheetly.openInNewWindow(f.path)
 }
 async function loadWorkbook(f) {
+  let snap
+  try { snap = await xlsxToSnapshot(f.data) } catch (e) {
+    // Unreadable (damaged, encrypted, not a workbook): nothing changes, and the window does not take the file.
+    console.warn('open', f.name, e)
+    openDialog({ title: 'Sheetly', width: 420, body: el('p', { style: { margin: 0 } }, `Sheetly cannot open the file '${f.name}' because the file format or file extension is not valid, or the file is protected with a password.`), cancelLabel: 'Close' })
+    return false
+  }
   fromFile = true
-  const snap = await xlsxToSnapshot(f.data)
   univerAPI.disposeUnit(univerAPI.getActiveWorkbook().getId())
   const { sheetlyTables = [], ...data } = snap
   const book = univerAPI.createWorkbook({ ...data, name: f.name, locale: LocaleType.EN_US })

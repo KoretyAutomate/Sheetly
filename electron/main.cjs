@@ -11,7 +11,7 @@ const workbookArgs = (argv, cwd) => argv.slice(1).filter((a) => !a.startsWith('-
   .map((a) => path.resolve(cwd ?? process.cwd(), a)).filter((p) => fs.existsSync(p))
 // Opening a workbook that is already open brings its window forward, as in Excel.
 function openWorkbook(p) {
-  for (const [id, f] of files) if (f === p) { const w = BrowserWindow.getAllWindows().find((x) => x.webContents.id === id); if (w) { if (w.isMinimized()) w.restore(); w.focus(); return w } }
+  for (const [id, f] of [...files, ...pending]) if (f === p) { const w = BrowserWindow.getAllWindows().find((x) => x.webContents.id === id); if (w) { if (w.isMinimized()) w.restore(); w.focus(); return w } }
   return createWindow(p)
 }
 
@@ -90,7 +90,9 @@ ipcMain.handle('initial-file', (e) => {
   const p = pending.get(e.sender.id)
   pending.delete(e.sender.id)
   if (!p) return null
-  try { files.set(e.sender.id, p); return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) } } catch { files.delete(e.sender.id); return null }
+  // The window takes the file as its own only once the page has loaded it ('current'): a file that fails to open
+  // must never become the target of Save.
+  try { return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) } } catch { return null }
 })
 // INFO("directory"): folder of the open workbook (else home), with a trailing separator like Excel.
 ipcMain.on('directory', (e) => { const p = fileOf(e); e.returnValue = (p ? path.dirname(p) : os.homedir()) + path.sep })

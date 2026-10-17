@@ -446,7 +446,7 @@ export async function xlsxToSnapshot(buf) {
         nameRef: x.name ? track(sheetName, { startRow: x.name[0], endRow: x.name[0], startColumn: x.name[1], endColumn: x.name[1] }) : undefined }))
       source.categoriesRef = track(sheetName, source.categories)
     }
-    const spec = { ...c.spec, source: { ...source, sheetId: sourceId } }
+    const spec = { ...c.spec, source: { ...source, sheetId: sourceId, local: sourceId === id } }
     const drawingId = `chart${++chartSeq}_${Date.now().toString(36)}`
     const d = placed(sheets[id], c.from, c.to ?? endFrom(sheets[id], c.from, c.size.width, c.size.height), { unitId: 'wb', subUnitId: id, drawingId, drawingType: 8, componentKey: CHART_COMPONENT, data: spec, allowTransform: true })
     const entry = (drawings[id] ??= { data: {}, order: [] })

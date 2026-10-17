@@ -38,6 +38,17 @@ spawnSync('npx', ['electron', '.', '--no-sandbox', a], { env, timeout: 60000 })
 await new Promise((r) => setTimeout(r, 2000))
 check('reopening an open workbook brings its window forward (no new window)', app.windows().length === 2, String(app.windows().length))
 await app.close()
+// a file that cannot be read: the window says so and does not take the file (Save would otherwise overwrite it)
+const bad = path.join(dir, 'broken.xlsx'); writeFileSync(bad, 'not a workbook')
+const env2 = { ...env, SHEETLY_USER_DATA: path.join(dir, 'profile2') }
+const app2 = await electron.launch({ args: ['.', '--no-sandbox', bad], env: env2 })
+const w3 = await app2.firstWindow()
+await w3.waitForFunction(() => window.univerAPI?.getActiveWorkbook?.(), null, { timeout: 60000 })
+await w3.waitForTimeout(2000)
+const msg = await w3.evaluate(() => document.querySelector('.sx-dialog p')?.textContent ?? '')
+const where = await w3.evaluate(() => window.sheetly.directory())
+check('a file that cannot be read: a message, and the window does not take it as its file', msg.startsWith("Sheetly cannot open the file 'broken.xlsx'") && !where.startsWith(dir), `${msg} | ${where}`)
+await app2.close()
 const pass = out.filter((l) => l.startsWith('PASS')).length
 console.log(`open file from the command line  ${new Date().toISOString()}\n${out.join('\n')}\n\n${pass}/${out.length} passed`)
 process.exitCode = pass === out.length ? 0 : 1

@@ -89,6 +89,10 @@ await ev(`await api._injector.get(window.__ICommandService).executeCommand('shee
 const copied = await ev(`const c=W().getSheets().find(s=>s.getSheetId()!==W().getSheets()[0].getSheetId()); W().setActiveSheet(c); await new Promise(r=>setTimeout(r,400)); return JSON.stringify([SP.groups().reduce((n,g)=>n+g.items.length,0), SP.groups().every(g=>g.items.every(i=>i.sheetId===S().getSheetId()))])`)
 check('a copied sheet keeps its sparklines, reading its own data', copied === `[${before},true]`, copied)
 await ev(`W().setActiveSheet(W().getSheets()[0])`); await settle(400)
+// Copy Sheet, Undo, Redo: the copy's sparklines are still its own
+await ev(`const U=(id)=>api._injector.get(window.__ICommandService).executeCommand(id); await U('univer.command.undo'); await new Promise(r=>setTimeout(r,500)); await U('univer.command.redo'); await new Promise(r=>setTimeout(r,800))`)
+const redone = await ev(`const c=W().getSheets().find(s=>s.getSheetId()!==W().getSheets()[0].getSheetId()); if(!c) return 'no copy'; W().setActiveSheet(c); await new Promise(r=>setTimeout(r,500)); const out=JSON.stringify([SP.groups().reduce((n,g)=>n+g.items.length,0), SP.groups().every(g=>g.items.every(i=>i.sheetId===S().getSheetId()))]); W().setActiveSheet(W().getSheets()[0]); return out`)
+check('after Copy Sheet, Undo and Redo the copy keeps its own sparklines', redone === `[${before},true]`, redone)
 
 // Clear
 await ev(`S().getRange('F2:F4').activate(); SP.clear()`); await settle(600)
