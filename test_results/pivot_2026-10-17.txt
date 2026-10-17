@@ -1,4 +1,4 @@
-pivot tables  2026-10-17T09:24:29.984Z
+pivot tables  2026-10-17T09:54:11.334Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -31,7 +31,8 @@ PASS  after the table is renamed and grown, Refresh still reads all of it (30)
 PASS  an error from the source is written as an error value and saved as one (#DIV/0!)
 PASS  Refresh on a copied sheet reads the copy's own table (100), the original keeps 1
 PASS  a PivotTable whose rows were deleted is not drawn again by Refresh All, nor found there
+PASS  Refresh with a cleared source header keeps the report and says the reference is not valid
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-34/34 passed
+35/35 passed

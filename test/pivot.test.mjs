@@ -217,6 +217,17 @@ const after17 = await ev(`return JSON.stringify(S().getRange('E10:F14').getValue
 const active17 = await ev(`S().getRange('E10').activate(); await new Promise(r=>setTimeout(r,300)); return P.active()?.name ?? null`)
 check('a PivotTable whose rows were deleted is not drawn again by Refresh All, nor found there', after17 === '[]' && active17 === null, `${after17} ${active17}`)
 
+// ---- a source that can no longer be read: Refresh keeps the report and says why
+await ev(`W().setActiveSheet(W().getSheetByName('R17')); S().getRange('E10:F14').clear(); P.create('R17!A1:B3', 'existing', 'R17!H10')`); await settle(500)
+await ev(`P.place('K', 'rows')`); await settle(500)
+const kept0 = await ev(`return JSON.stringify(S().getRange('H10:H13').getValues().flat())`)
+await ev(`S().getRange('A1').setValue(''); S().getRange('H11').activate()`); await settle(400)
+await ev(`P.refresh(false)`); await settle(800)
+const said = await ev(`return [...document.querySelectorAll('.sx-dialog p')].map((p) => p.textContent).find((t) => t.startsWith('Reference')) ?? ''`)
+await key('Escape'); await settle(300)
+const kept1 = await ev(`return JSON.stringify(S().getRange('H10:H13').getValues().flat())`)
+check('Refresh with a cleared source header keeps the report and says the reference is not valid', /^Reference isn't valid/.test(said) && kept1 === kept0 && kept0.includes('"a"'), `${said} | ${kept0} | ${kept1}`)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

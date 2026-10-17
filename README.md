@@ -101,6 +101,9 @@ python3 test/coverage.py test_results/coverage.txt   # function coverage vs Exce
 - PivotTables are saved to .xlsx as their values; the PivotTable itself (its cache) is not written yet, so cells
   with GETPIVOTDATA are saved as their results.
 - Chart sheets (F11) are saved as a worksheet holding the chart.
+- Legacy array formulas (Ctrl+Shift+Enter) from a file are calculated as dynamic arrays: when the result is a
+  different size from the range they were entered in, it spills to its own size instead of being cut or padded
+  with #N/A.
 - Quick Analysis has no live preview. Typing `=` and clicking a PivotTable cell does not write a GETPIVOTDATA
   formula for you.
 - The default font is Calibri (drawn with the metric-compatible Carlito). Excel 365 now uses Aptos, which cannot

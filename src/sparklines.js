@@ -35,7 +35,9 @@ export function pairUp(data, loc) {
   else if (loc.startColumn === loc.endColumn) for (let r = loc.startRow; r <= loc.endRow; r++) cells.push({ row: r, col: loc.startColumn })
   else return { error: 'Location reference is not valid because the cells are not all in the same column or same row. Select cells that are all in a single column or row.' }
   const rows = data.endRow - data.startRow + 1, cols = data.endColumn - data.startColumn + 1
-  if (cells.length === 1) return { items: [{ ...cells[0], source: data }] }
+  // one sparkline reads one row or one column of data
+  if (cells.length === 1) return rows === 1 || cols === 1 ? { items: [{ ...cells[0], source: data }] }
+    : { error: 'Data Range reference is not valid: it does not match the number of cells in the location range.' }
   // n location cells: n data rows (one sparkline per row), else n data columns.
   if (rows === cells.length) return { items: cells.map((x, i) => ({ ...x, source: { startRow: data.startRow + i, endRow: data.startRow + i, startColumn: data.startColumn, endColumn: data.endColumn } })) }
   if (cols === cells.length) return { items: cells.map((x, i) => ({ ...x, source: { startRow: data.startRow, endRow: data.endRow, startColumn: data.startColumn + i, endColumn: data.startColumn + i } })) }

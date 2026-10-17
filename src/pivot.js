@@ -101,7 +101,13 @@ export function createPivots(api, { dialogs, refs }) {
   function render(sheet, p, { refresh = false, force = false } = {}) {
     // a report whose cells were deleted is not written again (Refresh All skips it)
     if (!anchorAt(p)) return { gone: true }
-    if (refresh || !p.cache) p.cache = readLive(p)
+    // Refresh reads the source first: when it can no longer be read (a header cleared, its sheet deleted) the report
+    // and its records stay as they were, and the caller says why.
+    if (refresh || !p.cache) {
+      const fresh = readLive(p)
+      if (!fresh && p.cache) return { invalid: true }
+      p.cache = fresh
+    }
     const src = p.cache
     const old = written(p)
     const { row, col } = anchorAt(p)
@@ -170,8 +176,10 @@ export function createPivots(api, { dialogs, refs }) {
   const askReplace = (sheet, then) => openDialog({ title: 'Sheetly', width: 400, okLabel: 'OK',
     body: el('p', { style: { margin: 0 } }, `There's already data in [${sheet.getSheetName()}]. Do you want to replace it?`), onOk: then })
   function update(sheet, p, opts = {}) {
-    const go = (o) => atomic(() => { const r = render(sheet, p, o); if (!r?.conflict) save(sheet, p); return r })
-    if (go(opts)?.conflict) { askReplace(sheet, () => { go({ ...opts, force: true }); showPane() }); return true }
+    const go = (o) => atomic(() => { const r = render(sheet, p, o); if (!r?.conflict && !r?.invalid) save(sheet, p); return r })
+    const r = go(opts)
+    if (r?.invalid) return message("Reference isn't valid. The PivotTable's source data cannot be read: check that it is a list with a label in every column of its first row.") && false
+    if (r?.conflict) { askReplace(sheet, () => { go({ ...opts, force: true }); showPane() }); return true }
     showPane(); return true
   }
 
