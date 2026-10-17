@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T07:45:03.853Z
+xlsx objects  2026-10-17T08:12:00.200Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -64,8 +64,11 @@ PASS  a sparkline group set to show hidden cells keeps that setting
 PASS  list items with quote marks (12", 24") keep them
 PASS  a kept table whose cells were deleted (#REF!) is not written
 PASS  two-column categories: a hidden row drops its category and point
+PASS  a table with only its header keeps its range and leaves the cell below alone
+PASS  lowercase references parse (a1:b3)
+PASS  column sparklines are written with negative="1" (their negative points are coloured); a group with it off keeps it off
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-68/68 passed
+71/71 passed

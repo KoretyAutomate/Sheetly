@@ -14,11 +14,12 @@ const EMU_PER_PX = 9525
 
 // ---- A1 helpers
 export const colName = (c) => { let s = ''; for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s }
-const colNum = (L) => [...L].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
+const colNum = (L) => [...L.toUpperCase()].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
 export const rangeA1 = (g) => (g.startRow === g.endRow && g.startColumn === g.endColumn ? `${colName(g.startColumn)}${g.startRow + 1}`
   : `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`)
 export function parseRange(a1) {
-  const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/.exec(String(a1).trim().replace(/^'?[^!]*'?!/, ''))
+  // (references are case-insensitive: a1:b3 is A1:B3)
+  const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(String(a1).trim().replace(/^'?[^!]*'?!/, ''))
   if (!m) return null
   const r0 = +m[2] - 1, c0 = colNum(m[1]), r1 = m[4] ? +m[4] - 1 : r0, c1 = m[3] ? colNum(m[3]) : c0
   return { startRow: Math.min(r0, r1), endRow: Math.max(r0, r1), startColumn: Math.min(c0, c1), endColumn: Math.max(c0, c1) }
@@ -268,7 +269,7 @@ export function tablesOut(ws, tables = [], used = new Set()) {
       for (let c = g.startColumn; c <= g.endColumn; c++) row.push(ws.getCell(r + 1, c + 1).value ?? null)
       rows.push(row)
     }
-    if (!rows.length) rows.push(columns.map(() => null))
+    // (a table with only its header keeps its range: no row is added below it)
     const styles = []
     for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) styles.push([r, c, ws.getCell(r + 1, c + 1).style])
     // The totals row as it is (labels, SUBTOTAL formulas and their results): ExcelJS would write its defaults.

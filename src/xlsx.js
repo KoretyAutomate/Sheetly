@@ -457,7 +457,7 @@ export async function xlsxToSnapshot(buf) {
   for (const { sheetIndex, groups } of await readSparklines(buf)) {
     const id = idByIndex[sheetIndex]
     if (!id) continue
-    sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors, ...(g.displayHidden ? { displayHidden: true } : {}),
+    sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors, ...(g.displayHidden ? { displayHidden: true } : {}), ...(g.negative != null ? { negative: g.negative } : {}),
       items: g.items.filter((x) => idByName[x.sheetName]).map((x) => ({ row: x.row, col: x.col, sheetId: idByName[x.sheetName], source: x.source,
         cellRef: track(sheets[id].name, { startRow: x.row, endRow: x.row, startColumn: x.col, endColumn: x.col }), sourceRef: track(x.sheetName, x.source) })) })).filter((g) => g.items.length)
   }

@@ -1,4 +1,4 @@
-sparklines  2026-10-17T07:48:32.313Z
+sparklines  2026-10-17T08:15:32.788Z
 PASS  Alt N S L opens Create Sparklines with the selection as the Data Range
 PASS  one line sparkline per row in F2:F4
 PASS  the sparkline is drawn in F2 (its cell looks different from before)

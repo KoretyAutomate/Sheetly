@@ -53,7 +53,7 @@ export function createPivots(api, { dialogs, refs }) {
   // deleted rows and columns, in the same undo step. Stored coordinates are the fallback.
   // A table source is read from the table as it is at the time (rows added to it are included on Refresh).
   const sourceAt = (p) => {
-    const t = p.sourceTable ? tableData(p.sourceTable) : null
+    const t = p.sourceTable ? tableData(p.sourceTable, p.sourceTableId) : null
     if (t) return { sheetId: t.sheet.getSheetId(), range: t.range }
     return p.sourceRef ? refs?.resolve(p.sourceRef) : { sheetId: p.source.sheetId, range: p.source.range }
   }
@@ -110,8 +110,9 @@ export function createPivots(api, { dialogs, refs }) {
     const ownedBefore = (r, c) => old && r >= old.row && r < old.row + old.rows && c >= old.col && c < old.col + old.cols
     if (next && !force) {
       for (let r = next.row; r < next.row + next.rows; r++) for (let c = next.col; c < next.col + next.cols; c++) {
-        const v = sheet.getRange(r, c).getCalculatedValue()
-        if (v != null && v !== '' && !ownedBefore(r, c)) return { conflict: true }
+        // a formula counts as content even when its result is empty (="")
+        const cell = sheet.getRange(r, c), v = cell.getCalculatedValue()
+        if (((v != null && v !== '') || cell.getFormula()) && !ownedBefore(r, c)) return { conflict: true }
       }
     }
     if (old) sheet.getRange(old.row, old.col, old.rows, old.cols).clear()
@@ -183,13 +184,14 @@ export function createPivots(api, { dialogs, refs }) {
   }
   const sheetByName = (name) => wb().getSheets().find((s) => s.getSheetName().toLowerCase() === name.toLowerCase())
   /** A table's data as it is now: its header row and records, without a totals row (read from its definition). */
-  function tableData(name) {
-    const t = wb().getTableInfoByName?.(name)
+  // By id first, so a renamed table is still found; by name for a definition saved without one.
+  function tableData(name, id = null) {
+    const t = (id ? wb().getTableInfo?.(id) : null) ?? wb().getTableInfoByName?.(name)
     if (!t?.range) return null
     const sheet = wb().getSheetBySheetId(t.subUnitId)
     let footer = false
     try { footer = !!JSON.parse(wb().save().resources?.find((r) => r.name === 'SHEET_TABLE_PLUGIN')?.data ?? '{}')?.[t.subUnitId]?.tables?.find((x) => x.id === t.id)?.options?.showFooter } catch { footer = false }
-    return sheet ? { sheet, range: { ...t.range, endRow: t.range.endRow - (footer ? 1 : 0) }, table: t.name } : null
+    return sheet ? { sheet, range: { ...t.range, endRow: t.range.endRow - (footer ? 1 : 0) }, table: t.name, tableId: t.id } : null
   }
   function refOf(text) {
     // A table's name stands for its data with the header row (as Excel takes it), without a totals row.
@@ -226,7 +228,7 @@ export function createPivots(api, { dialogs, refs }) {
     while (used.has(`PivotTable${k}`)) k++
     const p = { id: `pt${Date.now().toString(36)}${k}`, name: `PivotTable${k}`, source: { sheetId: src.sheet.getSheetId(), range: src.range },
       anchor, rows: [], cols: [], values: [], filters: [],
-      sourceRef: refs?.track(src.sheet.getSheetId(), src.range) ?? undefined, ...(src.table ? { sourceTable: src.table } : {}),
+      sourceRef: refs?.track(src.sheet.getSheetId(), src.range) ?? undefined, ...(src.table ? { sourceTable: src.table, sourceTableId: src.tableId } : {}),
       anchorRef: refs?.track(target.getSheetId(), { startRow: anchor.row, endRow: anchor.row, startColumn: anchor.col, endColumn: anchor.col }) ?? undefined }
     wb().setActiveSheet(target)
     render(target, p, { refresh: true, force: true })

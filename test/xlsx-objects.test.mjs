@@ -6,6 +6,7 @@ import { SaxesParser } from 'saxes'
 import { xlsxToSnapshot, snapshotToXlsx } from '../src/xlsx.js'
 import { specFromXml, chartXml as writeChartXml } from '../src/xlsx-zip.js'
 import { explicitSeries } from '../src/chart-model.js'
+import { parseRange } from '../src/xlsx-objects.js'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -347,6 +348,26 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const g4 = []; g4[1] = ['N', 'a', 10]; g4[2] = [null, 'b', 20]; g4[3] = ['S', 'c', 30]
   const ml = explicitSeries((r, c) => g4[r]?.[c] ?? null, { categories: R(1, 0, 3, 1), series: [{ name: null, nameText: 'S', values: R(1, 2, 3, 2) }] }, { hiddenRow: (r) => r === 2 })
   check('two-column categories: a hidden row drops its category and point', J(ml.labels) === J(['a', 'c']) && J(ml.series[0].values) === J([10, 30]), J(ml))
+}
+
+// ---- review round 16: header-only tables, lowercase references, negative sparkline points
+{
+  const s18 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { v: 'H' } }, 1: { 0: { v: 'keep me' } } } } } }
+  const b18 = await snapshotToXlsx({ ...s18, sheetlyTablesExtra: undefined }, {})
+  const w18 = new ExcelJS.Workbook(); await w18.xlsx.load(b18)
+  const ws18 = w18.getWorksheet('Data')
+  // a header-only table, written through the same path as real ones
+  const { tablesOut } = await import('../src/xlsx-objects.js')
+  tablesOut(ws18, [{ name: 'Empty', range: R(0, 0), options: { showHeader: true }, columns: [{ displayName: 'H' }] }], new Set())
+  const w18b = new ExcelJS.Workbook(); await w18b.xlsx.load(await w18.xlsx.writeBuffer())
+  const t18 = w18b.getWorksheet('Data').getTables().map((t) => t.table ?? t)[0]
+  check('a table with only its header keeps its range and leaves the cell below alone', w18b.getWorksheet('Data').getCell('A2').value === 'keep me' && /^A1(:A1)?$/.test(t18?.tableRef ?? t18?.ref ?? ''), J([w18b.getWorksheet('Data').getCell('A2').value, t18?.tableRef ?? t18?.ref]))
+  check('lowercase references parse (a1:b3)', J(parseRange('a1:b3')) === J(R(0, 0, 2, 1)) && J(parseRange('$aa$10')) === J(R(9, 26)), J(parseRange('a1:b3')))
+  const s19 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { v: 1 }, 1: { v: -2 } } },
+    custom: { sheetlySparklines: [{ id: 'c', type: 'column', colors: {}, items: [{ row: 2, col: 0, sheetId: 's1', source: R(0, 0, 0, 1) }] }, { id: 'n', type: 'winloss', colors: {}, negative: false, items: [{ row: 3, col: 0, sheetId: 's1', source: R(0, 0, 0, 1) }] }] } } } }
+  const b19 = await snapshotToXlsx(s19), z19 = await JSZip.loadAsync(b19), x19 = await z19.file('xl/worksheets/sheet1.xml').async('string')
+  const r19 = await xlsxToSnapshot(b19), sp19 = r19.sheets[r19.sheetOrder[0]].custom.sheetlySparklines
+  check('column sparklines are written with negative="1" (their negative points are coloured); a group with it off keeps it off', /type="column"[^>]*negative="1"/.test(x19) && !/type="stacked"[^>]*negative="1"/.test(x19) && sp19[0].negative === true && sp19[1].negative === false, x19.match(/<x14:sparklineGroup[^>]*>/g)?.join(' '))
 }
 
 // ---- 1904 date system

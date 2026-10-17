@@ -87,6 +87,13 @@ await ev(`P.toggleField('Sales', true)`); await settle(600)
 const asked = await ev(`return document.querySelector('.sx-dialog p')?.textContent ?? ''`)
 check('growing over other data asks "There\'s already data in [...]. Do you want to replace it?"', /^There's already data in \[.+\]\. Do you want to replace it\?$/.test(asked), asked)
 await key('Escape'); await settle(400)
+// a formula whose result is empty ("") is content too
+await ev(`P.toggleField('Sales', false); S().getRange('G5').setFormula('=""')`); await settle(600)
+await ev(`S().getRange('F4').activate(); P.toggleField('Sales', true)`); await settle(600)
+const askedF = await ev(`return document.querySelector('.sx-dialog p')?.textContent ?? ''`)
+check('a formula returning "" in the way asks before it is replaced', /Do you want to replace it\?$/.test(askedF) && (await ev(`return S().getRange('G5').getFormula()`)) === '=""', askedF)
+await key('Escape'); await settle(400)
+await ev(`S().getRange('G5').setValue('in the way')`); await settle(300)
 check('Cancel leaves the data and the report as they were', (await ev(`return S().getRange('G5').getRawValue()`)) === 'in the way' && (await ev(`return S().getRange('G3').getRawValue()`)) == null)
 // ---- inserted rows: source and report move, Refresh still reads the moved data
 await ev(`S().getRange('G5').clear(); S().getRange('F4').activate(); P.toggleField('Sales', true)`); await settle(800)
@@ -177,6 +184,12 @@ await ev(`S().getRange('AQ4').activate()`); await settle(300)
 await key('Alt+F5'); await settle(800)
 const after2 = await ev(`return S().getRange('AQ4').getCalculatedValue()`)
 check('a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)', before2 === 3 && after2 === 10, `${before2} ${after2} ${grown}`)
+// renamed, then grown again: still found by its id
+await ev(`const id=W().getTableInfoByName('Grow').id; await S().setTableName(id, 'Renamed'); S().getRange('AN5:AO5').setValues([['d',20]]); S().setTableRange(id, { startRow: 0, endRow: 4, startColumn: 39, endColumn: 40 })`); await settle(500)
+await ev(`S().getRange('AQ4').activate()`); await settle(300)
+await key('Alt+F5'); await settle(800)
+const after3 = await ev(`return S().getRange('AQ4').getCalculatedValue()`)
+check('after the table is renamed and grown, Refresh still reads all of it (30)', after3 === 30, `${after3} ${await ev(`return JSON.stringify(W().getTableList().map(t=>[t.name,t.range]))`)}`)
 
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()

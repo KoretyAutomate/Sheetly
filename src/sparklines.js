@@ -43,7 +43,7 @@ export function pairUp(data, loc) {
 }
 
 /** Draws one sparkline into a box. */
-export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS) {
+export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS, negative = true) {
   const nums = values.filter((v) => v != null)
   if (!nums.length) return
   const x0 = box.x + PAD, y0 = box.y + PAD, w = Math.max(1, box.w - 2 * PAD), h = Math.max(1, box.h - 2 * PAD)
@@ -56,7 +56,7 @@ export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS) {
     const zero = type === 'winloss' ? y0 + h / 2 : y0 + ((hi - 0) / (hi - lo || 1)) * h
     values.forEach((v, i) => {
       if (v == null || (type === 'winloss' && v === 0)) return
-      ctx.fillStyle = v < 0 ? colors.negative : colors.color
+      ctx.fillStyle = v < 0 && negative ? colors.negative : colors.color
       const top = type === 'winloss' ? y(v) : Math.min(y(v), zero), height = type === 'winloss' ? h / 2 - 1 : Math.max(1, Math.abs(zero - y(v)))
       ctx.fillRect(x0 + i * slot + (slot - bw) / 2, top, bw, height)
     })
@@ -125,7 +125,7 @@ export function createSparklines(api, refs) {
         const shown = g.displayHidden ? null : (r, c) => srcSheet.getRowVisible(r) && srcSheet.getColVisible(c)
         const values = sparkValues((r, c) => srcSheet.getCellRaw(r, c)?.v ?? spillValue(injector, book?.getUnitId?.() ?? wb().getId(), srcSheet.getSheetId(), r, c), it.source, shown)
         const cell = sk.getCellWithCoordByIndex(it.row, it.col, false)
-        drawSparkline(ctx, g.type, values, { x: cell.startX, y: cell.startY, w: cell.endX - cell.startX, h: cell.endY - cell.startY }, { ...SPARK_DEFAULTS, ...g.colors })
+        drawSparkline(ctx, g.type, values, { x: cell.startX, y: cell.startY, w: cell.endX - cell.startX, h: cell.endY - cell.startY }, { ...SPARK_DEFAULTS, ...g.colors }, g.negative !== false)
       }
     }
   }

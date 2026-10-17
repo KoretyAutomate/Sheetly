@@ -1,5 +1,5 @@
-DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"rCKi_I"},[["001",10],["002",20]]]
-pivot tables  2026-10-17T07:48:00.947Z
+DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"3Vth2x"},[["001",10],["002",20]]]
+pivot tables  2026-10-17T08:15:01.353Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -16,6 +16,7 @@ PASS  the PivotTable definition is saved with the sheet
 PASS  the fields pane closes outside the PivotTable and comes back inside it
 PASS  adding a field does not clear cells the PivotTable never wrote (H20 kept)
 PASS  growing over other data asks "There's already data in [...]. Do you want to replace it?"
+PASS  a formula returning "" in the way asks before it is replaced
 PASS  Cancel leaves the data and the report as they were
 PASS  after inserting rows above source and report, the report is found and Refresh reads the moved source
 PASS  after a row inside the report is deleted, Refresh asks before overwriting the cell that moved up
@@ -27,7 +28,8 @@ PASS  a filter that would overwrite the cell beside it asks first
 PASS  GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20
 PASS  a table's totals row is left out (Grand Total 30, not 60); "001" stays the text 001
 PASS  a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)
+PASS  after the table is renamed and grown, Refresh still reads all of it (30)
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-29/29 passed
+31/31 passed

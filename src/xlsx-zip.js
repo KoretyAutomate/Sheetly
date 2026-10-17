@@ -228,7 +228,9 @@ function sparkGroupXml(g) {
   const colors = `<x14:colorSeries rgb="${argbOf(c.color)}"/><x14:colorNegative rgb="${argbOf(c.negative)}"/><x14:colorAxis rgb="FF000000"/><x14:colorMarkers rgb="${argbOf(c.markers)}"/>`
     + `<x14:colorFirst rgb="${argbOf(c.markers)}"/><x14:colorLast rgb="${argbOf(c.markers)}"/><x14:colorHigh rgb="${argbOf(c.markers)}"/><x14:colorLow rgb="${argbOf(c.markers)}"/>`
   const items = g.items.map((it) => `<x14:sparkline><xm:f>${esc(sheetRef(it.sheetName))}!${rangeRef(it.source)}</xm:f><xm:sqref>${colName(it.col)}${it.row + 1}</xm:sqref></x14:sparkline>`).join('')
-  return `<x14:sparklineGroup${type} displayEmptyCellsAs="gap"${g.displayHidden ? ' displayHidden="1"' : ''}>${colors}<x14:sparklines>${items}</x14:sparklines></x14:sparklineGroup>`
+  // Negative points are drawn in their colour for column and win/loss sparklines unless the group turns it off.
+  const negative = g.type !== 'line' && g.negative !== false ? ' negative="1"' : ''
+  return `<x14:sparklineGroup${type} displayEmptyCellsAs="gap"${negative}${g.displayHidden ? ' displayHidden="1"' : ''}>${colors}<x14:sparklines>${items}</x14:sparklines></x14:sparklineGroup>`
 }
 const rangeRef = (g) => `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`
 /** Sparkline groups per sheet index: [{ sheetIndex, groups: [{ type, colors, items: [{ row, col, sheetName, source }] }] }]. */
@@ -246,7 +248,8 @@ export async function readSparklines(buf) {
         return mm && at ? { row: at.startRow, col: at.startColumn, sheetName: (mm[1] ?? mm[2]).replace(/''/g, "'"), source: parseRange(mm[3]) } : null
       }).filter((x) => x?.source)
       const colors = Object.fromEntries([['color', color('colorSeries')], ['negative', color('colorNegative')], ['markers', color('colorMarkers')]].filter(([, v]) => v))
-      if (items.length) groups.push({ type: t === 'column' ? 'column' : t === 'stacked' ? 'winloss' : 'line', colors, items, ...(/\bdisplayHidden="(1|true)"/.test(m[1]) ? { displayHidden: true } : {}) })
+      if (items.length) groups.push({ type: t === 'column' ? 'column' : t === 'stacked' ? 'winloss' : 'line', colors, items, ...(/\bdisplayHidden="(1|true)"/.test(m[1]) ? { displayHidden: true } : {}),
+        ...(t === 'column' || t === 'stacked' ? { negative: /\bnegative="(1|true)"/.test(m[1]) } : {}) })
     }
     if (groups.length) out.push({ sheetIndex, groups })
   }
