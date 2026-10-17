@@ -132,8 +132,25 @@ commandService.onCommandExecuted((cmd) => {
   if (cmd.id !== 'sheet.mutation.insert-sheet' && cmd.id !== 'sheet.mutation.set-drawing-apply') return
   if (fixPending) return
   fixPending = true
-  setTimeout(() => { fixPending = false; sparklines.fixLocal(); pivots.fixLocal(); charts.fixLocal() }, 0)
+  setTimeout(() => { fixPending = false; sparklines.fixLocal(); pivots.fixLocal(); charts.fixLocal(); keptTablesFixLocal() }, 0)
 })
+// Tables kept outside Univer (sheetlyTablesKept) belong to their sheet the same way: a copy tracks its own cells.
+function keptTablesFixLocal() {
+  const book = univerAPI.getActiveWorkbook()
+  for (const sheet of book?.getSheets?.() ?? []) {
+    const w = sheet.getSheet(), custom = w.getCustomMetadata?.()
+    const list = custom?.sheetlyTablesKept
+    if (!list?.length) continue
+    let changed = false
+    const next = list.map((t) => {
+      const at = t.rangeRef ? refs.resolve(t.rangeRef, book) : null
+      if (!at || at.sheetId === sheet.getSheetId()) return t
+      changed = true
+      return { ...t, rangeRef: refs.track(sheet.getSheetId(), at.range, book) ?? t.rangeRef }
+    })
+    if (changed) w.setCustomMetadata({ ...custom, sheetlyTablesKept: next })
+  }
+}
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
 // Excel's sheet defaults: Calibri 11, rows 15 pt (20 px), columns 8.43 characters (64 px).

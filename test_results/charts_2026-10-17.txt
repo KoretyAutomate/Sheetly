@@ -1,4 +1,4 @@
-charts  2026-10-17T10:22:51.877Z
+charts  2026-10-17T11:05:40.319Z
 PASS  Alt+F1: clustered column, series by columns with the header row as names
 PASS  the chart follows its data: B2 = 99 redraws it
 PASS  formula results feed the chart too
@@ -22,6 +22,7 @@ PASS  saved chart: multi-level categories over both label columns
 PASS  series picked one by one: only those columns are plotted
 PASS  a hidden row drops out of a chart with series picked one by one
 PASS  and their references move with an inserted column
+PASS  Switch Row/Column on series that are not next to each other is refused and the chart stays as it is
 PASS  internal reference names are not listed among the workbook's names
 PASS  Name Manager does not show the internal names
 PASS  scatter points keep X = 0
@@ -30,4 +31,4 @@ PASS  the chart definition is saved (type + source range)
 PASS  one series: no legend at first; Legend shows it on the first press
 PASS  no page errors
 
-30/30 passed
+31/31 passed

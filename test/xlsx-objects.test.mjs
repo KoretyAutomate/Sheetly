@@ -388,6 +388,18 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('a spilling formula with GETPIVOTDATA is saved as all its values (45, 99)', w20.getWorksheet('Data').getCell('A1').value === 45 && w20.getWorksheet('Data').getCell('B1').value === 99, J([w20.getWorksheet('Data').getCell('A1').value, w20.getWorksheet('Data').getCell('B1').value]))
 }
 
+// ---- review round 21: PivotTable reads through defined names
+{
+  const s21 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DEFINED_NAME_PLUGIN', data: J({
+      n1: { id: 'n1', name: 'PivotTotal', formulaOrRefString: '=GETPIVOTDATA("Sales",Data!$A$3)' },
+      n2: { id: 'n2', name: 'Twice', formulaOrRefString: '=PivotTotal*2' },
+      n3: { id: 'n3', name: 'Plain', formulaOrRefString: '=Data!$B$1+1' } }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=PivotTotal', v: 45, t: 2 }, 1: { f: '=Twice+1', v: 91, t: 2 }, 2: { f: '=Plain', v: 1, t: 2 }, 3: { f: '=PivotTotalX', v: 0, t: 2 } } } } } }
+  const w21 = new ExcelJS.Workbook(); await w21.xlsx.load(await snapshotToXlsx(s21))
+  const c21 = (a) => w21.getWorksheet('Data').getCell(a).value
+  check('a formula reading a PivotTable through a name (or a name using one) is saved as its value; others stay formulas', c21('A1') === 45 && c21('B1') === 91 && c21('C1')?.formula === 'Plain' && c21('D1')?.formula === 'PivotTotalX', J([c21('A1'), c21('B1'), c21('C1'), c21('D1')]))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

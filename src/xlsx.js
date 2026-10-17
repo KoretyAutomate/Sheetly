@@ -524,6 +524,16 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
   const charts = [], spills = new Set(), usedTableNames = new Set(), sparklines = []
   // Hidden names that keep object ranges current (refs.js): where they point now.
   const nameMap = Object.fromEntries(Object.values(resource(snap, NAMES)).filter((d) => d?.name).map((d) => [d.name, d.formulaOrRefString]))
+  // Defined names that read a PivotTable (GETPIVOTDATA in them, or in a name they use; named LAMBDAs too): a formula
+  // using one is saved as its value, like a GETPIVOTDATA call.
+  const PIVOT_CALL = /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i
+  const usesName = (text, name) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])${name.replace(/[.\\]/g, '\\$&')}(?![\\p{L}\\p{N}_.!$\u0000])`, 'iu').test(text)
+  const pivotNames = new Set(Object.keys(nameMap).filter((n) => PIVOT_CALL.test(mask(String(nameMap[n] ?? '')))))
+  for (let grew = true; grew;) {
+    grew = false
+    for (const [n, text] of Object.entries(nameMap)) if (!pivotNames.has(n) && [...pivotNames].some((p) => usesName(mask(String(text ?? '')), p))) { pivotNames.add(n); grew = true }
+  }
+  const readsPivot = (f) => { const m = mask(f); return PIVOT_CALL.test(m) || [...pivotNames].some((n) => usesName(m, n)) }
   const sheetIdByName = Object.fromEntries(snap.sheetOrder.map((id) => [snap.sheets[id].name, id]))
   const resolveName = (name) => {
     const text = nameMap[name]
@@ -564,7 +574,7 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
       // GETPIVOTDATA reads a PivotTable, and PivotTables are saved as their values for now: Excel (and Sheetly on
       // reopening) would recalculate it to #REF!, so such a cell keeps its result as a value.
       // (a real call: quoted text and sheet names are masked first)
-      const pivotRead = f && /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i.test(mask(f)) && cell.v != null
+      const pivotRead = f && readsPivot(f) && cell.v != null
       const spill = f ? arrayRangeOf?.(id, +r, +c) : null
       const result = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined
       if (pivotRead && spill) {

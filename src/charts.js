@@ -230,8 +230,25 @@ export function createCharts(api, dialogs, refs) {
   }
   const setType = (type) => update(() => ({ type }))
   // Switch Row/Column swaps what the series are made of.
-  // (A chart whose series were picked one by one becomes one block over their range, as when Excel switches it.)
-  const switchRowColumn = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols',
+  // (A chart whose series were picked one by one becomes one block over their range, as when Excel switches it —
+  // only when they fill that block; otherwise the block would plot cells the chart leaves out.)
+  const fillsBlock = (src) => {
+    const live = liveSource(src)
+    if (!live?.series) return true
+    const parts = [live.categories, ...live.series.flatMap((x) => [x.values, x.xValues])].filter(Boolean)
+    const cells = new Set()
+    for (const g of parts) for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) cells.add(`${r},${c}`)
+    const rs = parts.map((g) => [g.startRow, g.endRow]).flat(), cs = parts.map((g) => [g.startColumn, g.endColumn]).flat()
+    const area = (Math.max(...rs) - Math.min(...rs) + 1) * (Math.max(...cs) - Math.min(...cs) + 1)
+    // (series names sit outside the values and categories, so they are not part of the block)
+    return cells.size === area
+  }
+  const switchRowColumn = () => {
+    const c = selected()
+    if (c && !fillsBlock(c.data?.source)) return message('Sheetly cannot switch rows and columns for this chart: its series are not next to each other.')
+    return switchBlock()
+  }
+  const switchBlock = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols',
     source: { ...s.source, series: undefined, categories: undefined, categoriesRef: undefined } }))
   const toggle = (what) => update((s) => (what === 'title' ? { title: s.title === '' ? null : '' }
     : what === 'legend' ? { legend: legendOf(s, dataOf(s)) === 'none' ? 'bottom' : 'none' }

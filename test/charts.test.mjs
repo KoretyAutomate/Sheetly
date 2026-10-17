@@ -122,6 +122,7 @@ await ev(`S().getRange('A1').activate()`)
 await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
 
 // ---- a chart with series picked one by one (categories A, series B and D) plots just those
+await removeCharts()
 await ev(`S().getRange('A1:H20').clear(); S().getRange('A1:D4').setValues([['R','S1','skip','S2'],['x',1,100,4],['y',2,200,5],['z',3,300,6]])`); await settle()
 await ev(`S().addFloatDomToPosition({ componentKey: 'sheetly-chart', allowTransform: true, initPosition: { startX: 400, endX: 800, startY: 0, endY: 250 },
   data: { v: 2, type: 'column', title: null, source: { sheetId: S().getSheetId(), range: { startRow: 0, endRow: 3, startColumn: 0, endColumn: 3 }, categories: { startRow: 1, endRow: 3, startColumn: 0, endColumn: 0 },
@@ -137,6 +138,12 @@ await ev(`S().showRows(2, 1)`); await settle(500)
 await ev(`S().insertColumnsBefore(2, 1)`); await settle(700)
 st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|')`)
 check('and their references move with an inserted column', st === 'S1:1,2,3|S2:4,5,6', st)
+// Switch Row/Column cannot make one block of B and D without plotting the column between: refused, chart unchanged
+await ev(`CH.switchRowColumn()`); await settle(500)
+const sw = await ev(`return [...document.querySelectorAll('.sx-dialog p')].map((p) => p.textContent).find((t) => t.startsWith('Sheetly cannot switch')) ?? ''`)
+await key('Escape'); await settle(300)
+st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|') + '|' + CH.charts().length`)
+check('Switch Row/Column on series that are not next to each other is refused and the chart stays as it is', sw !== '' && st.startsWith('S1:1,2,3|S2:4,5,6|'), `${sw} | ${st}`)
 await removeCharts(); await ev(`S().deleteColumns(2, 1); S().getRange('A1:H20').clear()`); await settle()
 await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
 await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)

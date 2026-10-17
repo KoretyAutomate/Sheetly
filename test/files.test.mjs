@@ -103,6 +103,14 @@ check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperli
   const w3 = new ExcelJS.Workbook(); await w3.xlsx.load(moved)
   const ref = w3.getWorksheet('Sales').getTables().map((x) => x.table ?? x).find((x) => x.name === 'Sales')?.tableRef ?? w3.getWorksheet('Sales').getTables().map((x) => x.table ?? x).find((x) => x.name === 'Sales')?.ref
   check('the kept table moves with rows inserted above it (A1:B3 -> A3:B5)', ref === 'A3:B5', String(ref))
+  // Copy Sheet: the copy's kept table follows the copy's cells, not the original's
+  const ids = await ev(`return W().getSheets().map(s=>s.getSheetId()).join(',')`)
+  await ev(`await api._injector.get(window.__ICommandService).executeCommand('sheet.command.copy-sheet', { unitId: W().getId(), subUnitId: S().getSheetId() })`); await win.waitForTimeout(900)
+  const copyName = await ev(`const before='${ids}'.split(','); return W().getSheets().find(s=>!before.includes(s.getSheetId())).getSheetName()`)
+  await ev(`W().getSheetByName('Sales').insertRowsBefore(0, 3)`); await win.waitForTimeout(500)
+  const w4 = new ExcelJS.Workbook(); await w4.xlsx.load(Buffer.from(await ev(`return Array.from(await X.xlsx.save())`)))
+  const refOf = (sheet) => { const t = w4.getWorksheet(sheet)?.getTables().map((x) => x.table ?? x).find((x) => /^Sales/.test(x.name)); return t?.tableRef ?? t?.ref }
+  check('a copied sheet\'s kept table stays on the copy\'s cells when the original moves (copy A3:B5, original A6:B8)', refOf(copyName) === 'A3:B5' && refOf('Sales') === 'A6:B8', `${copyName} ${refOf(copyName)} ${refOf('Sales')}`)
 }
 
 // Ctrl+; in a 1904 workbook writes today's 1904 serial
