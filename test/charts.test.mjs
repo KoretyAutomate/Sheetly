@@ -12,7 +12,7 @@ win.on('pageerror', (e) => errors.push(e.message))
 await win.waitForFunction(() => window.univerAPI?.getActiveWorkbook?.(), null, { timeout: 60000 })
 await win.waitForTimeout(1500)
 await win.mouse.click(700, 500)
-const ev = (code) => win.evaluate(`(async()=>{const api=window.univerAPI,S=()=>api.getActiveWorkbook().getActiveSheet(),X=window.__sheetly,CH=X.charts;
+const ev = (code) => win.evaluate(`(async()=>{const api=window.univerAPI,W=()=>api.getActiveWorkbook(),S=()=>W().getActiveSheet(),X=window.__sheetly,CH=X.charts;
   const canv=()=>[...document.querySelectorAll('.sx-chart canvas')]; const cj=(i)=>canv()[i]?.__chart; ${code}})()`)
 const settle = (ms = 400) => win.waitForTimeout(ms)
 const key = async (k, n = 1) => { for (let i = 0; i < n; i++) await win.keyboard.press(k); await settle(150) }
@@ -92,7 +92,7 @@ await key('Escape')
 await removeCharts(); await settle()
 await ev(`S().getRange('A1:C4').setValues([[null,'Q1','Q2'],['North',10,20],['South',30,40],['East',50,60]]); S().getRange('A1').activate()`); await settle()
 await key('Alt+F1'); await settle(800)
-const rng = () => ev(`const g=CH.charts()[0].data.source.range; return [g.startRow,g.endRow,g.startColumn,g.endColumn].join(',')`)
+const rng = () => ev(`const g=CH.sourceOf(CH.charts()[0])?.range; return g ? [g.startRow,g.endRow,g.startColumn,g.endColumn].join(',') : 'REF'`)
 await ev(`S().insertRowsBefore(0, 2)`); await settle(600)
 const afterInsert = await rng()
 await ev(`S().deleteRows(3, 1)`); await settle(600)
@@ -125,7 +125,9 @@ await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('E
 await ev(`S().getRange('A1:H20').clear(); S().getRange('A1:D4').setValues([['R','S1','skip','S2'],['x',1,100,4],['y',2,200,5],['z',3,300,6]])`); await settle()
 await ev(`S().addFloatDomToPosition({ componentKey: 'sheetly-chart', allowTransform: true, initPosition: { startX: 400, endX: 800, startY: 0, endY: 250 },
   data: { v: 2, type: 'column', title: null, source: { sheetId: S().getSheetId(), range: { startRow: 0, endRow: 3, startColumn: 0, endColumn: 3 }, categories: { startRow: 1, endRow: 3, startColumn: 0, endColumn: 0 },
-    series: [{ name: [0, 1], values: { startRow: 1, endRow: 3, startColumn: 1, endColumn: 1 } }, { name: [0, 3], values: { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 } }] } } })`); await settle(800)
+    ref: X.refs.track(S().getSheetId(), { startRow: 0, endRow: 3, startColumn: 0, endColumn: 3 }), categoriesRef: X.refs.track(S().getSheetId(), { startRow: 1, endRow: 3, startColumn: 0, endColumn: 0 }),
+    series: [{ name: [0, 1], nameRef: X.refs.track(S().getSheetId(), { startRow: 0, endRow: 0, startColumn: 1, endColumn: 1 }), values: { startRow: 1, endRow: 3, startColumn: 1, endColumn: 1 }, valuesRef: X.refs.track(S().getSheetId(), { startRow: 1, endRow: 3, startColumn: 1, endColumn: 1 }) },
+      { name: [0, 3], nameRef: X.refs.track(S().getSheetId(), { startRow: 0, endRow: 0, startColumn: 3, endColumn: 3 }), values: { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 }, valuesRef: X.refs.track(S().getSheetId(), { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 }) }] } } })`); await settle(800)
 st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|') + '|' + c.data.labels.join(',')`)
 check('series picked one by one: only those columns are plotted', st === 'S1:1,2,3|S2:4,5,6|x,y,z', st)
 await ev(`S().insertColumnsBefore(2, 1)`); await settle(700)
@@ -135,6 +137,11 @@ await removeCharts(); await ev(`S().deleteColumns(2, 1); S().getRange('A1:H20').
 await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
 await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
 
+check('internal reference names are not listed among the workbook\'s names', (await ev(`return W().getDefinedNames().filter(n=>n.getName().startsWith('SheetlyRef_')).length`)) > 0
+  && (await ev(`return document.body.innerText.includes('SheetlyRef_')`)) === false)
+await key('Control+F3'); await settle(800)
+check('Name Manager does not show the internal names', (await ev(`return document.body.innerText.includes('SheetlyRef_')`)) === false)
+await key('Escape'); await ev(`document.querySelector('[data-u-comp=right-sidebar] button[aria-label=Close], .univer-sidebar button')?.click?.()`); await settle()
 // ---- saved with the workbook
 const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); const k=Object.keys(d)[0]; return Object.values(d[k].data).map(x=>x.data).find(x=>x.type==='pie')`)
 check('the chart definition is saved (type + source range)', snap?.type === 'pie' && snap?.source?.range?.endRow === 5, JSON.stringify(snap))

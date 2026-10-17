@@ -1,7 +1,34 @@
 diff --git a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
-index aa80317..11827db 100644
+index aa80317..9bf4663 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
+@@ -21849,7 +21849,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
+ 	const unitId = univerInstanceService.getCurrentUnitOfType(_univerjs_core.UniverInstanceType.UNIVER_SHEET).getUnitId();
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const definedNames = (0, _univerjs_ui.useObservable)(() => definedNamesService.update$.pipe((0, rxjs.map)(getDefinedNameMap), (0, rxjs.startWith)(getDefinedNameMap())), getDefinedNameMap(), false, [definedNamesService, unitId]);
+@@ -21970,7 +21970,7 @@ function DefinedName({ disable }) {
+ 	const inputRef = (0, react.useRef)(null);
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const focusDefinedName = async (definedName) => {
+@@ -27355,7 +27355,7 @@ const DefinedNameContainer = ({ ConfirmComponent = _univerjs_design.Confirm, Def
+ 	const getDefinedNameMap = () => {
+ 		if (!unitId) return [];
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const [editState, setEditState] = (0, react.useState)(false);
 @@ -34399,13 +34399,20 @@ let AutoHeightService = class AutoHeightService extends _univerjs_core.Disposabl
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
@@ -25,9 +52,36 @@ index aa80317..11827db 100644
  		if (remainRanges.length) {
  			this._autoHeightTasks.push({
 diff --git a/node_modules/@univerjs/sheets-ui/lib/es/index.js b/node_modules/@univerjs/sheets-ui/lib/es/index.js
-index 5ae414a..0fb0e66 100644
+index 5ae414a..c9d08da 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/es/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/es/index.js
+@@ -21848,7 +21848,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
+ 	const unitId = univerInstanceService.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET).getUnitId();
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const definedNames = useObservable(() => definedNamesService.update$.pipe(map(getDefinedNameMap), startWith(getDefinedNameMap())), getDefinedNameMap(), false, [definedNamesService, unitId]);
+@@ -21969,7 +21969,7 @@ function DefinedName({ disable }) {
+ 	const inputRef = useRef(null);
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const focusDefinedName = async (definedName) => {
+@@ -27354,7 +27354,7 @@ const DefinedNameContainer = ({ ConfirmComponent = Confirm, DefinedNameInputComp
+ 	const getDefinedNameMap = () => {
+ 		if (!unitId) return [];
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const [editState, setEditState] = useState(false);
 @@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
@@ -51,9 +105,36 @@ index 5ae414a..0fb0e66 100644
  		if (remainRanges.length) {
  			this._autoHeightTasks.push({
 diff --git a/node_modules/@univerjs/sheets-ui/lib/index.js b/node_modules/@univerjs/sheets-ui/lib/index.js
-index 5ae414a..0fb0e66 100644
+index 5ae414a..c9d08da 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/index.js
+@@ -21848,7 +21848,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
+ 	const unitId = univerInstanceService.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET).getUnitId();
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const definedNames = useObservable(() => definedNamesService.update$.pipe(map(getDefinedNameMap), startWith(getDefinedNameMap())), getDefinedNameMap(), false, [definedNamesService, unitId]);
+@@ -21969,7 +21969,7 @@ function DefinedName({ disable }) {
+ 	const inputRef = useRef(null);
+ 	const getDefinedNameMap = () => {
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const focusDefinedName = async (definedName) => {
+@@ -27354,7 +27354,7 @@ const DefinedNameContainer = ({ ConfirmComponent = Confirm, DefinedNameInputComp
+ 	const getDefinedNameMap = () => {
+ 		if (!unitId) return [];
+ 		const definedNameMap = definedNamesService.getDefinedNameMap(unitId);
+-		if (definedNameMap) return Object.values(definedNameMap);
++		if (definedNameMap) return Object.values(definedNameMap).filter((d) => !d.hidden);
+ 		return [];
+ 	};
+ 	const [editState, setEditState] = useState(false);
 @@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);

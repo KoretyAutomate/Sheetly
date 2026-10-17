@@ -12,7 +12,7 @@ import { CommandType, ICommandService, numfmt } from '@univerjs/core'
 import { IDrawingManagerService } from '@univerjs/drawing'
 import { createElement, useEffect, useReducer, useRef } from 'react'
 import { el, openDialog, radios, check } from './ui/dialog.js'
-import { chartTitle, explicitSeries, seriesFrom } from './chart-model.js'
+import { chartTitle, explicitSeries, resolveSource, seriesFrom } from './chart-model.js'
 
 Chart.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Filler, Legend, LinearScale, LineController,
   LineElement, PieController, PointElement, ScatterController, Title, Tooltip)
@@ -36,14 +36,19 @@ export const CHART_TYPES = [
 ]
 const typeName = (t) => CHART_TYPES.find((x) => x[0] === t)?.[1] ?? t
 
-let apiRef = null
+let apiRef = null, refsRef = null
 const num = (x) => (typeof x === 'number' ? x : Number(x) || 0)
 
 export { seriesFrom }
 
+export const liveSource = (src) => resolveSource(src, (n) => refsRef?.resolve(n) ?? null)
+
 /** Live data of a spec from the workbook (falls back to saved data for old charts). */
-function dataOf(spec) {
-  if (!spec?.source) return { labels: spec?.labels ?? [], series: spec?.series ?? [], title: spec?.title ?? '' }
+function dataOf(spec0) {
+  if (!spec0?.source) return { labels: spec0?.labels ?? [], series: spec0?.series ?? [], title: spec0?.title ?? '' }
+  const source = liveSource(spec0.source)
+  if (!source) return { labels: [], series: [], title: spec0.title ?? '' }
+  const spec = { ...spec0, source }
   const sheet = apiRef?.getActiveWorkbook()?.getSheetBySheetId(spec.source.sheetId)
   if (!sheet) return { labels: [], series: [], title: spec.title ?? '' }
   const w = sheet.getSheet()
@@ -145,8 +150,9 @@ function ChartView({ data }) {
   createElement('canvas', { ref }))
 }
 
-export function createCharts(api, dialogs) {
+export function createCharts(api, dialogs, refs) {
   apiRef = api
+  refsRef = refs
   api.registerComponent(COMPONENT, ChartView)
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
@@ -160,7 +166,9 @@ export function createCharts(api, dialogs) {
   const newSpec = (type = 'column') => {
     const range = sourceRange()
     const { startRow, endRow, startColumn, endColumn } = range
-    return { v: 2, type, source: { sheetId: ws().getSheetId(), range: { startRow, endRow, startColumn, endColumn } }, plotBy: null, title: null, legend: null, dataLabels: false, axisTitles: null }
+    const g = { startRow, endRow, startColumn, endColumn }
+    // The source range lives on as a hidden defined name, so it moves with inserted and deleted rows and columns.
+    return { v: 2, type, source: { sheetId: ws().getSheetId(), range: g, ref: refs?.track(ws().getSheetId(), g) ?? undefined }, plotBy: null, title: null, legend: null, dataLabels: false, axisTitles: null }
   }
   /** For tests and Quick Analysis: the series Excel would plot from the selection. */
   function chartData() { const spec = newSpec(); return { data: dataOf(spec), range: spec.source.range, spec } }
@@ -187,38 +195,6 @@ export function createCharts(api, dialogs) {
     return true
   }
 
-  // ---- series ranges move with inserted / deleted rows and columns of their source sheet (undo replays the
-  // opposite mutation, so it moves them back).
-  const SHIFT = { 'sheet.mutation.insert-row': ['row', 1], 'sheet.mutation.remove-rows': ['row', -1], 'sheet.mutation.insert-col': ['col', 1], 'sheet.mutation.remove-col': ['col', -1] }
-  function shifted(g, axis, sign, s, e) {
-    const [a, b] = axis === 'row' ? ['startRow', 'endRow'] : ['startColumn', 'endColumn']
-    const n = e - s + 1, out = { ...g }
-    if (sign > 0) { if (s <= g[a]) { out[a] += n; out[b] += n } else if (s <= g[b]) out[b] += n; return out }
-    const gone = (x) => Math.max(0, Math.min(e, x) - s + 1) // deleted indexes at or before x
-    out[a] = g[a] - gone(g[a] - 1); out[b] = g[b] - gone(g[b])
-    return out
-  }
-  api._injector.get(ICommandService).onCommandExecuted((cmd) => {
-    const how = SHIFT[cmd.id], p = cmd.params
-    if (!how || !p?.range) return
-    const [axis, sign] = how
-    const [s, e] = axis === 'row' ? [p.range.startRow, p.range.endRow] : [p.range.startColumn, p.range.endColumn]
-    queueMicrotask(() => {
-      const book = api.getUnit?.(p.unitId) ?? wb()
-      for (const sheet of book?.getSheets?.() ?? []) for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
-        const spec = c.data
-        if (spec?.source?.sheetId !== p.subUnitId) continue
-        const src = { ...spec.source, range: shifted(spec.source.range, axis, sign, s, e) }
-        if (src.series) {
-          const cell = ([r, c2]) => { const g = shifted({ startRow: r, endRow: r, startColumn: c2, endColumn: c2 }, axis, sign, s, e); return [g.startRow, g.startColumn] }
-          src.series = src.series.map((x) => ({ ...x, values: shifted(x.values, axis, sign, s, e), name: x.name ? cell(x.name) : null }))
-          if (src.categories) src.categories = shifted(src.categories, axis, sign, s, e)
-        }
-        if (JSON.stringify(src) !== JSON.stringify(spec.source)) sheet.updateFloatDom(c.id, { data: { ...spec, source: src } })
-      }
-    })
-  })
-
   // ---- the selected chart (a focused chart drawing, else the only chart on the sheet)
   const charts = () => (ws().getAllFloatDoms?.() ?? []).filter((d) => d.componentKey === COMPONENT)
   let lastFocused = null
@@ -240,7 +216,9 @@ export function createCharts(api, dialogs) {
   }
   const setType = (type) => update(() => ({ type }))
   // Switch Row/Column swaps what the series are made of.
-  const switchRowColumn = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols' }))
+  // (A chart whose series were picked one by one becomes one block over their range, as when Excel switches it.)
+  const switchRowColumn = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols',
+    source: { ...s.source, series: undefined, categories: undefined, categoriesRef: undefined } }))
   const toggle = (what) => update((s) => (what === 'title' ? { title: s.title === '' ? null : '' }
     : what === 'legend' ? { legend: (s.legend ?? 'bottom') === 'none' ? 'bottom' : 'none' }
       : what === 'dataLabels' ? { dataLabels: !s.dataLabels }
@@ -269,5 +247,7 @@ export function createCharts(api, dialogs) {
     return true
   }
 
-  return { chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts }
+  return { chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts,
+    /** Where a chart's data is now (its references follow structural edits). */
+    sourceOf: (c) => liveSource(c?.data?.source) }
 }

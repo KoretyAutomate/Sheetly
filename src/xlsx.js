@@ -9,8 +9,9 @@
 // On load a summary flagged collapsed, or a group whose detail is all hidden, sets custom.outlineCollapsed.
 import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
-import { CF, CHART_COMPONENT, DRAWINGS, DV, TABLES, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
+import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
 import { finishPackage, readCharts, readSparklines } from './xlsx-zip.js'
+import { resolveSource } from './chart-model.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
 const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1)
@@ -186,34 +187,48 @@ const XLWS = new Set(['FILTER', 'SORT'])
 const outsideStrings = (f, fn) => f.split(/("(?:[^"]|"")*")/).map((p, i) => (i % 2 ? p : fn(p))).join('')
 export const formulaIn = (f) => outsideStrings(f, (p) => p.replace(/_xlfn\.(_xlws\.)?/gi, '').replace(/_xlpm\./gi, ''))
 // LET / LAMBDA parameter names are stored as _xlpm.name inside their call (Excel reads a bare name as a defined name).
+// The formula is scanned with its string literals and structured references ([...]) masked, so text such as
+// "LET(x,1,x)" in quotes or Table1[x] is never taken for a call or a parameter.
+function mask(f) {
+  let out = '', inStr = false, depth = 0
+  for (let i = 0; i < f.length; i++) {
+    const ch = f[i]
+    if (inStr) { out += '\u0000'; if (ch === '"') { if (f[i + 1] === '"') { out += '\u0000'; i++ } else inStr = false } continue }
+    if (depth) { out += '\u0000'; if (ch === '[') depth++; else if (ch === ']') depth--; continue }
+    if (ch === '"') { inStr = true; out += '\u0000'; continue }
+    if (ch === '[') { depth = 1; out += '\u0000'; continue }
+    out += ch
+  }
+  return out
+}
 function xlpm(f) {
+  const edits = [] // [position, name] where '_xlpm.' goes
+  const m0 = mask(f)
   const call = /(^|[^A-Za-z0-9_.])(?:_xlfn\.)?(LET|LAMBDA)\(/gi
-  let from = 0, m
-  while ((call.lastIndex = from, m = call.exec(f))) {
+  let m
+  while ((m = call.exec(m0))) {
     const open = m.index + m[0].length - 1
-    // the call's arguments: top-level commas up to the matching parenthesis, skipping strings and nesting
     const commas = []
-    let depth = 0, close = -1, inStr = false
-    for (let i = open; i < f.length; i++) {
-      const ch = f[i]
-      if (inStr) { if (ch === '"') { if (f[i + 1] === '"') i++; else inStr = false } continue }
-      if (ch === '"') inStr = true
-      else if (ch === '(' || ch === '{') depth++
+    let depth = 0, close = -1
+    for (let i = open; i < m0.length; i++) {
+      const ch = m0[i]
+      if (ch === '(' || ch === '{') depth++
       else if (ch === ')' || ch === '}') { depth--; if (depth === 0) { close = i; break } }
       else if (ch === ',' && depth === 1) commas.push(i)
     }
     if (close < 0) break
     const bounds = [open, ...commas, close]
-    const args = bounds.slice(0, -1).map((b, k) => f.slice(b + 1, bounds[k + 1]).trim())
+    const args = bounds.slice(0, -1).map((b, k) => m0.slice(b + 1, bounds[k + 1]).trim())
     const isLet = m[2].toUpperCase() === 'LET'
     const names = args.slice(0, -1).filter((_, k) => !isLet || k % 2 === 0).filter((x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x))
-    if (names.length) {
-      const re = new RegExp(`(^|[^A-Za-z0-9_.!$'])(${names.map((x) => x.replace(/\./g, '\\.')).join('|')})(?![A-Za-z0-9_.(!])`, 'gi')
-      const span = outsideStrings(f.slice(open, close + 1), (part) => part.replace(re, '$1_xlpm.$2'))
-      f = f.slice(0, open) + span + f.slice(close + 1)
-    }
-    from = m.index + 1
+    if (!names.length) continue
+    const re = new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${names.map((x) => x.replace(/\./g, '\\.')).join('|')})(?![A-Za-z0-9_.(!\u0000])`, 'gi')
+    const span = m0.slice(open, close + 1)
+    let t
+    while ((t = re.exec(span))) edits.push(open + t.index + t[1].length)
   }
+  // Apply from the end so earlier positions stay valid; a position is prefixed once.
+  for (const pos of [...new Set(edits)].sort((x, y) => y - x)) f = f.slice(0, pos) + '_xlpm.' + f.slice(pos)
   return f
 }
 export const formulaOut = (f) => xlpmThen(f)
@@ -365,19 +380,36 @@ export async function xlsxToSnapshot(buf) {
     const pics = imagesIn(wb, ws, sheet, 'wb')
     if (pics.length) drawings[id] = { data: Object.fromEntries(pics.map((d) => [d.drawingId, d])), order: pics.map((d) => d.drawingId) }
   })
+  // Object ranges are kept as hidden defined names (see refs.js) so they move with structural edits.
+  const refNames = {}
+  let refSeq = 0
+  const track = (sheetName, range) => {
+    if (!range) return undefined
+    const name = `${REF_PREFIX}f${(++refSeq).toString(36)}`
+    const q = /^[A-Za-z_][\w.]*$/.test(sheetName) ? sheetName : `'${sheetName.replace(/'/g, "''")}'`
+    refNames[name] = { id: name, name, formulaOrRefString: `${q}!${rangeA1(range).replace(/([A-Z]+)(\d+)/g, '$$$1$$$2')}`, hidden: true, localSheetId: ALL_SHEETS }
+    return name
+  }
   // Sparklines (x14 extension of the sheet).
   for (const { sheetIndex, groups } of await readSparklines(buf)) {
     const id = idByIndex[sheetIndex]
     if (!id) continue
     sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors,
-      items: g.items.filter((x) => idByName[x.sheetName]).map((x) => ({ row: x.row, col: x.col, sheetId: idByName[x.sheetName], source: x.source })) })).filter((g) => g.items.length)
+      items: g.items.filter((x) => idByName[x.sheetName]).map((x) => ({ row: x.row, col: x.col, sheetId: idByName[x.sheetName], source: x.source,
+        cellRef: track(sheets[id].name, { startRow: x.row, endRow: x.row, startColumn: x.col, endColumn: x.col }), sourceRef: track(x.sheetName, x.source) })) })).filter((g) => g.items.length)
   }
   // Charts: from the chart parts, as Sheetly charts linked to the same range.
   let chartSeq = 0
   for (const c of await readCharts(buf)) {
     const id = idByIndex[c.sheetIndex], sourceId = idByName[c.spec.source.sheetName]
     if (!id || !sourceId) continue
-    const { sheetName: _name, ...source } = c.spec.source
+    const { sheetName, ...source } = c.spec.source
+    source.ref = track(sheetName, source.range)
+    if (source.series) {
+      source.series = source.series.map((x) => ({ ...x, valuesRef: track(sheetName, x.values),
+        nameRef: x.name ? track(sheetName, { startRow: x.name[0], endRow: x.name[0], startColumn: x.name[1], endColumn: x.name[1] }) : undefined }))
+      source.categoriesRef = track(sheetName, source.categories)
+    }
     const spec = { ...c.spec, source: { ...source, sheetId: sourceId } }
     const drawingId = `chart${++chartSeq}_${Date.now().toString(36)}`
     const d = placed(sheets[id], c.from, c.to ?? endFrom(sheets[id], c.from, c.size.width, c.size.height), { unitId: 'wb', subUnitId: id, drawingId, drawingType: 8, componentKey: CHART_COMPONENT, data: spec, allowTransform: true })
@@ -400,6 +432,7 @@ export async function xlsxToSnapshot(buf) {
     names[key] = { id: key, name: dn.name, formulaOrRefString: formulaIn(text.replace(/^=/, '')),
       localSheetId: dn.localSheetId != null ? (idByIndex[dn.localSheetId] ?? ALL_SHEETS) : ALL_SHEETS }
   }
+  Object.assign(names, refNames)
   const resources = []
   if (Object.keys(notes).length) resources.push({ name: NOTE, data: JSON.stringify(notes) })
   if (Object.keys(names).length) resources.push({ name: NAMES, data: JSON.stringify(names) })
@@ -424,6 +457,16 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
   // Excel recalculates on open: spilled ranges and anything Sheetly could not cache are filled in.
   wb.calcProperties = { fullCalcOnLoad: true }
   const charts = [], spills = new Set(), usedTableNames = new Set(), sparklines = []
+  // Hidden names that keep object ranges current (refs.js): where they point now.
+  const nameMap = Object.fromEntries(Object.values(resource(snap, NAMES)).filter((d) => d?.name).map((d) => [d.name, d.formulaOrRefString]))
+  const sheetIdByName = Object.fromEntries(snap.sheetOrder.map((id) => [snap.sheets[id].name, id]))
+  const resolveName = (name) => {
+    const text = nameMap[name]
+    if (!text || /#REF!/i.test(text)) return null
+    const m = /^(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(text)
+    const sheetId = m && sheetIdByName[(m[1] ?? m[2]).replace(/''/g, "'")], range = m && parseRange(m[3])
+    return sheetId && range ? { sheetId, range } : null
+  }
   for (const [sheetIndex, id] of snap.sheetOrder.entries()) {
     const s = snap.sheets[id], settings = outlineSettings(s.custom?.sheetlyOutline)
     const view = {}
@@ -493,8 +536,12 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     if (maxRow) ws.properties.outlineLevelRow = maxRow
     if (maxCol) ws.properties.outlineLevelCol = maxCol
     for (const m of s.mergeData || []) ws.mergeCells(m.startRow + 1, m.startColumn + 1, m.endRow + 1, m.endColumn + 1)
-    const sg = s.custom?.sheetlySparklines ?? []
-    if (sg.length) sparklines.push({ sheetIndex, groups: sg.map((g) => ({ ...g, items: g.items.map((x) => ({ ...x, sheetName: snap.sheets[x.sheetId ?? id]?.name ?? s.name })) })) })
+    const sg = (s.custom?.sheetlySparklines ?? []).map((g) => ({ ...g, items: g.items.map((x) => {
+      const at = x.cellRef ? resolveName(x.cellRef) : { sheetId: id, range: { startRow: x.row, startColumn: x.col } }
+      const src = x.sourceRef ? resolveName(x.sourceRef) : { sheetId: x.sheetId ?? id, range: x.source }
+      return at && src ? { row: at.range.startRow, col: at.range.startColumn, source: src.range, sheetName: snap.sheets[src.sheetId]?.name ?? s.name } : null
+    }).filter(Boolean) })).filter((g) => g.items.length)
+    if (sg.length) sparklines.push({ sheetIndex, groups: sg })
     cfOut(ws, cfs[id])
     dvOut(ws, dvs[id])
     tablesOut(ws, allTables[id]?.tables, usedTableNames)
@@ -502,15 +549,16 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     imagesOut(wb, ws, list)
     for (const d of list) {
       if (d.componentKey !== CHART_COMPONENT || !d.data?.source || !d.sheetTransform) continue
-      const src = snap.sheets[d.data.source.sheetId]
+      const source = resolveSource(d.data.source, resolveName)
+      const src = source && snap.sheets[source.sheetId]
       if (!src) continue
       const get = (r, c) => { const v = src.cellData?.[r]?.[c]; return v?.v ?? (v?.p?.body?.dataStream ? docText(v.p) : null) }
-      charts.push({ sheetIndex, spec: d.data, from: d.sheetTransform.from, to: d.sheetTransform.to, get, sourceName: src.name })
+      charts.push({ sheetIndex, spec: { ...d.data, source }, from: d.sheetTransform.from, to: d.sheetTransform.to, get, sourceName: src.name })
     }
   }
   // Defined names go out as written (ranges, constants, formulas; sheet-scoped ones with localSheetId).
   const sheetIndex = Object.fromEntries(snap.sheetOrder.map((id, i) => [id, i]))
-  wb.extraDefinedNames = Object.values(resource(snap, NAMES)).filter((dn) => dn?.name && dn.formulaOrRefString).map((dn) => {
+  wb.extraDefinedNames = Object.values(resource(snap, NAMES)).filter((dn) => dn?.name && dn.formulaOrRefString && !dn.name.startsWith(REF_PREFIX)).map((dn) => {
     const local = dn.localSheetId && dn.localSheetId !== ALL_SHEETS ? sheetIndex[dn.localSheetId] : undefined
     return { name: dn.name, ranges: [formulaOut(dn.formulaOrRefString.replace(/^=/, ''))], ...(local != null ? { localSheetId: local } : {}) }
   })

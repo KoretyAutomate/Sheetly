@@ -54,3 +54,24 @@ export function explicitSeries(get, src) {
   const labels = src.categories ? cells(src.categories).map(([r, c]) => String(get(r, c) ?? '')) : Array.from({ length: n }, (_, i) => String(i + 1))
   return { labels, levels: [], series, byCols: true, headerRow: false, labelCol: !!src.categories, labelCount: src.categories ? 1 : 0, explicit: true }
 }
+
+/**
+ * Where a chart's references point now. Ranges are kept as hidden defined names (ref, valuesRef, nameRef,
+ * categoriesRef) that the spreadsheet moves with structural edits; resolve(name) gives { sheetId, range } or null
+ * (#REF!). Charts without names use their stored ranges. Returns null when the source itself is gone.
+ */
+export function resolveSource(src, resolve) {
+  if (!src) return null
+  const at = (name, sheetId, range) => (name ? resolve(name) ?? null : range ? { sheetId, range } : null)
+  const main = at(src.ref, src.sheetId, src.range)
+  if (!main) return null
+  const out = { ...src, sheetId: main.sheetId, range: main.range }
+  if (src.series) {
+    out.series = src.series.map((x) => {
+      const v = at(x.valuesRef, src.sheetId, x.values), n = x.nameRef ? at(x.nameRef) : null
+      return { ...x, values: v?.range ?? null, name: n ? [n.range.startRow, n.range.startColumn] : x.nameRef ? null : x.name }
+    }).filter((x) => x.values)
+    out.categories = at(src.categoriesRef, src.sheetId, src.categories)?.range ?? null
+  }
+  return out
+}

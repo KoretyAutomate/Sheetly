@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T00:28:36.942Z
+xlsx objects  2026-10-17T01:00:36.102Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -35,8 +35,10 @@ PASS  between with cell references becomes an equivalent formula rule (bounds ke
 PASS  a one-cell-anchored picture keeps its size (480 x 288)
 PASS  non-adjacent series are written with their own references (no column M)
 PASS  and read back as two series (Sales, Cost), not three
+PASS  years as categories stay categories (one series, categories K2:K4)
+PASS  read back with hidden reference names (not written to the file as names)
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-39/39 passed
+41/41 passed

@@ -104,7 +104,7 @@ export function createExtras(api) {
 
   // ---- F3: Paste Name
   function pasteName() {
-    const names = (wb().getDefinedNames?.() ?? []).map((n) => n.getName()).sort((a, b) => a.localeCompare(b))
+    const names = (wb().getDefinedNames?.() ?? []).filter((n) => !n.getName().startsWith('SheetlyRef_')).map((n) => n.getName()).sort((a, b) => a.localeCompare(b))
     if (!names.length) return true // Excel shows nothing when the workbook has no names
     let chosen = names[0]
     const list = el('div', { class: 'sx-list', role: 'listbox', 'aria-label': 'Paste name' }, ...names.map((n, i) => {
@@ -119,7 +119,7 @@ export function createExtras(api) {
   }
   function pasteList() {
     const g = ws().getActiveRange().getRange()
-    ;(wb().getDefinedNames?.() ?? []).forEach((n, i) => {
+    ;(wb().getDefinedNames?.() ?? []).filter((n) => !n.getName().startsWith('SheetlyRef_')).forEach((n, i) => {
       ws().getRange(g.startRow + i, g.startColumn).setValue(n.getName())
       ws().getRange(g.startRow + i, g.startColumn + 1).setValue(n.getFormulaOrRefString().startsWith('=') ? n.getFormulaOrRefString() : '=' + n.getFormulaOrRefString())
     })

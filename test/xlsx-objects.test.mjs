@@ -184,6 +184,20 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('and read back as two series (Sales, Cost), not three', spec6?.source?.series?.length === 2 && J(spec6.source.series[1].values) === J(R(1, 13, 3, 13)) && J(spec6.source.categories) === J(R(1, 10, 3, 10)), J(spec6?.source))
 }
 
+// ---- numeric categories (years) are not mistaken for a series when a chart is read back
+{
+  const s7 = structuredClone(snap)
+  for (let r = 0; r < 4; r++) s7.sheets.s1.cellData[r][10] = r ? { v: 2019 + r, t: 2 } : { v: 'Year', t: 1 }
+  const res7 = Object.fromEntries(s7.resources.map((r) => [r.name, JSON.parse(r.data)]))
+  res7.SHEET_DRAWING_PLUGIN.s1.data.c1.data = { ...chartSpec, source: { sheetId: 's1', range: R(0, 10, 3, 11), categories: R(1, 10, 3, 10), series: [{ name: [0, 11], values: R(1, 11, 3, 11) }] } }
+  s7.resources = Object.entries(res7).map(([name, d]) => ({ name, data: J(d) }))
+  const back7 = await xlsxToSnapshot(await snapshotToXlsx(s7))
+  const spec7 = Object.values(res(back7, 'SHEET_DRAWING_PLUGIN')[back7.sheetOrder[0]].data).find((d) => d.drawingType === 8)?.data
+  check('years as categories stay categories (one series, categories K2:K4)', spec7?.source?.series?.length === 1 && J(spec7.source.categories) === J(R(1, 10, 3, 10)), J(spec7?.source))
+  const names7 = Object.values(res(back7, 'SHEET_DEFINED_NAME_PLUGIN'))
+  check('read back with hidden reference names (not written to the file as names)', names7.some((n) => n.name.startsWith('SheetlyRef_') && n.hidden) && !J((await (async () => { const w = new ExcelJS.Workbook(); await w.xlsx.load(await snapshotToXlsx(back7)); return w.rawDefinedNames })())).includes('SheetlyRef_'))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

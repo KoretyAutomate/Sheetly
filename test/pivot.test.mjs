@@ -78,6 +78,26 @@ const hidden = await ev(`return document.querySelector('.sx-pivot-pane').hidden`
 await ev(`S().getRange('A4').activate()`); await settle(400)
 const shown = await ev(`return document.querySelector('.sx-pivot-pane').hidden`)
 check('the fields pane closes outside the PivotTable and comes back inside it', hidden === true && shown === false, `${hidden} ${shown} ${JSON.stringify(await ev(`return P.list().map(p=>[p.sheet,p.extent])`))} ${await ev(`return S().getSheetName()`)}`)
+// ---- an existing-sheet destination: unrelated cells are never cleared; growing over data asks first
+await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('H20').setValue('keep me'); S().getRange('G5').setValue('in the way')`); await settle()
+await ev(`P.create(S().getSheetName() + '!$A$1:$C$6', 'existing', S().getSheetName() + '!F3')`); await settle(600)
+await ev(`P.toggleField('Region', true)`); await settle(600)
+check('adding a field does not clear cells the PivotTable never wrote (H20 kept)', (await ev(`return S().getRange('H20').getRawValue()`)) === 'keep me')
+await ev(`P.toggleField('Sales', true)`); await settle(600)
+const asked = await ev(`return document.querySelector('.sx-dialog p')?.textContent ?? ''`)
+check('growing over other data asks "There\'s already data in [...]. Do you want to replace it?"', /^There's already data in \[.+\]\. Do you want to replace it\?$/.test(asked), asked)
+await key('Escape'); await settle(400)
+check('Cancel leaves the data and the report as they were', (await ev(`return S().getRange('G5').getRawValue()`)) === 'in the way' && (await ev(`return S().getRange('G3').getRawValue()`)) == null)
+// ---- inserted rows: source and report move, Refresh still reads the moved data
+await ev(`S().getRange('G5').clear(); S().getRange('F4').activate(); P.toggleField('Sales', true)`); await settle(800)
+const total0 = await ev(`return S().getRange('G7').getRawValue()`)
+await ev(`S().insertRowsBefore(0, 2)`); await settle(600)
+await ev(`S().getRange('F6').activate()`); await settle(400)
+const inside = await ev(`return P.active()?.name ?? null`)
+await key('Alt+F5'); await settle(800)
+const total1 = await ev(`return S().getRange('G9').getRawValue()`)
+check('after inserting rows above source and report, the report is found and Refresh reads the moved source', inside !== null && total0 === total1 && typeof total1 === 'number', `${inside} ${total0} ${total1}`)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

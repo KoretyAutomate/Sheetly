@@ -68,7 +68,9 @@ ipcMain.handle('app-action', (e, name) => {
 ipcMain.handle('open', async (e) => {
   const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), { filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }], properties: ['openFile'] })
   if (r.canceled) return null
-  const p = r.filePaths[0]; files.set(e.sender.id, p)
+  // The window takes the file only once it loads it (the page calls 'current'); opening into a new window leaves
+  // this window's own file as it was.
+  const p = r.filePaths[0]
   return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) }
 })
 ipcMain.handle('save', async (e, data, saveAs) => {
@@ -82,7 +84,7 @@ ipcMain.handle('save', async (e, data, saveAs) => {
 })
 ipcMain.on('current', (e, p) => files.set(e.sender.id, p))
 // File > Open over an edited workbook: Excel keeps it and opens the file in a window of its own.
-ipcMain.handle('open-in-new-window', (e, p) => { files.delete(e.sender.id); openWorkbook(p) })
+ipcMain.handle('open-in-new-window', (_e, p) => { openWorkbook(p) })
 // The page asks once it is ready whether this window was opened for a file.
 ipcMain.handle('initial-file', (e) => {
   const p = pending.get(e.sender.id)

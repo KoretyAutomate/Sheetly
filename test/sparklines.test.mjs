@@ -64,6 +64,14 @@ const moved2 = await ev(`return JSON.stringify(SP.groups().flatMap(g=>g.items.ma
 check('a row inserted above moves sparklines and their data down; a column inserted left moves them right', moved === '[[2,5,2],[3,5,3],[4,5,4]]' && moved2 === '[[2,6,1,5],[3,6,1,5],[4,6,1,5]]', `${moved} ${moved2}`)
 await ev(`S().deleteColumns(0, 1); S().deleteRows(0, 1)`); await settle(500)
 
+// deleting the row of a sparkline and undoing brings it back
+const n0 = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+await ev(`S().deleteRows(2, 1)`); await settle(500)
+const n1 = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(600)
+const n2 = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+check('a deleted sparkline row is gone, and Undo brings the sparkline back', n1 === n0 - 1 && n2 === n0, `${n0} ${n1} ${n2}`)
+
 // Clear
 await ev(`S().getRange('F2:F4').activate(); SP.clear()`); await settle(600)
 await ev(`S().getRange('J30').activate()`)

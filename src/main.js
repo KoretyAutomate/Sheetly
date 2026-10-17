@@ -53,6 +53,7 @@ import { installPanes } from './panes.js'
 import { createQuickAnalysis } from './quick-analysis.js'
 import { createPivots } from './pivot.js'
 import { createSparklines } from './sparklines.js'
+import { createRefs } from './refs.js'
 import { setDialogShortcutService } from './ui/dialog.js'
 import { xlsxToSnapshot, snapshotToXlsx, formulaResolver } from './xlsx.js'
 
@@ -92,15 +93,16 @@ window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExec
 const dialogs = createDialogs(univerAPI)
 dialogs.setShortcutService(shortcutSvc)
 setDialogShortcutService(shortcutSvc)
-const charts = createCharts(univerAPI, dialogs)
+const refs = createRefs(univerAPI)
+const charts = createCharts(univerAPI, dialogs, refs)
 const extras = createExtras(univerAPI)
 const outline = createOutline(univerAPI)
-const sparklines = createSparklines(univerAPI)
+const sparklines = createSparklines(univerAPI, refs)
 const quickAnalysis = createQuickAnalysis(univerAPI, { dialogs, charts, sparklines })
-pivots = createPivots(univerAPI, { dialogs })
+pivots = createPivots(univerAPI, { dialogs, refs })
 const panes = installPanes(univerAPI)
 installExcelShortcuts(univerAPI, shortcutSvc, dialogs, charts, extras, outline, quickAnalysis, pivots)
-window.__sheetly = { untouched: () => untouched(), pivots, sparklines, dialogs, charts, extras, outline, keyTips: keyTipState, panes, quickAnalysis, xlsx: { xlsxToSnapshot, snapshotToXlsx, save: () => workbookToXlsx(univerAPI.getActiveWorkbook()), load: (data, name = 'Book.xlsx') => loadWorkbook({ data, name, path: null }) } }
+window.__sheetly = { untouched: () => untouched(), refs, pivots, sparklines, dialogs, charts, extras, outline, keyTips: keyTipState, panes, quickAnalysis, xlsx: { xlsxToSnapshot, snapshotToXlsx, save: () => workbookToXlsx(univerAPI.getActiveWorkbook()), load: (data, name = 'Book.xlsx') => loadWorkbook({ data, name, path: null }) } }
 const contextService = univerAPI._injector.get(IContextService)
 setKeyTipTree(buildKeyTipTree(univerAPI, { dialogs, extras, charts, outline, pivots, sparklines }), { canStart: () => whenSheetEditorFocused(contextService) || !!charts.selectedNow() })
 // Every sheet gets Excel's grid size, including ones added later (sheet tab +, Shift+F11, F11), which

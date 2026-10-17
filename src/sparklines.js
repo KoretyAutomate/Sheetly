@@ -65,12 +65,19 @@ export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS) {
   ctx.restore()
 }
 
-export function createSparklines(api) {
+export function createSparklines(api, refs) {
   const injector = api._injector
   const commands = injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
   const groupsOf = (w) => w.getCustomMetadata?.()?.sheetlySparklines ?? []
+  // Where an item is now: its cell and its data are hidden defined names that move with structural edits (and undo);
+  // a deleted cell or data range resolves to nothing and the sparkline is not drawn until undo brings it back.
+  const placeOf = (w, it) => {
+    const at = it.cellRef ? refs?.resolve(it.cellRef) : { sheetId: w.getSheetId(), range: { startRow: it.row, startColumn: it.col } }
+    const src = it.sourceRef ? refs?.resolve(it.sourceRef) : { sheetId: it.sheetId ?? w.getSheetId(), range: it.source }
+    return at && src && at.sheetId === w.getSheetId() ? { row: at.range.startRow, col: at.range.startColumn, sheetId: src.sheetId, source: src.range } : null
+  }
   const store = (w, list) => {
     const custom = { ...(w.getCustomMetadata?.() ?? {}) }
     if (list.length) custom.sheetlySparklines = list; else delete custom.sheetlySparklines
@@ -85,7 +92,9 @@ export function createSparklines(api) {
       if (!groups.length) return
       const book = injector.get(IUniverInstanceService).getUnit(w.getUnitId?.() ?? wb().getId())
       const seg = sk.rowColumnSegment
-      for (const g of groups) for (const it of g.items) {
+      for (const g of groups) for (const it0 of g.items) {
+        const it = placeOf(w, it0)
+        if (!it) continue
         if (it.row < seg.startRow - 1 || it.row > seg.endRow + 1 || it.col < seg.startColumn - 1 || it.col > seg.endColumn + 1) continue
         if (!w.getRowVisible(it.row) || !w.getColVisible(it.col)) continue
         const srcSheet = (book?.getSheetBySheetId?.(it.sheetId ?? w.getSheetId())) ?? w
@@ -118,39 +127,6 @@ export function createSparklines(api) {
   })
   setTimeout(install, 0)
 
-  // Inserted / deleted rows and columns move sparklines and their data, as cell references move in Excel; a
-  // sparkline whose cell is deleted goes with it. Undo replays the opposite mutation, which moves them back.
-  const SHIFT = { 'sheet.mutation.insert-row': ['row', 1], 'sheet.mutation.remove-rows': ['row', -1], 'sheet.mutation.insert-col': ['col', 1], 'sheet.mutation.remove-col': ['col', -1] }
-  const moveIndex = (i, sign, s, e) => (sign > 0 ? (i >= s ? i + (e - s + 1) : i) : i < s ? i : i > e ? i - (e - s + 1) : null)
-  const moveRange = (g, axis, sign, s, e) => {
-    const [a, b] = axis === 'row' ? ['startRow', 'endRow'] : ['startColumn', 'endColumn']
-    const n = e - s + 1, out = { ...g }
-    if (sign > 0) { if (s <= g[a]) { out[a] += n; out[b] += n } else if (s <= g[b]) out[b] += n; return out }
-    const gone = (x) => Math.max(0, Math.min(e, x) - s + 1)
-    out[a] = g[a] - gone(g[a] - 1); out[b] = g[b] - gone(g[b])
-    return out.endRow >= out.startRow && out.endColumn >= out.startColumn ? out : null
-  }
-  commands.onCommandExecuted((cmd) => {
-    const how = SHIFT[cmd.id], p = cmd.params
-    if (!how || !p?.range) return
-    const [axis, sign] = how
-    const [s, e] = axis === 'row' ? [p.range.startRow, p.range.endRow] : [p.range.startColumn, p.range.endColumn]
-    const book = injector.get(IUniverInstanceService).getUnit(p.unitId)
-    for (const w of book?.getSheets?.() ?? []) {
-      const groups = groupsOf(w)
-      if (!groups.length) continue
-      const here = w.getSheetId() === p.subUnitId
-      const next = groups.map((g) => ({ ...g, items: g.items.map((it) => {
-        let { row, col, source } = it
-        if (here) { if (axis === 'row') row = moveIndex(row, sign, s, e); else col = moveIndex(col, sign, s, e) }
-        if (row == null || col == null) return null
-        if ((it.sheetId ?? w.getSheetId()) === p.subUnitId) source = moveRange(source, axis, sign, s, e)
-        return source ? { ...it, row, col, source } : null
-      }).filter(Boolean) })).filter((g) => g.items.length)
-      if (JSON.stringify(next) !== JSON.stringify(groups)) store(w, next)
-    }
-  })
-
   function add(type, dataText, locText) {
     const ref = (t) => { const m = /^\s*(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(t); const sheet = m ? wb().getSheets().find((s) => s.getSheetName() === (m[1] ?? m[2]).replace(/''/g, "'")) : ws(); const g = parseRange(m ? m[3] : t); return sheet && g ? { sheet, g } : null }
     const data = ref(dataText), loc = ref(locText)
@@ -162,8 +138,10 @@ export function createSparklines(api) {
     const w = ws().getSheet()
     const taken = new Set(p.items.map((x) => `${x.row}:${x.col}`))
     // A cell holds one sparkline: the new group replaces older ones in the same cells.
-    const groups = groupsOf(w).map((g) => ({ ...g, items: g.items.filter((x) => !taken.has(`${x.row}:${x.col}`)) })).filter((g) => g.items.length)
-    groups.push({ id: `spk${Date.now().toString(36)}`, type, colors: {}, items: p.items.map((x) => ({ ...x, sheetId: data.sheet.getSheetId() })) })
+    const groups = groupsOf(w).map((g) => ({ ...g, items: g.items.filter((x) => { const at = placeOf(w, x); return !at || !taken.has(`${at.row}:${at.col}`) }) })).filter((g) => g.items.length)
+    const cell = (x) => ({ startRow: x.row, endRow: x.row, startColumn: x.col, endColumn: x.col })
+    groups.push({ id: `spk${Date.now().toString(36)}`, type, colors: {}, items: p.items.map((x) => ({ ...x, sheetId: data.sheet.getSheetId(),
+      cellRef: refs?.track(w.getSheetId(), cell(x)) ?? undefined, sourceRef: refs?.track(data.sheet.getSheetId(), x.source) ?? undefined })) })
     store(w, groups)
     redraw()
     return { ok: true }
@@ -185,10 +163,12 @@ export function createSparklines(api) {
   /** Clear Selected Sparklines (Sparkline tab > Clear). */
   function clear() {
     const g = ws().getActiveRange().getRange(), w = ws().getSheet()
-    const inSel = (x) => x.row >= g.startRow && x.row <= g.endRow && x.col >= g.startColumn && x.col <= g.endColumn
+    const inSel = (x) => { const at = placeOf(w, x); return at && at.row >= g.startRow && at.row <= g.endRow && at.col >= g.startColumn && at.col <= g.endColumn }
     store(w, groupsOf(w).map((gr) => ({ ...gr, items: gr.items.filter((x) => !inSel(x)) })).filter((gr) => gr.items.length))
     redraw()
     return true
   }
-  return { dialog, add, clear, groups: () => groupsOf(ws().getSheet()), redraw }
+  /** Groups with each sparkline where it is now (null items: deleted cells, kept for undo). */
+  const groups = () => { const w = ws().getSheet(); return groupsOf(w).map((g) => ({ ...g, items: g.items.map((x) => placeOf(w, x)).filter(Boolean) })) }
+  return { dialog, add, clear, groups, redraw }
 }

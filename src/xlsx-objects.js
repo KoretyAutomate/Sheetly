@@ -8,6 +8,8 @@
 //   SHEET_DRAWING_PLUGIN               {sheetId: {data: {id: drawing}, order: [id]}}
 export const CF = 'SHEET_CONDITIONAL_FORMATTING_PLUGIN', DV = 'SHEET_DATA_VALIDATION_PLUGIN', TABLES = 'SHEET_TABLE_PLUGIN', DRAWINGS = 'SHEET_DRAWING_PLUGIN'
 export const CHART_COMPONENT = 'sheetly-chart'
+// Internal hidden defined names that keep object ranges up to date (see refs.js); never written to .xlsx.
+export const REF_PREFIX = 'SheetlyRef_'
 const EMU_PER_PX = 9525
 
 // ---- A1 helpers

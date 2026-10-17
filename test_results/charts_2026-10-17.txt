@@ -1,4 +1,4 @@
-charts  2026-10-17T00:30:09.488Z
+charts  2026-10-17T01:02:07.419Z
 PASS  Alt+F1: clustered column, series by columns with the header row as names
 PASS  the chart follows its data: B2 = 99 redraws it
 PASS  formula results feed the chart too
@@ -21,7 +21,9 @@ PASS  Region and Product (text) label the axis in two levels; only Sales is plot
 PASS  saved chart: multi-level categories over both label columns
 PASS  series picked one by one: only those columns are plotted
 PASS  and their references move with an inserted column
+PASS  internal reference names are not listed among the workbook's names
+PASS  Name Manager does not show the internal names
 PASS  the chart definition is saved (type + source range)
 PASS  no page errors
 
-24/24 passed
+26/26 passed

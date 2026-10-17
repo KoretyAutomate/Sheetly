@@ -16,7 +16,7 @@ const EMPTY_EXTENT = { rows: 18, cols: 3 } // the empty report's placeholder (A3
 const soon = (fn) => { let done = false; const run = () => { if (!done) { done = true; fn() } }; requestAnimationFrame(run); setTimeout(run, 60) }
 const AREAS = [['filters', 'Filters'], ['cols', 'Columns'], ['rows', 'Rows'], ['values', 'Values']]
 
-export function createPivots(api, { dialogs }) {
+export function createPivots(api, { dialogs, refs }) {
   const commands = api._injector.get(ICommandService)
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
@@ -27,14 +27,28 @@ export function createPivots(api, { dialogs }) {
     sheet.getSheet().setCustomMetadata(Object.keys(custom).length ? custom : undefined)
   }
   const allPivots = () => wb().getSheets().flatMap((s) => listOf(s).map((p) => ({ sheet: s, p })))
+  // The source and the report's place are hidden defined names (refs.js): Univer moves them with inserted and
+  // deleted rows and columns, in the same undo step. Stored coordinates are the fallback.
+  const sourceAt = (p) => (p.sourceRef ? refs?.resolve(p.sourceRef) : { sheetId: p.source.sheetId, range: p.source.range })
+  const anchorAt = (p) => { const a = p.anchorRef ? refs?.resolve(p.anchorRef) : null; return a ? { row: a.range.startRow, col: a.range.startColumn } : p.anchor }
   // Like Excel's PivotCache: the records a report was built from are kept with it (p.cache). Layout changes and
   // GETPIVOTDATA use them; only creating and refreshing read the source again.
   const readLive = (p) => {
-    const s = wb().getSheetBySheetId(p.source.sheetId)
-    return s ? readSource((r, c) => { const v = s.getRange(r, c).getRawValue(); return v === '' ? null : v }, p.source.range) : null
+    const at = sourceAt(p)
+    const s = at && wb().getSheetBySheetId(at.sheetId)
+    return s ? readSource((r, c) => { const v = s.getRange(r, c).getRawValue(); return v === '' ? null : v }, at.range) : null
   }
   const sourceOf = (p) => p.cache ?? readLive(p)
-  const inside = (p, r, c) => r >= p.extent.row && r < p.extent.row + p.extent.rows && c >= p.extent.col && c < p.extent.col + p.extent.cols
+  /** The cells the report wrote (filters included), or null before it has written any. */
+  const written = (p) => {
+    const e = p.extent
+    if (!e?.written) return null
+    const a = anchorAt(p)
+    return { row: a.row + e.dRow - e.filterRows, col: a.col, rows: e.rows + e.filterRows, cols: e.cols }
+  }
+  // An empty report shows Excel's placeholder area (A3:C20) for the fields pane.
+  const footprint = (p) => written(p) ?? { ...anchorAt(p), rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols }
+  const inside = (p, r, c) => { const f = footprint(p); return r >= f.row && r < f.row + f.rows && c >= f.col && c < f.col + f.cols }
   /** The PivotTable the active cell is in (on the active sheet). */
   function active() {
     const g = ws().getActiveRange()?.getRange()
@@ -43,31 +57,38 @@ export function createPivots(api, { dialogs }) {
   }
   const message = (text) => { openDialog({ title: 'Sheetly', width: 380, body: el('p', { style: { margin: 0 } }, text), cancelLabel: 'Close' }); return true }
 
-  // ---- writing a report
-  function clearExtent(sheet, p) {
-    if (!p.extent) return
-    const top = Math.max(0, p.extent.row - (p.extent.filterRows ?? 0))
-    const range = sheet.getRange(top, p.extent.col, p.extent.row + p.extent.rows - top, p.extent.cols)
-    range.clear()
-  }
-  function render(sheet, p, { refresh = false } = {}) {
+  // ---- writing a report: only the cells it wrote last time are cleared; other data in the way needs consent.
+  function render(sheet, p, { refresh = false, force = false } = {}) {
     if (refresh || !p.cache) p.cache = readLive(p)
     const src = p.cache
-    clearExtent(sheet, p)
-    const { row, col } = p.anchor
-    if (!src) { p.extent = { row, col, rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols, filterRows: 0 }; return p }
-    const L = layout(p, src)
-    const filters = filterCells(p)
+    const old = written(p)
+    const { row, col } = anchorAt(p)
+    const empty = !src || (!p.rows.length && !p.cols.length && !p.values.length && !p.filters.length)
+    const L = empty ? null : layout(p, src)
+    const filters = empty ? [] : filterCells(p)
     // Report filters sit above the report with one blank row between; the report moves down to make room.
     const top = Math.max(row, filters.length ? filters.length + 1 : 0)
+    const hasGrid = L && (p.rows.length || p.cols.length || p.values.length)
+    const width = hasGrid ? Math.max(...L.grid.map((r) => r.length)) : filters.length ? 2 : 0
+    const rows = hasGrid ? L.grid.length : 0
+    const filterRows = filters.length ? filters.length + 1 : 0
+    const next = width ? { row: top - filterRows, col, rows: rows + filterRows, cols: width } : null
+    const ownedBefore = (r, c) => old && r >= old.row && r < old.row + old.rows && c >= old.col && c < old.col + old.cols
+    if (next && !force) {
+      for (let r = next.row; r < next.row + next.rows; r++) for (let c = next.col; c < next.col + next.cols; c++) {
+        const v = sheet.getRange(r, c).getRawValue()
+        if (v != null && v !== '' && !ownedBefore(r, c)) return { conflict: true }
+      }
+    }
+    if (old) sheet.getRange(old.row, old.col, old.rows, old.cols).clear()
+    if (!next) { p.extent = null; return p }
     filters.forEach(([name, value], i) => {
       const r = top - filters.length - 1 + i
       sheet.getRange(r, col, 1, 2).setValues([[name, value]])
       sheet.getRange(r, col).setFontWeight('bold')
     })
-    const empty = !p.rows.length && !p.cols.length && !p.values.length
-    if (empty) { p.extent = { row: top, col, rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols, filterRows: filters.length ? filters.length + 1 : 0 }; return p }
-    const width = Math.max(...L.grid.map((r) => r.length))
+    p.extent = { written: true, dRow: top - row, rows, cols: width, filterRows }
+    if (!hasGrid) return p
     const values = L.grid.map((r) => [...r.map((c) => c.v ?? null), ...Array(width - r.length).fill(null)])
     sheet.getRange(top, col, values.length, width).setValues(values)
     // Excel's default look: header rows on a light blue band in bold, subtotal and Grand Total rows in bold.
@@ -79,7 +100,6 @@ export function createPivots(api, { dialogs }) {
     if (L.grid[last]?.[0]?.kind === 'grandLabel') sheet.getRange(top + last, col, 1, width).setBorder(BorderType.TOP, BorderStyleTypes.THIN, RULE)
     // Compact form indents inner row items.
     L.grid.forEach((r, i) => { if (r[0]?.indent) indent(sheet, top + i, col, r[0].indent) })
-    p.extent = { row: top, col, rows: L.grid.length, cols: width, filterRows: filters.length ? filters.length + 1 : 0 }
     return p
   }
   // Indentation as left padding (Excel indents compact-form items by one level each).
@@ -92,7 +112,13 @@ export function createPivots(api, { dialogs }) {
     const list = listOf(sheet).filter((x) => x.id !== p.id)
     store(sheet, [...list, structuredClone(p)])
   }
-  function update(sheet, p) { render(sheet, p); save(sheet, p); showPane(); return true }
+  // Excel asks before a report grows over other data.
+  const askReplace = (sheet, then) => openDialog({ title: 'Sheetly', width: 400, okLabel: 'OK',
+    body: el('p', { style: { margin: 0 } }, `There's already data in [${sheet.getSheetName()}]. Do you want to replace it?`), onOk: then })
+  function update(sheet, p, opts = {}) {
+    if (render(sheet, p, opts)?.conflict) { askReplace(sheet, () => { render(sheet, p, { ...opts, force: true }); save(sheet, p); showPane() }); return true }
+    save(sheet, p); showPane(); return true
+  }
 
   // ---- Insert > PivotTable
   function createDialog() {
@@ -140,9 +166,11 @@ export function createPivots(api, { dialogs }) {
     let k = 1
     while (used.has(`PivotTable${k}`)) k++
     const p = { id: `pt${Date.now().toString(36)}${k}`, name: `PivotTable${k}`, source: { sheetId: src.sheet.getSheetId(), range: src.range },
-      anchor, rows: [], cols: [], values: [], filters: [] }
+      anchor, rows: [], cols: [], values: [], filters: [],
+      sourceRef: refs?.track(src.sheet.getSheetId(), src.range) ?? undefined,
+      anchorRef: refs?.track(target.getSheetId(), { startRow: anchor.row, endRow: anchor.row, startColumn: anchor.col, endColumn: anchor.col }) ?? undefined }
     wb().setActiveSheet(target)
-    render(target, p, { refresh: true })
+    render(target, p, { refresh: true, force: true })
     save(target, p)
     target.getRange(anchor.row, anchor.col).activate()
     setTimeout(showPane, 0)
@@ -213,7 +241,7 @@ export function createPivots(api, { dialogs }) {
   }
   function refresh(all) {
     const list = all ? allPivots() : (() => { const p = active(); return p ? [{ sheet: ws(), p }] : [] })()
-    for (const { sheet, p } of list) { const q = structuredClone(p); render(sheet, q, { refresh: true }); save(sheet, q) }
+    for (const { sheet, p } of list) update(sheet, structuredClone(p), { refresh: true })
     showPane()
     return true
   }

@@ -127,7 +127,7 @@ export function createDialogs(api) {
   // ---------- Go To (F5 / Ctrl+G)
   const goToHistory = []
   function goTo() {
-    const names = (wb().getDefinedNames?.() ?? []).map((n) => n.getName())
+    const names = (wb().getDefinedNames?.() ?? []).filter((n) => !n.getName().startsWith('SheetlyRef_')).map((n) => n.getName())
     const input = el('input', { type: 'text', 'aria-label': 'Reference' })
     const list = el('div', { class: 'sx-list', role: 'listbox' },
       ...[...names, ...goToHistory].map((n) => el('div', { role: 'option', onClick: (e) => { input.value = n; list.querySelectorAll('.sel').forEach((x) => x.classList.remove('sel')); e.target.classList.add('sel') },

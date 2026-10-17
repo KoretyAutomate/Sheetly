@@ -307,16 +307,14 @@ export function specFromXml(xml) {
   const axisTitle = (tag) => texts(new RegExp(`<c:${tag}>[\\s\\S]*?<c:title>([\\s\\S]*?)<\\/c:title>[\\s\\S]*?<\\/c:${tag}>`).exec(plot)?.[1])
   const ax = /<c:catAx>/.test(plot) ? axisTitle('catAx') : axisTitle('valAx'), ay = axisTitle('valAx')
   const axisTitles = ax || (ay && /<c:catAx>/.test(plot)) ? { x: ax || '', y: /<c:catAx>/.test(plot) ? ay : '' } : null
-  // Series picked one by one (gaps between them, or not lined up with the categories) keep their own references.
   const serXml = [...plot.matchAll(/<c:ser>([\s\S]*?)<\/c:ser>/g)].map((m) => m[1])
   const refIn = (x, tag) => { const f = new RegExp(`<c:${tag}>[\\s\\S]*?<c:f>([^<]*)<\\/c:f>`).exec(x)?.[1]; return f ? parseRange(unesc(f).replace(/^.*!/, '')) : null }
   const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), nameText: texts(/<c:tx>([\s\S]*?)<\/c:tx>/.exec(x)?.[1]) || null }))
   const categories = serXml.length ? refIn(serXml[0], 'cat') ?? refIn(serXml[0], 'xVal') : null
-  const lines = series.map((x) => x.values && (plotBy === 'rows' ? x.values.startRow : x.values.startColumn))
-  const contiguous = plotBy !== null && series.every((x) => x.values) && lines.every((l, i) => i === 0 || l === lines[i - 1] + 1)
-  const regular = contiguous && (!categories || (plotBy === 'cols' ? categories.endColumn === lines[0] - 1 : categories.endRow === lines[0] - 1))
   const source = { sheetName: parsed[0].sheet, range: box }
-  if (!regular && series.every((x) => x.values)) {
+  // A chart from a file keeps its series exactly as referenced: re-reading the block by cell types could, for
+  // example, take numeric category labels (years) for a series.
+  if (series.every((x) => x.values)) {
     source.series = series.map((x) => ({ name: x.name ? [x.name.startRow, x.name.startColumn] : null, nameText: x.nameText, values: x.values }))
     source.categories = categories
   }
