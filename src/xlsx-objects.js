@@ -24,6 +24,7 @@ export function parseRange(a1) {
   const r0 = +m[2] - 1, c0 = colNum(m[1]), r1 = m[4] ? +m[4] - 1 : r0, c1 = m[3] ? colNum(m[3]) : c0
   return { startRow: Math.min(r0, r1), endRow: Math.max(r0, r1), startColumn: Math.min(c0, c1), endColumn: Math.max(c0, c1) }
 }
+const absA1 = (g) => rangeA1(g).replace(/([A-Z]+)(\d+)/g, '$$$1$$$2')
 const sqrefIn = (sqref) => String(sqref).split(/\s+/).map(parseRange).filter(Boolean)
 const sqrefOut = (ranges) => ranges.map(rangeA1).join(' ')
 const plainRange = (g) => ({ startRow: g.startRow, endRow: g.endRow, startColumn: g.startColumn, endColumn: g.endColumn })
@@ -85,7 +86,8 @@ export function cfOut(ws, rules = []) {
           rule = ['equal', 'notEqual'].includes(x.operator) ? { type: 'expression', formulae: [`${cell}${x.operator === 'equal' ? '=' : '<>'}AVERAGE(${abs})`], style }
             : { type: 'aboveAverage', aboveAverage: x.operator.startsWith('greater'), equalAverage: x.operator.endsWith('OrEqual'), style }
           break
-        case 'formula': rule = { type: 'expression', formulae: [String(x.value ?? '').replace(/^=/, '')], style }; break
+        case 'formula': rule = x.sheetlyStdDev ? { type: 'aboveAverage', aboveAverage: x.sheetlyStdDev.above, equalAverage: x.sheetlyStdDev.equal, stdDev: x.sheetlyStdDev.n, style }
+          : { type: 'expression', formulae: [String(x.value ?? '').replace(/^=/, '')], style }; break
         case 'duplicateValues': case 'uniqueValues': rule = { type: x.subType, style }; break
         default: break
       }
@@ -145,7 +147,17 @@ export function cfIn(ws, sheetId, color = fromArgb) {
       case 'containsText': rule = { type: 'highlightCell', subType: 'text', operator: x.operator ?? 'containsText', value: x.text ?? textFromFormula(x.formulae?.[0]) ?? '', style }; break
       case 'timePeriod': rule = { type: 'highlightCell', subType: 'timePeriod', operator: x.timePeriod, style }; break
       case 'top10': rule = { type: 'highlightCell', subType: 'rank', isBottom: !!x.bottom, isPercent: !!x.percent, value: x.rank ?? 10, style }; break
-      case 'aboveAverage': rule = { type: 'highlightCell', subType: 'average', operator: `${x.aboveAverage === false ? 'lessThan' : 'greaterThan'}${x.equalAverage ? 'OrEqual' : ''}`, style }; break
+      case 'aboveAverage': {
+        const operator = `${x.aboveAverage === false ? 'lessThan' : 'greaterThan'}${x.equalAverage ? 'OrEqual' : ''}`
+        if (!x.stdDev) { rule = { type: 'highlightCell', subType: 'average', operator, style }; break }
+        // N standard deviations above / below the average: the same test as a formula (Univer has no such rule),
+        // marked so it is written back as Excel's rule.
+        const g = ranges[0], cell = `${colName(g.startColumn)}${g.startRow + 1}`, all = ranges.map((r) => absA1(r)).join(',')
+        const above = x.aboveAverage !== false, op = above ? (x.equalAverage ? '>=' : '>') : (x.equalAverage ? '<=' : '<')
+        rule = { type: 'highlightCell', subType: 'formula', value: `=${cell}${op}AVERAGE(${all})${above ? '+' : '-'}${x.stdDev}*STDEV.P(${all})`, style,
+          sheetlyStdDev: { n: x.stdDev, above, equal: !!x.equalAverage } }
+        break
+      }
       case 'expression': rule = { type: 'highlightCell', subType: 'formula', value: `=${x.formulae?.[0] ?? 'FALSE'}`, style }; break
       case 'duplicateValues': case 'uniqueValues': rule = { type: 'highlightCell', subType: x.type, style }; break
       case 'dataBar': rule = { type: 'dataBar', isShowValue: x.showValue !== false,

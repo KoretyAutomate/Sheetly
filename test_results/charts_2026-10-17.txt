@@ -1,4 +1,4 @@
-charts  2026-10-17T11:05:40.319Z
+charts  2026-10-17T11:54:42.657Z
 PASS  Alt+F1: clustered column, series by columns with the header row as names
 PASS  the chart follows its data: B2 = 99 redraws it
 PASS  formula results feed the chart too
@@ -20,6 +20,7 @@ PASS  value axis: Excel-style automatic minimum (data 100-102 do not start at 0)
 PASS  Region and Product (text) label the axis in two levels; only Sales is plotted
 PASS  saved chart: multi-level categories over both label columns
 PASS  series picked one by one: only those columns are plotted
+PASS  series picked one by one: the value axis uses their number format (0.2 -> 20%)
 PASS  a hidden row drops out of a chart with series picked one by one
 PASS  and their references move with an inserted column
 PASS  Switch Row/Column on series that are not next to each other is refused and the chart stays as it is
@@ -31,4 +32,4 @@ PASS  the chart definition is saved (type + source range)
 PASS  one series: no legend at first; Legend shows it on the first press
 PASS  no page errors
 
-31/31 passed
+32/32 passed

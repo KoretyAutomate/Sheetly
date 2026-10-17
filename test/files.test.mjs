@@ -113,6 +113,17 @@ check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperli
   check('a copied sheet\'s kept table stays on the copy\'s cells when the original moves (copy A3:B5, original A6:B8)', refOf(copyName) === 'A3:B5' && refOf('Sales') === 'A6:B8', `${copyName} ${refOf(copyName)} ${refOf('Sales')}`)
 }
 
+// a rule 2 standard deviations above average survives open + save in the app
+{
+  const w = new ExcelJS.Workbook(), t = w.addWorksheet('S')
+  for (let i = 1; i <= 5; i++) t.getCell(`A${i}`).value = i
+  t.addConditionalFormatting({ ref: 'A1:A5', rules: [{ type: 'aboveAverage', aboveAverage: true, stdDev: 2, priority: 1, style: { font: { bold: true } } }] })
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'sd.xlsx')`, Array.from(new Uint8Array(await w.xlsx.writeBuffer()))); await win.waitForTimeout(1500)
+  const z = await JSZip.loadAsync(Buffer.from(await ev(`return Array.from(await X.xlsx.save())`)))
+  const x = await z.file('xl/worksheets/sheet1.xml').async('string')
+  check('a "2 standard deviations above average" rule is saved back as one', /type="aboveAverage"[^>]*stdDev="2"/.test(x), (x.match(/<cfRule[^>]*>/g) ?? []).join(' '))
+}
+
 // Ctrl+; in a 1904 workbook writes today's 1904 serial
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true; w.addWorksheet('D').getCell('A1').value = 1

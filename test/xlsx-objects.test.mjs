@@ -400,6 +400,30 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('a formula reading a PivotTable through a name (or a name using one) is saved as its value; others stay formulas', c21('A1') === 45 && c21('B1') === 91 && c21('C1')?.formula === 'Plain' && c21('D1')?.formula === 'PivotTotalX', J([c21('A1'), c21('B1'), c21('C1'), c21('D1')]))
 }
 
+// ---- review round 22: qualified pivot names, chart over a spill, standard-deviation rules
+{
+  const s22 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DEFINED_NAME_PLUGIN', data: J({ n1: { id: 'n1', name: 'PivotTotal', formulaOrRefString: '=GETPIVOTDATA("Sales",Data!$A$3)' } }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=Data!PivotTotal', v: 45, t: 2 }, 1: { f: "='Data'!PivotTotal+1", v: 46, t: 2 } } } } } }
+  const w22 = new ExcelJS.Workbook(); await w22.xlsx.load(await snapshotToXlsx(s22))
+  check('a sheet-qualified name that reads a PivotTable (Data!PivotTotal) is saved as its value', w22.getWorksheet('Data').getCell('A1').value === 45 && w22.getWorksheet('Data').getCell('B1').value === 46, J([w22.getWorksheet('Data').getCell('A1').value, w22.getWorksheet('Data').getCell('B1').value]))
+  // a chart over a spilled table: header and labels come from the calculated array
+  const spill = [['Category', 'Sales'], ['a', 1], ['b', 2]]
+  const s23 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=SOMEARRAY()', v: 'Category', t: 1 } } } } },
+    resources: [{ name: 'SHEET_DRAWING_PLUGIN', data: J({ s1: { data: { c: { unitId: 'wb', subUnitId: 's1', drawingId: 'c', drawingType: 8, componentKey: 'sheetly-chart',
+      data: { v: 2, type: 'column', title: null, source: { sheetId: 's1', range: R(0, 0, 2, 1) } }, sheetTransform: { from: { column: 4, columnOffset: 0, row: 0, rowOffset: 0 }, to: { column: 9, columnOffset: 0, row: 10, rowOffset: 0 } } } }, order: ['c'] } }) }] }
+  const b23 = await snapshotToXlsx(s23, { arrayRangeOf: (id, r, c) => (r === 0 && c === 0 ? R(0, 0, 2, 1) : null), spillValueOf: (id, r, c) => spill[r]?.[c] ?? null })
+  const z23 = await JSZip.loadAsync(b23), cx = await z23.file(Object.keys(z23.files).find((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))).async('string')
+  check('a chart over a spilled table is saved with the header as the series name (B1) and data from row 2', cx.includes('<c:f>Data!$B$1</c:f>') && cx.includes('<c:f>Data!$B$2:$B$3</c:f>') && cx.includes('<c:f>Data!$A$2:$A$3</c:f>'), (cx.match(/<c:f>[^<]*<\/c:f>/g) ?? []).join(' '))
+  // above the average by 2 standard deviations: read as a formula rule, written back as Excel's rule
+  const w24 = new ExcelJS.Workbook(), ws24 = w24.addWorksheet('Data')
+  for (let i = 1; i <= 5; i++) ws24.getCell(`A${i}`).value = i
+  ws24.addConditionalFormatting({ ref: 'A1:A5', rules: [{ type: 'aboveAverage', aboveAverage: true, stdDev: 2, priority: 1, style: { font: { bold: true } } }] })
+  const r24 = await xlsxToSnapshot(Buffer.from(await w24.xlsx.writeBuffer()))
+  const cf24 = res(r24, 'SHEET_CONDITIONAL_FORMATTING_PLUGIN')[r24.sheetOrder[0]]?.[0]?.rule
+  const b24 = await snapshotToXlsx(r24), z24 = await JSZip.loadAsync(b24), x24 = await z24.file('xl/worksheets/sheet1.xml').async('string')
+  check('a rule 2 standard deviations above average keeps its threshold (formula in Sheetly, stdDev="2" in the file)', cf24?.subType === 'formula' && /AVERAGE\(\$A\$1:\$A\$5\)\+2\*STDEV\.P\(\$A\$1:\$A\$5\)/.test(cf24.value) && /type="aboveAverage"[^>]*stdDev="2"/.test(x24), `${J(cf24)} ${(x24.match(/<cfRule[^>]*>/g) ?? []).join(' ')}`)
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

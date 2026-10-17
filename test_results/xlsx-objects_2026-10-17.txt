@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T11:03:55.726Z
+xlsx objects  2026-10-17T11:52:57.447Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -71,8 +71,11 @@ PASS  scatter with years in the first column: written with them as X values
 PASS  a doughnut writes a ring per series (2); a pie its first series
 PASS  a spilling formula with GETPIVOTDATA is saved as all its values (45, 99)
 PASS  a formula reading a PivotTable through a name (or a name using one) is saved as its value; others stay formulas
+PASS  a sheet-qualified name that reads a PivotTable (Data!PivotTotal) is saved as its value
+PASS  a chart over a spilled table is saved with the header as the series name (B1) and data from row 2
+PASS  a rule 2 standard deviations above average keeps its threshold (formula in Sheetly, stdDev="2" in the file)
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-75/75 passed
+78/78 passed

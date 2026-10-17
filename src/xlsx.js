@@ -527,7 +527,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
   // Defined names that read a PivotTable (GETPIVOTDATA in them, or in a name they use; named LAMBDAs too): a formula
   // using one is saved as its value, like a GETPIVOTDATA call.
   const PIVOT_CALL = /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i
-  const usesName = (text, name) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])${name.replace(/[.\\]/g, '\\$&')}(?![\\p{L}\\p{N}_.!$\u0000])`, 'iu').test(text)
+  // (also qualified with a sheet: Data!PivotTotal, 'My data'!PivotTotal — quoted sheet names are masked)
+  const usesName = (text, name) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])(?:[\\p{L}\\p{N}_.]+!|\u0000+!)?${name.replace(/[.\\]/g, '\\$&')}(?![\\p{L}\\p{N}_.!$\u0000])`, 'iu').test(text)
   const pivotNames = new Set(Object.keys(nameMap).filter((n) => PIVOT_CALL.test(mask(String(nameMap[n] ?? '')))))
   for (let grew = true; grew;) {
     grew = false
@@ -646,7 +647,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
       const source = resolveSource(d.data.source, resolveName)
       const src = source && snap.sheets[source.sheetId]
       if (!src) continue
-      const get = (r, c) => { const v = src.cellData?.[r]?.[c]; return v?.v ?? (v?.p?.body?.dataStream ? docText(v.p) : null) }
+      // (cells of a spilled array are not stored: their calculated values come from the formula engine)
+      const get = (r, c) => { const v = src.cellData?.[r]?.[c]; return v?.v ?? (v?.p?.body?.dataStream ? docText(v.p) : null) ?? spillValueOf?.(source.sheetId, r, c) ?? null }
       charts.push({ sheetIndex, spec: { ...d.data, source }, from: d.sheetTransform.from, to: d.sheetTransform.to, get, sourceName: src.name })
     }
   }

@@ -58,7 +58,10 @@ function dataOf(spec0) {
   const w = sheet.getSheet()
   if (spec.source.series) {
     const d = explicitSeries((r, c) => sheet.getRange(r, c).getCalculatedValue(), spec.source, { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
-    return { ...d, title: chartTitle(spec, d), pattern: null }
+    // the value axis takes the number format of the first series' first cell, as for a block
+    const v0 = spec.source.series[0]?.values
+    const pattern = v0 ? sheet.getRange(v0.startRow, v0.startColumn).getNumberFormat?.() : null
+    return { ...d, title: chartTitle(spec, d), pattern: pattern && pattern !== 'General' ? pattern : null }
   }
   const d = seriesFrom((r, c) => sheet.getRange(r, c).getCalculatedValue(), spec.source.range, spec.plotBy,
     { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })

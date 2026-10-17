@@ -200,3 +200,19 @@ Still open (and why):
 - Chart sheets are saved as worksheets with a chart; Quick Analysis has no live preview.
 - Excel 365's Aptos font cannot be bundled; Calibri (Carlito) is the default.
 - KeyTip letters with one source, F6 KeyTip badges, Quick Analysis Count (COUNTA?) need a live Excel to confirm.
+
+## Status 2026-10-17 (review rounds 1-22 on gaps-r3-r6)
+The pre-push gate's Codex review ran 22 times on this branch; every finding was checked against the code, fixed
+with a test (or written down below), and the full regression run before each push (shortcuts 176, formulas 398,
+coverage 517, flash fill 11, outline 27, round2 50, xlsx 62, xlsx-objects 78, files 28, open-file 7, charts 32,
+pivot-model 28, pivot 36, sparklines 20). Each review kept finding a few new, narrower edge cases, so with the
+owner's agreement (2026-10-17) the branch was pushed with --no-verify after round 22. The next review's findings
+are follow-up work, not blockers.
+Follow-ups (known, not done):
+- Legacy array formulas (Ctrl+Shift+Enter) from a file are calculated as dynamic arrays: a result of another size
+  than the range spills to its own size (Excel cuts it, or pads with #N/A). Needs fixed-size arrays in Univer.
+- "N standard deviations above / below average" rules are shown as an equivalent formula rule using STDEV.P (Excel's
+  choice of sample vs population deviation still to be confirmed against a live Excel); the file keeps stdDev.
+- PivotTables are still written as values (no pivot cache); formulas that read them (GETPIVOTDATA, or names that
+  use it) are saved as their results for that reason.
+- Run the gate's Codex review on main after the merge and work through what it finds.
