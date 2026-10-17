@@ -72,10 +72,19 @@ export function aggregate(fn, values) {
   }
 }
 
+/** The report item a typed value names: the item of the same type first ("1" is the text item when there is one),
+ *  else one that matches loosely (the number 2024 for "2024"). */
+export function resolveItem(src, records, field, wanted) {
+  const i = src.fields.indexOf(field)
+  const items = [...new Map(records.map((r) => [itemKey(label(r[i])), label(r[i])])).values()]
+  return items.find((x) => sameItem(x, wanted)) ?? items.find((x) => same(x, wanted)) ?? null
+}
+
 /** Records left after the report filters. */
 export function filtered(def, src) {
   const idx = (f) => src.fields.indexOf(f)
-  return src.records.filter((rec) => (def.filters ?? []).every((fl) => !fl.items || fl.items.some((it) => same(label(rec[idx(fl.field)]), it))))
+  const chosen = (def.filters ?? []).filter((fl) => fl.items).map((fl) => [idx(fl.field), fl.items.map((it) => resolveItem(src, src.records, fl.field, it)).filter((x) => x !== null)])
+  return src.records.filter((rec) => chosen.every(([i, items]) => items.some((it) => sameItem(label(rec[i]), it))))
 }
 
 // Item tree of some fields over records: [{ item, path, children }].
@@ -179,8 +188,9 @@ export function getPivotData(def, src, dataField, pairs) {
     const f = shown.find((x) => same(x, field))
     if (!f) return { error: '#REF!' }
     const i = src.fields.indexOf(f)
-    sel = sel.filter((r) => same(label(r[i]), item))
-    if (!recs.some((r) => same(label(r[i]), item))) return { error: '#REF!' }
+    const it = resolveItem(src, recs, f, item)
+    if (it === null) return { error: '#REF!' }
+    sel = sel.filter((r) => sameItem(label(r[i]), it))
   }
   const out = aggregate(v.fn, sel.map((r) => r[src.fields.indexOf(v.field)]))
   return out == null ? { error: '#REF!' } : { value: out }

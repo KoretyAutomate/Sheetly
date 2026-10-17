@@ -40,9 +40,15 @@ export function createPivots(api, { dialogs, refs }) {
   }
   const sourceOf = (p) => p.cache ?? readLive(p)
   /** The cells the report wrote (filters included), or null before it has written any. */
+  // The written area is a hidden name too, so rows inserted or deleted inside the report grow or shrink it.
   const written = (p) => {
     const e = p.extent
     if (!e?.written) return null
+    if (p.writtenRef) {
+      const w = refs?.resolve(p.writtenRef)
+      if (!w) return null
+      return { row: w.range.startRow, col: w.range.startColumn, rows: w.range.endRow - w.range.startRow + 1, cols: w.range.endColumn - w.range.startColumn + 1 }
+    }
     const a = anchorAt(p)
     return { row: a.row + e.dRow - e.filterRows, col: a.col, rows: e.rows + e.filterRows, cols: e.cols }
   }
@@ -88,6 +94,8 @@ export function createPivots(api, { dialogs, refs }) {
       sheet.getRange(r, col).setFontWeight('bold')
     })
     p.extent = { written: true, dRow: top - row, rows, cols: width, filterRows }
+    const area = { startRow: next.row, endRow: next.row + next.rows - 1, startColumn: next.col, endColumn: next.col + next.cols - 1 }
+    p.writtenRef = (p.writtenRef ? refs?.update(p.writtenRef, sheet.getSheetId(), area) : refs?.track(sheet.getSheetId(), area)) ?? undefined
     if (!hasGrid) return p
     const values = L.grid.map((r) => [...r.map((c) => c.v ?? null), ...Array(width - r.length).fill(null)])
     sheet.getRange(top, col, values.length, width).setValues(values)
@@ -276,9 +284,10 @@ export function createPivots(api, { dialogs, refs }) {
         const row = el('div', { class: 'sx-pivot-item', draggable: 'true', 'data-area': key }, el('span', {}, text), menu)
         row.addEventListener('dragstart', (e) => { e.stopPropagation(); drag = { from: key, index: i, field: key === 'values' || key === 'filters' ? x.field : x } })
         if (key === 'filters') {
-          const items2 = [...new Set(src.records.map((r) => r[src.fields.indexOf(x.field)] ?? BLANK).map((v) => (v === '' ? BLANK : v)))]
-          const pick = el('select', { 'aria-label': `${x.field} filter`, onChange: (e) => setFilter(i, e.target.value === '' ? null : [e.target.value]) },
-            el('option', { value: '' }, '(All)'), ...items2.map((it) => el('option', { value: String(it), selected: x.items?.length === 1 && String(x.items[0]) === String(it) }, String(it))))
+          // Items keep their type (the number 1 and the text "1" are different items); options refer to them by index.
+          const items2 = [...new Map(src.records.map((r) => r[src.fields.indexOf(x.field)] ?? BLANK).map((v) => (v === '' ? BLANK : v)).map((v) => [`${typeof v}:${v}`, v])).values()]
+          const pick = el('select', { 'aria-label': `${x.field} filter`, onChange: (e) => setFilter(i, e.target.value === '' ? null : [items2[+e.target.value]]) },
+            el('option', { value: '' }, '(All)'), ...items2.map((it, k) => el('option', { value: String(k), 'data-item': String(it), selected: x.items?.length === 1 && x.items[0] === it }, String(it))))
           row.append(pick)
         }
         return row
@@ -299,6 +308,20 @@ export function createPivots(api, { dialogs, refs }) {
   }
   commands.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.operation.set-selections' || cmd.id.startsWith('sheet.operation.set-worksheet-active')) soon(showPane) })
 
+  /** After Copy Sheet: the copy's PivotTables get their own place (and source, when it was on the copied sheet). */
+  function remapCopy(fromId, sheet) {
+    const list = listOf(sheet)
+    if (!list.length) return
+    const re = (name, fallbackSheet, range, onCopy) => {
+      const at = name ? refs?.resolve(name) : range ? { sheetId: fallbackSheet, range } : null
+      if (!at) return name
+      return refs?.track(onCopy || at.sheetId === fromId ? sheet.getSheetId() : at.sheetId, at.range) ?? name
+    }
+    store(sheet, list.map((p) => ({ ...p, id: `${p.id}c`, sourceRef: re(p.sourceRef, p.source.sheetId, p.source.range, false),
+      anchorRef: re(p.anchorRef, fromId, { startRow: p.anchor.row, endRow: p.anchor.row, startColumn: p.anchor.col, endColumn: p.anchor.col }, true),
+      writtenRef: p.writtenRef ? re(p.writtenRef, fromId, null, true) : undefined })))
+  }
+
   /** GETPIVOTDATA: the PivotTable at (sheetId, row, col) answers for data_field and field/item pairs. */
   function lookup(sheetId, row, col, dataField, pairs) {
     const sheet = wb()?.getSheetBySheetId(sheetId)
@@ -308,6 +331,6 @@ export function createPivots(api, { dialogs, refs }) {
     return src ? getPivotData(p, src, dataField, pairs) : { error: '#REF!' }
   }
 
-  return { createDialog, create, active, place, toggleField, removeAt, moveTo, moveWithin, setFilter, setValueField, valueFieldSettings, refresh, lookup, showPane,
+  return { remapCopy, createDialog, create, active, place, toggleField, removeAt, moveTo, moveWithin, setFilter, setValueField, valueFieldSettings, refresh, lookup, showPane,
     list: () => allPivots().map(({ sheet, p }) => ({ sheet: sheet.getSheetName(), ...p })) }
 }

@@ -36,6 +36,11 @@ check('column field and two value fields: item row, then the value captions next
   const src2 = readSource((r, c) => rows2[r]?.[c] ?? null, { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 })
   const L2 = layout({ rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }, src2)
   check('the number 1 and the text "1" are separate items, each counted once', show(L2) === 'Row Labels | Sum of V\n1 | 10\n1 | 20\nGrand Total | 30', '\n' + show(L2))
+  const d2 = { rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }
+  const gp = (it) => { const x = getPivotData(d2, src2, 'V', [['K', it]]); return x.error ?? x.value }
+  check('GETPIVOTDATA tells them apart: 1 -> 10, "1" -> 20', gp(1) === 10 && gp('1') === 20, `${gp(1)} ${gp('1')}`)
+  const F2 = layout({ rows: [], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [{ field: 'K', items: ['1'] }] }, src2)
+  check('a report filter on the text "1" keeps only that item', show(F2) === 'Sum of V\n20', '\n' + show(F2))
 }
 const def = { rows: ['Region'], cols: ['Product'], values: sum, filters: [] }
 const g = (df, pairs) => { const x = getPivotData(def, src, df, pairs); return x.error ?? x.value }

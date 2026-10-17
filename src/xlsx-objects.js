@@ -271,7 +271,7 @@ export function tablesIn(ws) {
     const m = t.table ?? t.model ?? t
     const g = parseRange(m.tableRef ?? m.ref)
     if (!g) continue
-    out.push({ name: m.displayName ?? m.name, range: g, showHeader: m.headerRow !== false, showFooter: !!m.totalsRow })
+    out.push({ name: m.displayName ?? m.name, range: g, showHeader: m.headerRow !== false, showFooter: !!m.totalsRow, columns: (m.columns ?? []).map((c) => c.name) })
   }
   return out
 }

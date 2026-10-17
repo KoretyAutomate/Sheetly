@@ -55,7 +55,7 @@ g = await ev(`return [S().getRange('G1').getRawValue(), S().getRange('G2').getRa
 check('GETPIVOTDATA after the change: "Sales" still finds the field (East/B = 20), the old caption "Sum of Sales" is #REF!', g === '20|#REF!', g)
 // ---- report filter: Region to Filters, pick West
 await ev(`const s=[...document.querySelectorAll('.sx-pivot-area[data-area=rows] .sx-pivot-item')].find(x=>x.textContent.startsWith('Region')).querySelector('select'); s.value='filters'; s.dispatchEvent(new Event('change'))`); await settle(700)
-await ev(`const s=document.querySelector('.sx-pivot-area[data-area=filters] select[aria-label="Region filter"]'); s.value='West'; s.dispatchEvent(new Event('change'))`); await settle(700)
+await ev(`const s=document.querySelector('.sx-pivot-area[data-area=filters] select[aria-label="Region filter"]'); s.value=[...s.options].find(o=>o.dataset.item==='West').value; s.dispatchEvent(new Event('change'))`); await settle(700)
 g = await grid('A1:B1') + ' / ' + await grid('A3:D5')
 check('report filter: Region / West above the report; only West is summarised', g === 'Region|West / Average of Sales|Column Labels||\n|A|Grand Total|\n|6|6|', g)
 // ---- Refresh: change the source, Alt+F5
@@ -97,6 +97,20 @@ const inside = await ev(`return P.active()?.name ?? null`)
 await key('Alt+F5'); await settle(800)
 const total1 = await ev(`return S().getRange('G9').getRawValue()`)
 check('after inserting rows above source and report, the report is found and Refresh reads the moved source', inside !== null && total0 === total1 && typeof total1 === 'number', `${inside} ${total0} ${total1}`)
+
+// ---- deleting a row inside the report shrinks what it owns: data moved up into its old area is safe
+await ev(`S().getRange('F10').setValue('below')`); await settle()
+await ev(`S().deleteRows(6, 1)`); await settle(600)
+await ev(`S().getRange('F6').activate()`); await settle(300)
+await key('Alt+F5'); await settle(800)
+const asked2 = await ev(`return document.querySelector('.sx-dialog p')?.textContent ?? ''`)
+check('after a row inside the report is deleted, Refresh asks before overwriting the cell that moved up', asked2.startsWith("There's already data in") && (await ev(`return S().getRange('F9').getRawValue()`)) === 'below', `${asked2} | ${await ev(`return S().getRange('F9').getRawValue()`)}`)
+await key('Escape'); await settle(300)
+// ---- Copy Sheet: the copy's PivotTable is found on the copy
+const ids0 = await ev(`return W().getSheets().map(s=>s.getSheetId()).join(',')`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('sheet.command.copy-sheet', { unitId: W().getId(), subUnitId: S().getSheetId() })`); await settle(800)
+const copy = await ev(`const before='${ids0}'.split(','); const c=W().getSheets().find(s=>!before.includes(s.getSheetId())); W().setActiveSheet(c); await new Promise(r=>setTimeout(r,300)); S().getRange('F6').activate(); await new Promise(r=>setTimeout(r,300)); return [S().getSheetName(), P.active()?.name ?? null].join('|')`)
+check('a copied sheet\'s PivotTable is found on the copy', /\|PivotTable\d+$/.test(copy) && !copy.startsWith('Sheet1|'), copy)
 
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()

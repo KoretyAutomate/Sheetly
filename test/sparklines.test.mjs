@@ -72,6 +72,24 @@ await ev(`await api._injector.get(window.__ICommandService).executeCommand('univ
 const n2 = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
 check('a deleted sparkline row is gone, and Undo brings the sparkline back', n1 === n0 - 1 && n2 === n0, `${n0} ${n1} ${n2}`)
 
+// Add and Clear are undo steps
+const before = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+await ev(`SP.add('line','A2:E2','H2')`); await settle(400)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(400)
+const afterUndo = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.redo')`); await settle(400)
+const afterRedo = await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)
+check('adding sparklines is one undo step (undo removes, redo puts back)', afterUndo === before && afterRedo === before + 1, `${before} ${afterUndo} ${afterRedo}`)
+await ev(`S().getRange('H2').activate(); SP.clear()`); await settle(400)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(400)
+check('Clear can be undone', (await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)) === before + 1)
+await ev(`S().getRange('H2').activate(); SP.clear()`); await settle(400)
+// Copy Sheet keeps the sparklines on the copy, reading the copy's data
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('sheet.command.copy-sheet', { unitId: W().getId(), subUnitId: S().getSheetId() })`); await settle(800)
+const copied = await ev(`const c=W().getSheets().find(s=>s.getSheetId()!==W().getSheets()[0].getSheetId()); W().setActiveSheet(c); await new Promise(r=>setTimeout(r,400)); return JSON.stringify([SP.groups().reduce((n,g)=>n+g.items.length,0), SP.groups().every(g=>g.items.every(i=>i.sheetId===S().getSheetId()))])`)
+check('a copied sheet keeps its sparklines, reading its own data', copied === `[${before},true]`, copied)
+await ev(`W().setActiveSheet(W().getSheets()[0])`); await settle(400)
+
 // Clear
 await ev(`S().getRange('F2:F4').activate(); SP.clear()`); await settle(600)
 await ev(`S().getRange('J30').activate()`)

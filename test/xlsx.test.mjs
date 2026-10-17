@@ -192,7 +192,7 @@ const J = JSON.stringify
     ['LET(x,"x",x&"x")', '_xlfn.LET(_xlpm.x,"x",_xlpm.x&"x")'], ['SUM(x1,A1)', 'SUM(x1,A1)'], ['LET(a1x,5,a1x+A1)', '_xlfn.LET(_xlpm.a1x,5,_xlpm.a1x+A1)'],
     ['IF(A1="LET(x,1,x)",1,0)', 'IF(A1="LET(x,1,x)",1,0)'], ['LET(x,1,SUM(Table1[x]))', '_xlfn.LET(_xlpm.x,1,SUM(Table1[x]))'], ['LET(x,1,x&"x""x")', '_xlfn.LET(_xlpm.x,1,_xlpm.x&"x""x")'],
     ['LET(fn,LAMBDA(x,x+1),fn(5))', '_xlfn.LET(_xlpm.fn,_xlfn.LAMBDA(_xlpm.x,_xlpm.x+1),_xlpm.fn(5))'], ['LAMBDA(f,v,f(v))(SQRT,4)', '_xlfn.LAMBDA(_xlpm.f,_xlpm.v,_xlpm.f(_xlpm.v))(SQRT,4)'],
-    ['LAMBDA(max,MAX(max,1))', '_xlfn.LAMBDA(_xlpm.max,MAX(_xlpm.max,1))'], ['LET(sum,5,SUM(sum,1))', '_xlfn.LET(_xlpm.sum,5,SUM(_xlpm.sum,1))']]
+    ['LAMBDA(max,MAX(max,1))', '_xlfn.LAMBDA(_xlpm.max,MAX(_xlpm.max,1))'], ['LET(sum,5,SUM(sum,1))', '_xlfn.LET(_xlpm.sum,5,SUM(_xlpm.sum,1))'], ["LET(x,1,'Sales x Plan'!A1+x)", "_xlfn.LET(_xlpm.x,1,'Sales x Plan'!A1+_xlpm.x)"], ["LET(x,1,'It''s x'!A1+x)", "_xlfn.LET(_xlpm.x,1,'It''s x'!A1+_xlpm.x)"]]
   const bad = cases.filter(([f, want]) => formulaOut(f) !== want || formulaIn(formulaOut(f)) !== f)
   check('write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare', !bad.length, J(bad.map(([f]) => [f, formulaOut(f)])))
 }

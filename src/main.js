@@ -122,6 +122,20 @@ const fitExcelGrid = () => {
   }
 }
 commandService.onCommandExecuted((cmd) => { if (cmd.id === 'sheet.command.insert-sheet' || cmd.id === 'sheet.command.copy-sheet') fitExcelGrid() })
+// Copy Sheet copies the sheet's objects with references to the original; the copies get their own.
+let sheetsBeforeCopy = null
+let copiedFrom = null
+commandService.beforeCommandExecuted((cmd) => {
+  if (cmd.id !== 'sheet.command.copy-sheet') return
+  sheetsBeforeCopy = new Set(univerAPI.getActiveWorkbook().getSheets().map((s) => s.getSheetId()))
+  copiedFrom = cmd.params?.subUnitId ?? univerAPI.getActiveWorkbook().getActiveSheet().getSheetId()
+})
+commandService.onCommandExecuted((cmd) => {
+  if (cmd.id !== 'sheet.command.copy-sheet' || !sheetsBeforeCopy) return
+  const fromId = copiedFrom
+  for (const s of univerAPI.getActiveWorkbook().getSheets()) if (!sheetsBeforeCopy.has(s.getSheetId())) { sparklines.remapCopy(fromId, s); pivots.remapCopy(fromId, s) }
+  sheetsBeforeCopy = null
+})
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)
 export const EXCEL_ROWS = 1048576, EXCEL_COLS = 16384
 // Excel's sheet defaults: Calibri 11, rows 15 pt (20 px), columns 8.43 characters (64 px).

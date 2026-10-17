@@ -1,4 +1,4 @@
-pivot model  2026-10-17T01:29:49.641Z
+pivot model  2026-10-17T01:57:26.034Z
 PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
 PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
 PASS  two row fields: compact form, subtotals on the group row, inner items indented
@@ -11,6 +11,8 @@ PASS  aggregates: count counts non-blank, countNums numbers, stdDev / var
 PASS  blank header -> not a valid PivotTable source
 PASS  column field and two value fields: item row, then the value captions next to Row Labels
 PASS  the number 1 and the text "1" are separate items, each counted once
+PASS  GETPIVOTDATA tells them apart: 1 -> 10, "1" -> 20
+PASS  a report filter on the text "1" keeps only that item
 PASS  GETPIVOTDATA("Sales", pt) = grand total 45
 PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
 PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
@@ -19,4 +21,4 @@ PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
 PASS  GETPIVOTDATA: combination with no data -> #REF!
 PASS  GETPIVOTDATA: unknown data field -> #REF!
 
-19/19 passed
+21/21 passed

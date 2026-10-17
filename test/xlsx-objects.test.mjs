@@ -216,7 +216,22 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const ex = explicitSeries((r, c) => grid[r]?.[c] ?? null, { categories: R(0, 0, 2, 1), series: [{ name: null, nameText: 'S', values: R(0, 2, 2, 2) }] })
   check('two-column categories stay two levels (inner A,B,C; outer East, , West)', J(ex.labels) === J(['A', 'B', 'C']) && J(ex.levels) === J([['East', '', 'West']]) && ex.series[0].values.length === 3, J(ex))
   const hid = explicitSeries((r, c) => grid[r]?.[c] ?? null, { categories: R(0, 1, 2, 1), series: [{ name: null, nameText: 'S', values: R(0, 2, 2, 2) }] }, { hiddenRow: (r) => r === 1 })
+  const two = explicitSeries((r, c) => [[1, 10, 100], [2, 20, 200]][r]?.[c] ?? null, { categories: R(0, 0, 1, 0), series: [{ name: null, nameText: 'B', values: R(0, 1, 1, 1) }, { name: null, nameText: 'C', values: R(0, 2, 1, 2) }] }, { hiddenCol: (c) => c === 2 })
+  const twoB = explicitSeries((r, c) => [[1, 10, 100], [2, 20, 200]][r]?.[c] ?? null, { categories: R(0, 0, 1, 0), series: [{ name: null, nameText: 'B', values: R(0, 1, 1, 1) }, { name: null, nameText: 'C', values: R(0, 2, 1, 2) }] }, { hiddenCol: (c) => c === 1 })
+  check('hiding a series column drops only that series (C hidden -> B stays; B hidden -> C keeps all points)', J(two.series.map((x) => [x.name, x.values])) === J([['B', [10, 20]]]) && J(twoB.series.map((x) => [x.name, x.values])) === J([['C', [100, 200]]]), J([two.series, twoB.series]))
   check('a hidden row is left out of explicit series and their categories', J(hid.labels) === J(['A', 'C']) && J(hid.series[0].values) === J([1, 3]), J(hid))
+}
+
+// ---- a table with its header row hidden keeps its column names
+{
+  const w = new ExcelJS.Workbook(), s9 = w.addWorksheet('T')
+  s9.addTable({ name: 'Sales', ref: 'A1', headerRow: false, columns: [{ name: 'Amount' }, { name: 'Qty' }], rows: [[10, 1], [20, 2]] })
+  const r9 = await xlsxToSnapshot(await w.xlsx.writeBuffer()), sh = r9.sheets[r9.sheetOrder[0]]
+  check('a headerless table is not handed to Univer (which would name columns from the data)', !(r9.sheetlyTables ?? []).length && sh.custom?.sheetlyTablesNoHeader?.[0]?.columns?.join() === 'Amount,Qty', J([r9.sheetlyTables, sh.custom]))
+  const w2 = new ExcelJS.Workbook(); await w2.xlsx.load(await snapshotToXlsx(r9))
+  const t9 = w2.getWorksheet('T').getTables()[0]
+  const m9 = t9?.table ?? t9
+  check('and it is written back with its names and no header row', m9?.headerRow === false && J((m9.columns ?? []).map((c) => c.name)) === J(['Amount', 'Qty']), J(m9 && { headerRow: m9.headerRow, columns: m9.columns }))
 }
 
 // ---- 1904 date system

@@ -17,15 +17,16 @@ export function createRefs(api) {
   let seq = 0
   const nextId = () => `${REF_PREFIX}${Date.now().toString(36)}${(++seq).toString(36)}`
 
-  /** A new hidden name for a range on a sheet; returns its name. Not an undo step of its own. */
-  function track(sheetId, range, book = wb()) {
+  /** A new hidden name for a range on a sheet (or `name` pointed somewhere else); returns the name. Not an undo
+   *  step of its own. */
+  function track(sheetId, range, book = wb(), name = nextId()) {
     const sheet = book.getSheetBySheetId(sheetId)
     if (!sheet || !range) return null
-    const name = nextId()
     commands.syncExecuteCommand('formula.mutation.set-defined-name', { unitId: book.getId(), id: name, name,
       formulaOrRefString: `${quote(sheet.getSheetName())}!${absolute(rangeA1(range))}`, hidden: true })
     return name
   }
+  const update = (name, sheetId, range, book = wb()) => track(sheetId, range, book, name)
   /** Where a name points now: { sheetId, range }, or null once its cells are gone (#REF!). */
   function resolve(name, book = wb()) {
     if (!name || !book) return null
@@ -39,5 +40,5 @@ export function createRefs(api) {
     const range = parseRange(m[3])
     return sheet && range ? { sheetId: sheet.getSheetId(), range } : null
   }
-  return { track, resolve }
+  return { track, update, resolve }
 }

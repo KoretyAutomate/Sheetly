@@ -1,4 +1,4 @@
-outline.test.mjs  2026-10-17T01:32:39.327Z
+outline.test.mjs  2026-10-17T02:00:56.130Z
 pass 27/27
 PASS  xlsx: row levels survive
 PASS  xlsx: hidden rows survive

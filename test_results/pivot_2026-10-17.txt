@@ -1,4 +1,4 @@
-pivot tables  2026-10-17T01:31:57.608Z
+pivot tables  2026-10-17T01:59:49.069Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -17,7 +17,9 @@ PASS  adding a field does not clear cells the PivotTable never wrote (H20 kept)
 PASS  growing over other data asks "There's already data in [...]. Do you want to replace it?"
 PASS  Cancel leaves the data and the report as they were
 PASS  after inserting rows above source and report, the report is found and Refresh reads the moved source
+PASS  after a row inside the report is deleted, Refresh asks before overwriting the cell that moved up
+PASS  a copied sheet's PivotTable is found on the copy
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-20/20 passed
+22/22 passed

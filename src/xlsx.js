@@ -187,15 +187,18 @@ const XLWS = new Set(['FILTER', 'SORT'])
 const outsideStrings = (f, fn) => f.split(/("(?:[^"]|"")*")/).map((p, i) => (i % 2 ? p : fn(p))).join('')
 export const formulaIn = (f) => outsideStrings(f, (p) => p.replace(/_xlfn\.(_xlws\.)?/gi, '').replace(/_xlpm\./gi, ''))
 // LET / LAMBDA parameter names are stored as _xlpm.name inside their call (Excel reads a bare name as a defined name).
-// The formula is scanned with its string literals and structured references ([...]) masked, so text such as
-// "LET(x,1,x)" in quotes or Table1[x] is never taken for a call or a parameter.
+// The formula is scanned with its string literals, quoted sheet names and structured references ([...]) masked, so
+// text such as "LET(x,1,x)" in quotes, 'Sales x Plan'!A1 or Table1[x] is never taken for a call or a parameter.
 // Common worksheet functions a LAMBDA parameter could be spelled like (a call then means the function).
 const BUILTIN_CALLS = new Set('SUM AVERAGE COUNT COUNTA MAX MIN IF IFS AND OR NOT INDEX MATCH VLOOKUP HLOOKUP LOOKUP ROUND ABS LEN LEFT RIGHT MID TEXT VALUE ROW ROWS COLUMN COLUMNS DATE YEAR MONTH DAY NOW TODAY PRODUCT POWER SQRT EXP LN LOG MOD INT TRIM UPPER LOWER CONCATENATE CHOOSE OFFSET INDIRECT SUMIF SUMIFS COUNTIF COUNTIFS AVERAGEIF ISNUMBER ISTEXT ISBLANK ISERROR IFERROR N T TYPE RAND'.split(' '))
 function mask(f) {
-  let out = '', inStr = false, depth = 0
+  let out = '', inStr = false, inSheet = false, depth = 0
   for (let i = 0; i < f.length; i++) {
     const ch = f[i]
     if (inStr) { out += '\u0000'; if (ch === '"') { if (f[i + 1] === '"') { out += '\u0000'; i++ } else inStr = false } continue }
+    // 'Quoted sheet names' ('' is an apostrophe inside one)
+    if (inSheet) { out += '\u0000'; if (ch === "'") { if (f[i + 1] === "'") { out += '\u0000'; i++ } else inSheet = false } continue }
+    if (ch === "'") { inSheet = true; out += '\u0000'; continue }
     if (depth) { out += '\u0000'; if (ch === '[') depth++; else if (ch === ']') depth--; continue }
     if (ch === '"') { inStr = true; out += '\u0000'; continue }
     if (ch === '[') { depth = 1; out += '\u0000'; continue }
@@ -384,7 +387,12 @@ export async function xlsxToSnapshot(buf) {
     if (rules.length) cfs[id] = rules
     const vals = dvIn(ws, id)
     if (vals.length) dvs[id] = vals
-    for (const t of tablesIn(ws)) tables.push({ sheetId: id, ...t })
+    // Tables with their header row hidden keep their definition (column names live only there): Univer's tables
+    // would name the columns from the first data row. They are written back as they were.
+    for (const t of tablesIn(ws)) {
+      if (t.showHeader) tables.push({ sheetId: id, ...t })
+      else (sheet.custom.sheetlyTablesNoHeader ??= []).push({ name: t.name, range: t.range, showFooter: t.showFooter, columns: t.columns })
+    }
     const pics = imagesIn(wb, ws, sheet, 'wb')
     if (pics.length) drawings[id] = { data: Object.fromEntries(pics.map((d) => [d.drawingId, d])), order: pics.map((d) => d.drawingId) }
   })
@@ -552,7 +560,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     if (sg.length) sparklines.push({ sheetIndex, groups: sg })
     cfOut(ws, cfs[id])
     dvOut(ws, dvs[id])
-    tablesOut(ws, allTables[id]?.tables, usedTableNames)
+    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesNoHeader ?? []).map((t) => ({ name: t.name, range: t.range,
+      options: { showHeader: false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
     const list = Object.values(allDrawings[id]?.data ?? {})
     imagesOut(wb, ws, list)
     for (const d of list) {

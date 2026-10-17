@@ -54,9 +54,11 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   const first = src.series[0]?.values
   const vertical = !first || first.startColumn === first.endColumn
   const along = (g) => { const out = []; if (vertical) for (let r = g.startRow; r <= g.endRow; r++) out.push([r, g.startColumn]); else for (let c = g.startColumn; c <= g.endColumn; c++) out.push([g.startRow, c]); return out }
-  const shown = (r, c) => !hiddenRow(r) && !hiddenCol(c)
-  const keep = first ? along(first).map(([r, c]) => shown(r, c)) : []
-  const series = src.series.map((s, i) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
+  // A hidden row (vertical series) or column (horizontal) drops that point from every series, with its category; a
+  // hidden column (vertical) or row (horizontal) drops just the series in it.
+  const keep = first ? along(first).map(([r, c]) => (vertical ? !hiddenRow(r) : !hiddenCol(c))) : []
+  const seriesShown = (g) => (vertical ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
+  const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
     values: along(s.values).filter((_, k) => keep[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name }))
   const n = Math.max(0, ...series.map((s) => s.values.length))
   let labels = Array.from({ length: n }, (_, i) => String(i + 1)), levels = []

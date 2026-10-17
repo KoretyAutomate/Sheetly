@@ -2,7 +2,7 @@
 // (Data Range and Location Range), drawn inside their cells on the grid and redrawn as the data change. Each
 // location cell plots one row (or column) of the data range, as in Excel. Groups are kept in the sheet's custom
 // data (custom.sheetlySparklines) and written to .xlsx as x14:sparklineGroups (see xlsx-zip.js).
-import { CommandType, ICommandService, IUniverInstanceService } from '@univerjs/core'
+import { CommandType, ICommandService, IUndoRedoService, IUniverInstanceService } from '@univerjs/core'
 import { IRenderManagerService, SheetExtension } from '@univerjs/engine-render'
 import { el, field, openDialog } from './ui/dialog.js'
 import { parseRange, rangeA1 } from './xlsx-objects.js'
@@ -83,6 +83,22 @@ export function createSparklines(api, refs) {
     if (list.length) custom.sheetlySparklines = list; else delete custom.sheetlySparklines
     w.setCustomMetadata(Object.keys(custom).length ? custom : undefined)
   }
+  // Changes go through a mutation of their own, with the previous groups as its undo: Add and Clear are each one
+  // step of the undo history, like any other edit.
+  const SET = 'sheetly.mutation.set-sparklines'
+  commands.registerCommand({ id: SET, type: CommandType.MUTATION, handler: (_a, p) => {
+    const w = injector.get(IUniverInstanceService).getUnit(p.unitId)?.getSheetBySheetId(p.subUnitId)
+    if (!w) return false
+    store(w, p.groups)
+    return true
+  } })
+  function commit(w, next) {
+    const unitId = wb().getId(), subUnitId = w.getSheetId()
+    const before = structuredClone(groupsOf(w)), after = structuredClone(next)
+    commands.syncExecuteCommand(SET, { unitId, subUnitId, groups: after })
+    injector.get(IUndoRedoService).pushUndoRedo({ unitID: unitId, undoMutations: [{ id: SET, params: { unitId, subUnitId, groups: before } }],
+      redoMutations: [{ id: SET, params: { unitId, subUnitId, groups: after } }] })
+  }
 
   class SparklineExt extends SheetExtension {
     constructor() { super(); this.uKey = 'SheetlySparklines'; this.Z_INDEX = 45 }
@@ -142,7 +158,7 @@ export function createSparklines(api, refs) {
     const cell = (x) => ({ startRow: x.row, endRow: x.row, startColumn: x.col, endColumn: x.col })
     groups.push({ id: `spk${Date.now().toString(36)}`, type, colors: {}, items: p.items.map((x) => ({ ...x, sheetId: data.sheet.getSheetId(),
       cellRef: refs?.track(w.getSheetId(), cell(x)) ?? undefined, sourceRef: refs?.track(data.sheet.getSheetId(), x.source) ?? undefined })) })
-    store(w, groups)
+    commit(w, groups)
     redraw()
     return { ok: true }
   }
@@ -164,11 +180,31 @@ export function createSparklines(api, refs) {
   function clear() {
     const g = ws().getActiveRange().getRange(), w = ws().getSheet()
     const inSel = (x) => { const at = placeOf(w, x); return at && at.row >= g.startRow && at.row <= g.endRow && at.col >= g.startColumn && at.col <= g.endColumn }
-    store(w, groupsOf(w).map((gr) => ({ ...gr, items: gr.items.filter((x) => !inSel(x)) })).filter((gr) => gr.items.length))
+    commit(w, groupsOf(w).map((gr) => ({ ...gr, items: gr.items.filter((x) => !inSel(x)) })).filter((gr) => gr.items.length))
     redraw()
     return true
   }
+  /** After Copy Sheet: the copy's sparklines get references of their own (their cells, and data that was on the
+   *  copied sheet), instead of the original's. */
+  function remapCopy(fromId, sheet) {
+    const w = sheet.getSheet ? sheet.getSheet() : sheet
+    const groups = groupsOf(w)
+    if (!groups.length) return
+    const toCopy = (name, fallbackSheet, range) => {
+      const at = name ? refs?.resolve(name) : { sheetId: fallbackSheet, range }
+      if (!at) return { name, ...{} }
+      return { sheetId: at.sheetId === fromId ? w.getSheetId() : at.sheetId, range: at.range }
+    }
+    const next = groups.map((g) => ({ ...g, items: g.items.map((it) => {
+      const cell = toCopy(it.cellRef, w.getSheetId(), { startRow: it.row, endRow: it.row, startColumn: it.col, endColumn: it.col })
+      const src = toCopy(it.sourceRef, it.sheetId ?? fromId, it.source)
+      if (!cell?.range || !src?.range) return it
+      return { ...it, sheetId: src.sheetId, cellRef: refs?.track(w.getSheetId(), cell.range) ?? undefined, sourceRef: refs?.track(src.sheetId, src.range) ?? undefined }
+    }) }))
+    store(w, next)
+    redraw()
+  }
   /** Groups with each sparkline where it is now (null items: deleted cells, kept for undo). */
   const groups = () => { const w = ws().getSheet(); return groupsOf(w).map((g) => ({ ...g, items: g.items.map((x) => placeOf(w, x)).filter(Boolean) })) }
-  return { dialog, add, clear, groups, redraw }
+  return { dialog, add, clear, groups, redraw, remapCopy }
 }
