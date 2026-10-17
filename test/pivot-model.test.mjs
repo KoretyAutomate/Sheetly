@@ -59,6 +59,14 @@ check('Max / Min over 150,000 values do not overflow the stack', aggregate('max'
   const t0 = Date.now(), LB = layout({ rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }, srcB), ms = Date.now() - t0
   check('10,000 row items lay out quickly (records grouped once)', LB.grid.length === 10002 && ms < 1500, `${ms} ms`)
 }
+{
+  const rows5 = [['Region', 'Sales'], ['E', 10], ['E', '#DIV/0!'], ['W', 5]]
+  const src5 = readSource((r, c) => rows5[r]?.[c] ?? null, { startRow: 0, endRow: 3, startColumn: 0, endColumn: 1 })
+  const d5 = { rows: ['Region'], cols: [], values: [{ field: 'Sales', fn: 'sum' }], filters: [] }
+  const g5 = getPivotData(d5, src5, 'Sales', [['Region', 'E']]), gw = getPivotData(d5, src5, 'Sales', [['Region', 'W']])
+  const c5 = getPivotData({ ...d5, values: [{ field: 'Sales', fn: 'count' }] }, src5, 'Count of Sales', [['Region', 'E']])
+  check('an error in the source is the Sum of its group (#DIV/0!), other groups unaffected, Count still counts it', g5.error === '#DIV/0!' && gw.value === 5 && c5.value === 2 && show(layout(d5, src5)).includes('#DIV/0!'), JSON.stringify([g5, gw, c5]))
+}
 const def = { rows: ['Region'], cols: ['Product'], values: sum, filters: [] }
 const g = (df, pairs) => { const x = getPivotData(def, src, df, pairs); return x.error ?? x.value }
 check('GETPIVOTDATA("Sales", pt) = grand total 45', g('Sales', []) === 45)

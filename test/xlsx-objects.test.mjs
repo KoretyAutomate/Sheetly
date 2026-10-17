@@ -338,6 +338,17 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('list items with quote marks (12", 24") keep them', J(JSON.parse(v16?.formula1 ?? 'null')) === J(['12"', '24"']), J(v16))
 }
 
+// ---- review round 15: a deleted kept table is dropped; multi-level categories follow hidden rows
+{
+  const s17 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DEFINED_NAME_PLUGIN', data: J({ n1: { id: 'n1', name: 'SheetlyRef_gone', formulaOrRefString: '#REF!', hidden: true } }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { v: 'x' } }, 1: { 0: { v: 'y' } } }, custom: { sheetlyTablesKept: [{ name: 'OldTable', range: R(0, 0, 1, 0), showHeader: false, columns: ['Column1'], rangeRef: 'SheetlyRef_gone' }] } } } }
+  const w17 = new ExcelJS.Workbook(); await w17.xlsx.load(await snapshotToXlsx(s17))
+  check('a kept table whose cells were deleted (#REF!) is not written', w17.getWorksheet('Data').getTables().length === 0, J(w17.getWorksheet('Data').getTables().map((t) => (t.table ?? t).name)))
+  const g4 = []; g4[1] = ['N', 'a', 10]; g4[2] = [null, 'b', 20]; g4[3] = ['S', 'c', 30]
+  const ml = explicitSeries((r, c) => g4[r]?.[c] ?? null, { categories: R(1, 0, 3, 1), series: [{ name: null, nameText: 'S', values: R(1, 2, 3, 2) }] }, { hiddenRow: (r) => r === 2 })
+  check('two-column categories: a hidden row drops its category and point', J(ml.labels) === J(['a', 'c']) && J(ml.series[0].values) === J([10, 30]), J(ml))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

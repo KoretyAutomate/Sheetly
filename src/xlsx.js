@@ -208,6 +208,9 @@ function xlpm(f) {
   const edits = [] // [position, name] where '_xlpm.' goes
   const m0 = mask(f)
   const call = /(^|[^A-Za-z0-9_.])(?:_xlfn\.)?(LET|LAMBDA)\(/gi
+  // Every LET / LAMBDA call with where its arguments are, so a binding's uses can skip nested calls that bind the
+  // same name again (LET(sum,LAMBDA(x,x+1),LET(sum,5,SUM(sum,1))): the inner SUM is the function).
+  const calls = []
   let m
   while ((m = call.exec(m0))) {
     const open = m.index + m[0].length - 1
@@ -226,6 +229,13 @@ function xlpm(f) {
     const valid = (x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x)
     // Declarations with their argument positions (LET: names at even positions; LAMBDA: all but the body).
     const decls = args.map((x, k) => [x, k]).filter(([x, k]) => k < args.length - 1 && (!isLet || k % 2 === 0) && valid(x))
+    calls.push({ open, close, bounds, args, isLet, decls })
+  }
+  // Where a nested call binds `name` again: a LAMBDA parameter over the whole call, a LET name from after its value.
+  const shadowed = (name, outer) => calls.filter((c) => c !== outer && c.open > outer.open && c.close <= outer.close)
+    .flatMap((c) => c.decls.filter(([x]) => x.toLowerCase() === name.toLowerCase()).map(([, k]) => [c.isLet ? c.bounds[k + 2] ?? c.close : c.open, c.close]))
+  for (const c of calls) {
+    const { open, close, bounds, args, isLet, decls } = c
     // Names that can be called: LET names bound to a LAMBDA, and LAMBDA parameters (a function passed in) unless
     // they are spelled like a built-in function, which a call then means.
     // A call to a bound name means the binding unless the name is spelled like a built-in function and the binding
@@ -242,7 +252,11 @@ function xlpm(f) {
     // Whole names only: letters of any script count as part of a name (税x is not x).
     // ($ after a name makes it a cell reference such as X$1, not a parameter x)
     const re = (name, calls) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![\\p{L}\\p{N}_.(!$\u0000])"}`, 'giu')
-    const scan = (name, startAt, endAt, calls) => { const span = m0.slice(startAt, endAt); let t; const r = re(name, calls); while ((t = r.exec(span))) edits.push(startAt + t.index + t[1].length) }
+    const scan = (name, startAt, endAt, calls) => {
+      const skip = shadowed(name, c), span = m0.slice(startAt, endAt)
+      let t; const r = re(name, calls)
+      while ((t = r.exec(span))) { const pos = startAt + t.index + t[1].length; if (!skip.some(([a, b]) => pos > a && pos <= b)) edits.push(pos) }
+    }
     // Where each name is bound: a LAMBDA parameter in the whole call; a LET name from its declaration on, skipping
     // its own value (LET(a,y,y,1,a+y): the first y is the workbook's y, not the parameter).
     for (const [name, k] of decls) {
@@ -600,7 +614,9 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     if (sg.length) sparklines.push({ sheetIndex, groups: sg })
     cfOut(ws, cfs[id])
     dvOut(ws, dvs[id])
-    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesKept ?? []).map((t) => ({ name: t.name, range: (t.rangeRef ? resolveName(t.rangeRef)?.range : null) ?? t.range,
+    // A kept table whose tracked cells were deleted (#REF!) is dropped, not written over what moved into its place.
+    const kept = (s.custom?.sheetlyTablesKept ?? []).map((t) => ({ t, range: t.rangeRef ? resolveName(t.rangeRef)?.range ?? null : t.range })).filter((x) => x.range)
+    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...kept.map(({ t, range }) => ({ name: t.name, range,
       options: { showHeader: t.showHeader !== false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
     const list = Object.values(allDrawings[id]?.data ?? {})
     imagesOut(wb, ws, list)

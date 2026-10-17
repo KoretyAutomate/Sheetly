@@ -67,7 +67,13 @@ export const isNumericField = (src, field) => {
 /** Excel's choice for a value field added from the list: Sum for numbers, Count otherwise. */
 export const defaultFn = (src, field) => (isNumericField(src, field) ? 'sum' : 'count')
 
+// Error values (a source formula returning #DIV/0!, say) come through as their text.
+const ERROR_VALUES = new Set(['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A', '#SPILL!', '#CALC!', '#GETTING_DATA', '#FIELD!', '#BLOCKED!', '#CONNECT!', '#BUSY!', '#UNKNOWN!'])
+export const isErrorValue = (x) => typeof x === 'string' && ERROR_VALUES.has(x.toUpperCase())
+
+/** A value field's result; an error in the values is the result for every function but Count (as in Excel). */
 export function aggregate(fn, values) {
+  if (fn !== 'count') { const e = values.find(isErrorValue); if (e !== undefined) return e }
   const nums = values.filter((x) => typeof x === 'number')
   const n = nums.length, sum = nums.reduce((a, b) => a + b, 0)
   const varOf = (pop) => { if (n < (pop ? 1 : 2)) return null; const m = sum / n; return nums.reduce((a, b) => a + (b - m) ** 2, 0) / (pop ? n : n - 1) }
@@ -217,5 +223,5 @@ export function getPivotData(def, src, dataField, pairs) {
     sel = sel.filter((r) => sameItem(label(r[i]), it))
   }
   const out = aggregate(v.fn, sel.map((r) => r[src.fields.indexOf(v.field)]))
-  return out == null ? { error: '#REF!' } : { value: out }
+  return out == null ? { error: '#REF!' } : isErrorValue(out) ? { error: out.toUpperCase() } : { value: out }
 }

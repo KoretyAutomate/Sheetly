@@ -1,4 +1,4 @@
-pivot model  2026-10-17T07:20:35.409Z
+pivot model  2026-10-17T07:45:04.007Z
 PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
 PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
 PASS  two row fields: compact form, subtotals on the group row, inner items indented
@@ -17,6 +17,7 @@ PASS  Max / Min over 150,000 values do not overflow the stack
 PASS  TRUE, 1 and "TRUE" are three items; logicals sort after text
 PASS  repeated headers are separate fields (Sales, Sales2): the second one sums its own column (300)
 PASS  10,000 row items lay out quickly (records grouped once)
+PASS  an error in the source is the Sum of its group (#DIV/0!), other groups unaffected, Count still counts it
 PASS  GETPIVOTDATA("Sales", pt) = grand total 45
 PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
 PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
@@ -26,4 +27,4 @@ PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
 PASS  GETPIVOTDATA: combination with no data -> #REF!
 PASS  GETPIVOTDATA: unknown data field -> #REF!
 
-26/26 passed
+27/27 passed

@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T07:20:35.259Z
+xlsx objects  2026-10-17T07:45:03.853Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -62,8 +62,10 @@ PASS  text "GETPIVOTDATA(" inside quotes does not turn a formula into a value
 PASS  a GETPIVOTDATA cell is saved as its value; formulas using it stay formulas
 PASS  a sparkline group set to show hidden cells keeps that setting
 PASS  list items with quote marks (12", 24") keep them
+PASS  a kept table whose cells were deleted (#REF!) is not written
+PASS  two-column categories: a hidden row drops its category and point
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-66/66 passed
+68/68 passed

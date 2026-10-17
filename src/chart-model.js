@@ -66,7 +66,8 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   // gap, so the remaining values keep their own categories.
   const visible = src.series.filter(({ values }) => seriesShown(values))
   const masks = visible.map(({ values }) => keepFor(values))
-  const catMask = src.categories ? keepFor(isVertical(src.categories) === vertical ? (vertical ? { ...src.categories, startColumn: src.categories.endColumn } : { ...src.categories, startRow: src.categories.endRow }) : src.categories) : null
+  // (the innermost category column or row, read along the series' direction)
+  const catMask = src.categories ? keepFor(vertical ? { ...src.categories, startColumn: src.categories.endColumn } : { ...src.categories, startRow: src.categories.endRow }) : null
   const width = Math.max(0, ...masks.map((m) => m.length), catMask?.length ?? 0)
   const drop = Array.from({ length: width }, (_, k) => (catMask ? catMask[k] === false : true) && masks.every((m, j) => isVertical(visible[j].values) !== vertical || m[k] === false))
   const series = visible.map((s, j) => {

@@ -1,5 +1,5 @@
-DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"KQvzDK"},[["001",10],["002",20]]]
-pivot tables  2026-10-17T07:23:31.839Z
+DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"rCKi_I"},[["001",10],["002",20]]]
+pivot tables  2026-10-17T07:48:00.947Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
