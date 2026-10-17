@@ -73,6 +73,19 @@ check('saved: the chart part (line over Data!$B$2:$B$4, current value 50 cached)
 check('saved: the spilling formula as a dynamic array', /<c r="A10"[^>]*cm="1"[^>]*><f t="array" ref="A10:A12">_xlfn.SEQUENCE\(3\)<\/f>/.test(sheetXml), sheetXml.match(/<c r="A10"[^>]*>.{0,60}/)?.[0])
 check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperlink === 'https://example.com/' && /location="(&apos;|')Other(&apos;|')!C5"/.test(sheetXml), J([ws.getCell('D1').value, sheetXml.match(/<hyperlink [^>]*>/g)]))
 
+// legacy (Ctrl+Shift+Enter) array formulas, settled by calculating: one value fills the range, an array spills
+{
+  const w = new ExcelJS.Workbook(), t = w.addWorksheet('L')
+  t.getCell('A1').value = 1; t.getCell('A2').value = 1; t.getCell('A3').value = 4
+  t.getCell('C1').value = { formula: 'SUM(A1:A3)', result: 6, shareType: 'array', ref: 'C1:C3' }; t.getCell('C2').value = 6; t.getCell('C3').value = 6
+  t.getCell('E1').value = { formula: 'A1:A2', result: 1, shareType: 'array', ref: 'E1:E2' }; t.getCell('E2').value = 1
+  const b = Array.from(new Uint8Array(await w.xlsx.writeBuffer()))
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'legacy.xlsx')`, b); await win.waitForTimeout(2000)
+  const got = await ev(`const v=(a)=>S().getRange(a).getCalculatedValue(); return JSON.stringify([v('C1'),v('C2'),v('C3'),S().getRange('C3').getFormula(),v('E1'),v('E2'),v('E3')])`)
+  check('legacy array formulas: a single result fills C1:C3 (6, with the formula); an array result spills into E1:E2 (1, 1, no #SPILL!)', got === JSON.stringify([6, 6, 6, '=SUM(A1:A3)', 1, 1, null]), got)
+  check('opening the file left nothing to undo', (await ev(`return api._injector.get(window.__IUndoRedoService).getUndoRedoStatus(W().getId()).undos`)) === 0)
+}
+
 // Ctrl+; in a 1904 workbook writes today's 1904 serial
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true; w.addWorksheet('D').getCell('A1').value = 1

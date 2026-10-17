@@ -1,5 +1,5 @@
 diff --git a/node_modules/exceljs/dist/exceljs.js b/node_modules/exceljs/dist/exceljs.js
-index ab2c9d6..b2467e8 100644
+index ab2c9d6..0fca4b6 100644
 --- a/node_modules/exceljs/dist/exceljs.js
 +++ b/node_modules/exceljs/dist/exceljs.js
 @@ -1273,6 +1273,7 @@ class Column {
@@ -87,20 +87,29 @@ index ab2c9d6..b2467e8 100644
      };
      if (this._parsedLocalSheetId !== undefined) {
        this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
-@@ -9683,8 +9700,15 @@ const getTextFormula = model => {
-     tl
-   } = range;
+@@ -9678,13 +9695,20 @@ const getTextFormula = model => {
+   if (model.formulae && model.formulae[0]) {
+     return model.formulae[0];
+   }
+-  const range = new Range(model.ref);
+-  const {
+-    tl
+-  } = range;
++    const range = new Range(model.ref);
++  const {tl} = range;
++  // Sheetly: a quote inside the text is doubled in the formula's string literal.
++  const text = String(model.text == null ? '' : model.text).replace(/"/g, '""');
    switch (model.operator) {
--    case 'containsText':
-+        case 'containsText':
-       return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
+     case 'containsText':
+-      return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
++      return `NOT(ISERROR(SEARCH("${text}",${tl})))`;
 +    // Sheetly: the other text rules.
 +    case 'notContainsText':
-+      return `ISERROR(SEARCH("${model.text}",${tl}))`;
++      return `ISERROR(SEARCH("${text}",${tl}))`;
 +    case 'beginsWith':
-+      return `LEFT(${tl},LEN("${model.text}"))="${model.text}"`;
++      return `LEFT(${tl},LEN("${text}"))="${text}"`;
 +    case 'endsWith':
-+      return `RIGHT(${tl},LEN("${model.text}"))="${model.text}"`;
++      return `RIGHT(${tl},LEN("${text}"))="${text}"`;
      case 'containsBlanks':
        return `LEN(TRIM(${tl}))=0`;
      case 'notContainsBlanks':
@@ -590,24 +599,30 @@ index 9ed8fec..9bad67d 100644
      if (this._parsedLocalSheetId !== undefined) {
        this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
 diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
-index 22b3e44..1fe4e58 100644
+index 22b3e44..75c79e9 100644
 --- a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
 +++ b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
-@@ -25,6 +25,13 @@ const getTextFormula = model => {
+@@ -22,9 +22,18 @@ const getTextFormula = model => {
+ 
+   const range = new Range(model.ref);
+   const {tl} = range;
++  // Sheetly: a quote inside the text is doubled in the formula's string literal.
++  const text = String(model.text == null ? '' : model.text).replace(/"/g, '""');
    switch (model.operator) {
      case 'containsText':
-       return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
+-      return `NOT(ISERROR(SEARCH("${model.text}",${tl})))`;
++      return `NOT(ISERROR(SEARCH("${text}",${tl})))`;
 +    // Sheetly: the other text rules.
 +    case 'notContainsText':
-+      return `ISERROR(SEARCH("${model.text}",${tl}))`;
++      return `ISERROR(SEARCH("${text}",${tl}))`;
 +    case 'beginsWith':
-+      return `LEFT(${tl},LEN("${model.text}"))="${model.text}"`;
++      return `LEFT(${tl},LEN("${text}"))="${text}"`;
 +    case 'endsWith':
-+      return `RIGHT(${tl},LEN("${model.text}"))="${model.text}"`;
++      return `RIGHT(${tl},LEN("${text}"))="${text}"`;
      case 'containsBlanks':
        return `LEN(TRIM(${tl}))=0`;
      case 'notContainsBlanks':
-@@ -79,6 +86,9 @@ const opType = attributes => {
+@@ -79,6 +88,9 @@ const opType = attributes => {
      case 'notContainsBlanks':
      case 'containsErrors':
      case 'notContainsErrors':
@@ -617,7 +632,7 @@ index 22b3e44..1fe4e58 100644
        return {
          type: 'containsText',
          operator: type,
-@@ -145,6 +155,17 @@ class CfRuleXform extends CompositeXform {
+@@ -145,6 +157,17 @@ class CfRuleXform extends CompositeXform {
        case 'timePeriod':
          this.renderTimePeriod(xmlStream, model);
          break;
@@ -635,7 +650,7 @@ index 22b3e44..1fe4e58 100644
      }
    }
  
-@@ -153,6 +174,8 @@ class CfRuleXform extends CompositeXform {
+@@ -153,6 +176,8 @@ class CfRuleXform extends CompositeXform {
        type: 'expression',
        dxfId: model.dxfId,
        priority: model.priority,
@@ -644,7 +659,7 @@ index 22b3e44..1fe4e58 100644
      });
  
      this.formulaXform.render(xmlStream, model.formulae[0]);
-@@ -165,6 +188,8 @@ class CfRuleXform extends CompositeXform {
+@@ -165,6 +190,8 @@ class CfRuleXform extends CompositeXform {
        type: 'cellIs',
        dxfId: model.dxfId,
        priority: model.priority,
@@ -653,7 +668,7 @@ index 22b3e44..1fe4e58 100644
        operator: model.operator,
      });
  
-@@ -180,6 +205,8 @@ class CfRuleXform extends CompositeXform {
+@@ -180,6 +207,8 @@ class CfRuleXform extends CompositeXform {
        type: 'top10',
        dxfId: model.dxfId,
        priority: model.priority,
@@ -662,7 +677,7 @@ index 22b3e44..1fe4e58 100644
        percent: BaseXform.toBoolAttribute(model.percent, false),
        bottom: BaseXform.toBoolAttribute(model.bottom, false),
        rank: BaseXform.toIntValue(model.rank, 10, true),
-@@ -191,7 +218,11 @@ class CfRuleXform extends CompositeXform {
+@@ -191,7 +220,11 @@ class CfRuleXform extends CompositeXform {
        type: 'aboveAverage',
        dxfId: model.dxfId,
        priority: model.priority,
@@ -674,7 +689,7 @@ index 22b3e44..1fe4e58 100644
      });
    }
  
-@@ -199,6 +230,8 @@ class CfRuleXform extends CompositeXform {
+@@ -199,6 +232,8 @@ class CfRuleXform extends CompositeXform {
      xmlStream.openNode(this.tag, {
        type: 'dataBar',
        priority: model.priority,
@@ -683,7 +698,7 @@ index 22b3e44..1fe4e58 100644
      });
  
      this.databarXform.render(xmlStream, model);
-@@ -211,6 +244,8 @@ class CfRuleXform extends CompositeXform {
+@@ -211,6 +246,8 @@ class CfRuleXform extends CompositeXform {
      xmlStream.openNode(this.tag, {
        type: 'colorScale',
        priority: model.priority,
@@ -692,7 +707,7 @@ index 22b3e44..1fe4e58 100644
      });
  
      this.colorScaleXform.render(xmlStream, model);
-@@ -227,6 +262,8 @@ class CfRuleXform extends CompositeXform {
+@@ -227,6 +264,8 @@ class CfRuleXform extends CompositeXform {
      xmlStream.openNode(this.tag, {
        type: 'iconSet',
        priority: model.priority,
@@ -701,7 +716,7 @@ index 22b3e44..1fe4e58 100644
      });
  
      this.iconSetXform.render(xmlStream, model);
-@@ -235,11 +272,15 @@ class CfRuleXform extends CompositeXform {
+@@ -235,11 +274,15 @@ class CfRuleXform extends CompositeXform {
    }
  
    renderText(xmlStream, model) {
@@ -718,7 +733,7 @@ index 22b3e44..1fe4e58 100644
      });
  
      const formula = getTextFormula(model);
-@@ -255,6 +296,8 @@ class CfRuleXform extends CompositeXform {
+@@ -255,6 +298,8 @@ class CfRuleXform extends CompositeXform {
        type: 'timePeriod',
        dxfId: model.dxfId,
        priority: model.priority,
@@ -727,7 +742,7 @@ index 22b3e44..1fe4e58 100644
        timePeriod: model.timePeriod,
      });
  
-@@ -276,6 +319,9 @@ class CfRuleXform extends CompositeXform {
+@@ -276,6 +321,9 @@ class CfRuleXform extends CompositeXform {
        bottom: BaseXform.toBoolValue(attributes.bottom),
        rank: BaseXform.toIntValue(attributes.rank),
        aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),

@@ -54,10 +54,10 @@ function dataOf(spec0) {
   if (!sheet) return { labels: [], series: [], title: spec.title ?? '' }
   const w = sheet.getSheet()
   if (spec.source.series) {
-    const d = explicitSeries((r, c) => sheet.getRange(r, c).getRawValue(), spec.source, { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
+    const d = explicitSeries((r, c) => sheet.getRange(r, c).getCalculatedValue(), spec.source, { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
     return { ...d, title: chartTitle(spec, d), pattern: null }
   }
-  const d = seriesFrom((r, c) => sheet.getRange(r, c).getRawValue(), spec.source.range, spec.plotBy,
+  const d = seriesFrom((r, c) => sheet.getRange(r, c).getCalculatedValue(), spec.source.range, spec.plotBy,
     { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
   // The value axis shows numbers in the source's number format (sourceLinked, as in Excel).
   const pattern = d.series.length ? sheet.getRange(d.byCols ? d.r0 : d.series[0].line, d.byCols ? d.series[0].line : d.c0).getNumberFormat?.() : null

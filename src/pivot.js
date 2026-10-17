@@ -58,7 +58,7 @@ export function createPivots(api, { dialogs, refs }) {
   const readLive = (p) => {
     const at = sourceAt(p)
     const s = at && wb().getSheetBySheetId(at.sheetId)
-    return s ? readSource((r, c) => { const v = s.getRange(r, c).getRawValue(); return v === '' ? null : v }, at.range) : null
+    return s ? readSource((r, c) => { const v = s.getRange(r, c).getCalculatedValue(); return v === '' ? null : v }, at.range) : null
   }
   const sourceOf = (p) => p.cache ?? readLive(p)
   /** The cells the report wrote (filters included), or null before it has written any. */
@@ -105,7 +105,7 @@ export function createPivots(api, { dialogs, refs }) {
     const ownedBefore = (r, c) => old && r >= old.row && r < old.row + old.rows && c >= old.col && c < old.col + old.cols
     if (next && !force) {
       for (let r = next.row; r < next.row + next.rows; r++) for (let c = next.col; c < next.col + next.cols; c++) {
-        const v = sheet.getRange(r, c).getRawValue()
+        const v = sheet.getRange(r, c).getCalculatedValue()
         if (v != null && v !== '' && !ownedBefore(r, c)) return { conflict: true }
       }
     }
@@ -188,7 +188,7 @@ export function createPivots(api, { dialogs, refs }) {
   function createNow(rangeText, where, locText) {
     const src = refOf(rangeText)
     if (!src || src.range.endRow <= src.range.startRow) return message('The reference is not valid.') && false
-    const data = readSource((r, c) => { const v = src.sheet.getRange(r, c).getRawValue(); return v === '' ? null : v }, src.range)
+    const data = readSource((r, c) => { const v = src.sheet.getRange(r, c).getCalculatedValue(); return v === '' ? null : v }, src.range)
     if (!data) return message('The PivotTable field name is not valid. To create a PivotTable report, you must use data that is organized as a list with labeled columns.') && false
     let target, anchor
     if (where === 'existing') {

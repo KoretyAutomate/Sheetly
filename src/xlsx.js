@@ -15,7 +15,6 @@ import { resolveSource } from './chart-model.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
 const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1)
-let epoch = EPOCH // the workbook being read: 1904 date system workbooks count days from 1904-01-01
 const PX_PER_PT = 4 / 3
 const NOTE_SIZE = { width: 160, height: 72 }
 
@@ -260,21 +259,22 @@ const fnPrefix = (f) => outsideStrings(f, (p) => p.replace(/(^|[^A-Za-z0-9_.])([
 }))
 
 // Dates come from ExcelJS as Date objects with millisecond precision; round off the float noise.
-const serial = (d) => Math.round(((d.getTime() - epoch) / 864e5) * 1e10) / 1e10
+// epoch: the workbook's own (1904 date system workbooks count days from 1904-01-01).
+const serial = (d, epoch = EPOCH) => Math.round(((d.getTime() - epoch) / 864e5) * 1e10) / 1e10
 
-function cellValueIn(cell) {
+function cellValueIn(cell, epoch = EPOCH) {
   const v = cell.value, o = {}
   if (v && typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) {
     const f = cell.formula // translated for shared-formula clones
     if (f) o.f = '=' + formulaIn(f)
     const res = v.result
-    if (res instanceof Date) o.v = serial(res)
+    if (res instanceof Date) o.v = serial(res, epoch)
     else if (res && typeof res === 'object' && 'error' in res) o.v = res.error
     else if (res !== undefined) o.v = res
   } else if (v && typeof v === 'object' && 'richText' in v) o.v = v.richText.map((t) => t.text).join('')
   else if (v && typeof v === 'object' && 'error' in v) { o.v = v.error; o.t = 1 }
   else if (v && typeof v === 'object' && 'hyperlink' in v) { o.v = typeof v.text === 'string' ? v.text : v.text?.richText?.map((t) => t.text).join('') ?? ''; o.link = v.hyperlink }
-  else if (v instanceof Date) o.v = serial(v)
+  else if (v instanceof Date) o.v = serial(v, epoch)
   else o.v = v
   if (typeof o.v === 'number') o.t = 2
   else if (typeof o.v === 'boolean') { o.t = 3; o.v = o.v ? 1 : 0 }
@@ -306,10 +306,10 @@ export async function xlsxToSnapshot(buf) {
   const theme = themePalette(wb)
   // 1904 workbooks keep their serials; Univer is told the date system.
   const date1904 = !!wb.properties?.date1904
-  epoch = date1904 ? EPOCH_1904 : EPOCH
+  const epoch = date1904 ? EPOCH_1904 : EPOCH
   const sheets = {}, order = [], notes = {}, idByIndex = {}, links = [], idByName = {}
   const cfs = {}, dvs = {}, drawings = {}, tables = []
-  const dynamic = await readDynamicArrays(buf)
+  const dynamic = await readDynamicArrays(buf), legacyArrays = []
   wb.eachSheet((ws, i) => {
     idByName[ws.name] = `sheet${i}`
     const id = `sheet${i}`, cellData = {}, columnData = {}, rowData = {}, mergeData = []
@@ -322,7 +322,7 @@ export async function xlsxToSnapshot(buf) {
         const s = styleIn(cell, theme)
         // Merged-away cells repeat the master's value in ExcelJS; Univer keeps them empty.
         if (cell.isMerged && cell.master !== cell) { if (!isEmptyStyle(s)) rowCells[c - 1] = { s }; return }
-        const o = cellValueIn(cell)
+        const o = cellValueIn(cell, epoch)
         if (o.link) { links.push([o, o.link]); delete o.link }
         if (o.v == null) { delete o.v; delete o.t }
         if (!isEmptyStyle(s)) o.s = s
@@ -346,8 +346,8 @@ export async function xlsxToSnapshot(buf) {
     if (Object.keys(sheetNotes).length) notes[id] = sheetNotes
     // Array formulas. A dynamic array (cm= in the file) holds its spilled values as plain cells inside the anchor's
     // ref; Univer computes them itself (kept as constants they would make the formula #SPILL!). A legacy array
-    // formula (Ctrl+Shift+Enter) whose cells all show one value is a scalar entered over the range: each cell gets
-    // the formula. One whose cells differ returns an array, which Univer spills the same way.
+    // formula (Ctrl+Shift+Enter) is read the same way and listed in sheetlyLegacyArrays: once the workbook has been
+    // calculated, one whose result is a single value gets the formula in every cell of its range (main.js).
     const sheetIndex = order.length
     ws.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: false }, (cell) => {
       const v = cell.value
@@ -357,13 +357,12 @@ export async function xlsxToSnapshot(buf) {
       const r0 = cell.row - 1, c0 = cell.col - 1, anchor = cellData[r0]?.[c0]
       const others = []
       for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (r !== r0 || c !== c0) others.push([r, c])
-      const legacy = !dynamic.has(`${sheetIndex}!${cell.address}`)
-      const scalar = legacy && anchor?.f && others.every(([r, c]) => cellData[r]?.[c]?.v === anchor.v)
+      if (!dynamic.has(`${sheetIndex}!${cell.address}`) && anchor?.f) legacyArrays.push({ sheetId: id, row: r0, col: c0, range: g, formula: anchor.f })
       for (const [r, c] of others) {
-        const x = (cellData[r] ??= {})[c] ??= {}
-        if (x.f) continue
-        if (scalar) { x.f = anchor.f; x.v = anchor.v; if (anchor.t != null) x.t = anchor.t }
-        else { delete x.v; delete x.t; if (!Object.keys(x).length) delete cellData[r][c] }
+        const x = cellData[r]?.[c]
+        if (!x || x.f) continue
+        delete x.v; delete x.t
+        if (!Object.keys(x).length) delete cellData[r][c]
       }
     }))
     ws.columns?.forEach((col, i2) => {
@@ -477,9 +476,9 @@ export async function xlsxToSnapshot(buf) {
   if (Object.keys(cfs).length) resources.push({ name: CF, data: JSON.stringify(cfs) })
   if (Object.keys(dvs).length) resources.push({ name: DV, data: JSON.stringify(dvs) })
   if (Object.keys(drawings).length) resources.push({ name: DRAWINGS, data: JSON.stringify(drawings) })
-  epoch = EPOCH
   // Tables are created through Univer's table API once the workbook exists (sheetlyTables, see main.js).
-  return { id: 'wb', sheetOrder: order, sheets, resources, ...(date1904 ? { dateSystem: 'date1904' } : {}), ...(tables.length ? { sheetlyTables: tables } : {}) }
+  return { id: 'wb', sheetOrder: order, sheets, resources, ...(date1904 ? { dateSystem: 'date1904' } : {}), ...(tables.length ? { sheetlyTables: tables } : {}),
+    ...(legacyArrays.length ? { sheetlyLegacyArrays: legacyArrays } : {}) }
 }
 
 /**

@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T03:18:09.254Z
+xlsx objects  2026-10-17T03:43:21.208Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -46,15 +46,16 @@ PASS  a headerless table is not handed to Univer (which would name columns from 
 PASS  and it is written back with its names and no header row
 PASS  scatter: each series keeps its X range on read
 PASS  scatter: each series is written with its own X range
-PASS  a legacy array formula entered over C1:C3 (one value) keeps a formula and 6 in each cell
-PASS  a legacy array formula returning an array spills from its first cell
+PASS  legacy array formulas are listed for the app to settle by calculating (scalar vs array)
 PASS  a validation without allowBlank / showErrorMessage in the file has both off
 PASS  a conditional format filled with a theme colour keeps the colour
 PASS  a chart written with another namespace prefix (ch:) is still read
 PASS  scatter: both axis titles survive (x Time, y Distance)
 PASS  a table header that is a link keeps its text as the column name and stays a link
+PASS  two files read at the same time keep their own date systems (43830 / 45292)
+PASS  a quote inside a text rule is doubled in its formula
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-57/57 passed
+58/58 passed

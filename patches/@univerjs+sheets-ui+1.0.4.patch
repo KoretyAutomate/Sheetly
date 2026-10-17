@@ -1,5 +1,5 @@
 diff --git a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
-index aa80317..9bf4663 100644
+index aa80317..0a1a3e2 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/cjs/index.js
 @@ -21849,7 +21849,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
@@ -29,7 +29,7 @@ index aa80317..9bf4663 100644
  		return [];
  	};
  	const [editState, setEditState] = (0, react.useState)(false);
-@@ -34399,13 +34399,20 @@ let AutoHeightService = class AutoHeightService extends _univerjs_core.Disposabl
+@@ -34399,13 +34399,21 @@ let AutoHeightService = class AutoHeightService extends _univerjs_core.Disposabl
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
  		if (!skeleton) return;
@@ -38,7 +38,8 @@ index aa80317..9bf4663 100644
 +		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
 +		const sheetlyWorksheet = skeleton.worksheet;
 +		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
-+		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		let sheetlyLastRow = sheetlyWorksheet.getLastRowWithContent();
++		for (const k of sheetlyRowKeys) { const n = Number(k); if (n > sheetlyLastRow) sheetlyLastRow = n; }
 +		task.ranges = _univerjs_core.Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
  			return {
  				...range,
@@ -52,7 +53,7 @@ index aa80317..9bf4663 100644
  		if (remainRanges.length) {
  			this._autoHeightTasks.push({
 diff --git a/node_modules/@univerjs/sheets-ui/lib/es/index.js b/node_modules/@univerjs/sheets-ui/lib/es/index.js
-index 5ae414a..c9d08da 100644
+index 5ae414a..c278c35 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/es/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/es/index.js
 @@ -21848,7 +21848,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
@@ -82,7 +83,7 @@ index 5ae414a..c9d08da 100644
  		return [];
  	};
  	const [editState, setEditState] = useState(false);
-@@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
+@@ -34398,13 +34398,21 @@ let AutoHeightService = class AutoHeightService extends Disposable {
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
  		if (!skeleton) return;
@@ -91,7 +92,8 @@ index 5ae414a..c9d08da 100644
 +		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
 +		const sheetlyWorksheet = skeleton.worksheet;
 +		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
-+		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		let sheetlyLastRow = sheetlyWorksheet.getLastRowWithContent();
++		for (const k of sheetlyRowKeys) { const n = Number(k); if (n > sheetlyLastRow) sheetlyLastRow = n; }
 +		task.ranges = Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
  			return {
  				...range,
@@ -105,7 +107,7 @@ index 5ae414a..c9d08da 100644
  		if (remainRanges.length) {
  			this._autoHeightTasks.push({
 diff --git a/node_modules/@univerjs/sheets-ui/lib/index.js b/node_modules/@univerjs/sheets-ui/lib/index.js
-index 5ae414a..c9d08da 100644
+index 5ae414a..c278c35 100644
 --- a/node_modules/@univerjs/sheets-ui/lib/index.js
 +++ b/node_modules/@univerjs/sheets-ui/lib/index.js
 @@ -21848,7 +21848,7 @@ function DefinedNameOverlay({ search, isInputEvent, onClose }) {
@@ -135,7 +137,7 @@ index 5ae414a..c9d08da 100644
  		return [];
  	};
  	const [editState, setEditState] = useState(false);
-@@ -34398,13 +34398,20 @@ let AutoHeightService = class AutoHeightService extends Disposable {
+@@ -34398,13 +34398,21 @@ let AutoHeightService = class AutoHeightService extends Disposable {
  	startAutoHeightTask(task) {
  		const skeleton = this._sheetSkeletonManagerService.getSkeleton(task.sheetId);
  		if (!skeleton) return;
@@ -144,7 +146,8 @@ index 5ae414a..c9d08da 100644
 +		// a column-width change otherwise queues every row, and after maxTime the rest runs in one blocking call.
 +		const sheetlyWorksheet = skeleton.worksheet;
 +		const sheetlyRowKeys = Object.keys(sheetlyWorksheet.getRowManager().getRowData() ?? {});
-+		const sheetlyLastRow = Math.max(sheetlyWorksheet.getLastRowWithContent(), sheetlyRowKeys.length ? Math.max(...sheetlyRowKeys.map(Number)) : -1);
++		let sheetlyLastRow = sheetlyWorksheet.getLastRowWithContent();
++		for (const k of sheetlyRowKeys) { const n = Number(k); if (n > sheetlyLastRow) sheetlyLastRow = n; }
 +		task.ranges = Rectangle.mergeRanges(task.ranges.filter((range) => range.startRow <= sheetlyLastRow).map((range) => {
  			return {
  				...range,

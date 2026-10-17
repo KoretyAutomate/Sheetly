@@ -258,8 +258,8 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   t.dataValidations.model['G1'] = { type: 'whole', operator: 'between', formulae: [1, 9] }
   t.addConditionalFormatting({ ref: 'A1:A3', rules: [{ type: 'cellIs', operator: 'greaterThan', formulae: ['1'], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { theme: 4 } } } }] })
   const r = await xlsxToSnapshot(await w.xlsx.writeBuffer()), c = r.sheets[r.sheetOrder[0]].cellData
-  check('a legacy array formula entered over C1:C3 (one value) keeps a formula and 6 in each cell', [0, 1, 2].every((k) => c[k][2]?.f === '=SUM(A1:A3)' && c[k][2]?.v === 6), J([c[0][2], c[1][2], c[2][2]]))
-  check('a legacy array formula returning an array spills from its first cell', c[0][4]?.f === '=A1:A3*2' && c[1][4]?.v === undefined && c[2][4]?.v === undefined, J([c[0][4], c[1][4], c[2][4]]))
+  const legacy = (r.sheetlyLegacyArrays ?? []).map((x) => `${x.formula}@${x.row},${x.col}:${x.range.endRow}`)
+  check('legacy array formulas are listed for the app to settle by calculating (scalar vs array)', legacy.join('|') === '=SUM(A1:A3)@0,2:2|=A1:A3*2@0,4:2' && c[1][2]?.v === undefined && c[1][4]?.v === undefined, J([r.sheetlyLegacyArrays, c[1]]))
   const v = res(r, 'SHEET_DATA_VALIDATION_PLUGIN')[r.sheetOrder[0]]?.[0]
   check('a validation without allowBlank / showErrorMessage in the file has both off', v?.allowBlank === false && v?.showErrorMessage === false, J(v))
   const cf = res(r, 'SHEET_CONDITIONAL_FORMATTING_PLUGIN')[r.sheetOrder[0]]?.[0]?.rule
@@ -285,6 +285,20 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const w11 = new ExcelJS.Workbook(); await w11.xlsx.load(await snapshotToXlsx(s11))
   const ws11 = w11.getWorksheet('Data'), tb = ws11.getTables()[0], m = tb?.table ?? tb
   check('a table header that is a link keeps its text as the column name and stays a link', J((m?.columns ?? []).map((c) => c.name)) === J(['Site', 'Qty']) && ws11.getCell('A1').value?.hyperlink === 'https://example.com/', J([m?.columns?.map((c) => c.name), ws11.getCell('A1').value]))
+}
+
+// ---- review round 8: imports run side by side keep their own date systems; quotes in text rules
+{
+  const mk = async (d1904) => { const w = new ExcelJS.Workbook(); w.properties.date1904 = d1904; const t = w.addWorksheet('D'); t.getCell('A1').value = new Date(Date.UTC(2024, 0, 1)); t.getCell('A1').numFmt = 'yyyy-mm-dd'; return w.xlsx.writeBuffer() }
+  const [a1904, a1900] = await Promise.all([mk(true), mk(false)])
+  const [s1904, s1900] = await Promise.all([xlsxToSnapshot(a1904), xlsxToSnapshot(a1900)])
+  const v = (x) => x.sheets[x.sheetOrder[0]].cellData[0][0].v
+  check('two files read at the same time keep their own date systems (43830 / 45292)', v(s1904) === 43830 && v(s1900) === 45292, `${v(s1904)} ${v(s1900)}`)
+  const s12 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_CONDITIONAL_FORMATTING_PLUGIN', data: J({ s1: [{ cfId: 'q', ranges: [R(0, 0, 4, 0)], stopIfTrue: false, rule: { type: 'highlightCell', subType: 'text', operator: 'beginsWith', value: 'a"b', style: red } }] }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: {} } } }
+  const x12 = await (await JSZip.loadAsync(await snapshotToXlsx(s12))).file('xl/worksheets/sheet1.xml').async('string')
+  const f12 = /<cfRule[^>]*>\s*<formula>([^<]*)<\/formula>/.exec(x12)?.[1]?.replace(/&quot;/g, '"')
+  check('a quote inside a text rule is doubled in its formula', f12 === 'LEFT(A1,LEN("a""b"))="a""b"', f12)
 }
 
 // ---- 1904 date system

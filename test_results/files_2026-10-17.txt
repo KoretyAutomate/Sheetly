@@ -1,4 +1,4 @@
-files (open / save objects in the app)  2026-10-17T03:19:55.924Z
+files (open / save objects in the app)  2026-10-17T03:45:12.244Z
 PASS  a new workbook has Excel's sizes: columns 64 px, rows 20 px
 PASS  Calibri (bundled Carlito metrics) is the sheet font and is loaded
 PASS  a new, untouched Book1 may be replaced by File > Open
@@ -18,7 +18,9 @@ PASS  saved: the picture
 PASS  saved: the chart part (line over Data!$B$2:$B$4, current value 50 cached)
 PASS  saved: the spilling formula as a dynamic array
 PASS  saved: links (external and in-workbook)
+PASS  legacy array formulas: a single result fills C1:C3 (6, with the formula); an array result spills into E1:E2 (1, 1, no #SPILL!)
+PASS  opening the file left nothing to undo
 PASS  Ctrl+; in a 1904 workbook writes the 1904 serial for today
 PASS  no page errors
 
-21/21 passed
+23/23 passed

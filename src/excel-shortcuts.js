@@ -218,7 +218,7 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
     // The stored cell (getCellData() is the formatted view, e.g. "$100" for 100): copied before it is overwritten.
     const original = structuredClone(sheet().getSheet().getCellRaw(r, c) ?? null)
     if (formula && above.getFormula()) range.setFormula(above.getFormula())
-    else { const v = above.getRawValue(); if (v == null || v === '') range.clearContent(); else range.setValue(v) }
+    else { const v = above.getCalculatedValue(); if (v == null || v === '') range.clearContent(); else range.setValue(v) }
     commands.executeCommand('sheet.operation.set-cell-edit-visible-f2', { visible: true, eventType: 4, keycode: KeyCode.F2 })
     const sub = commands.onCommandExecuted((cmd) => {
       // Only user-initiated closes carry a keycode (Esc, Enter, Tab, ...); internal closes do not.
@@ -242,8 +242,8 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
   function pickFromList() {
     const [r, c] = activeCell()
     const s = sheet(), seen = new Set()
-    for (let y = r - 1; y >= 0 && s.getRange(y, c).getRawValue() != null && s.getRange(y, c).getRawValue() !== ''; y--) seen.add(String(s.getRange(y, c).getRawValue()))
-    for (let y = r + 1; s.getRange(y, c).getRawValue() != null && s.getRange(y, c).getRawValue() !== ''; y++) seen.add(String(s.getRange(y, c).getRawValue()))
+    for (let y = r - 1; y >= 0 && s.getRange(y, c).getCalculatedValue() != null && s.getRange(y, c).getCalculatedValue() !== ''; y--) seen.add(String(s.getRange(y, c).getCalculatedValue()))
+    for (let y = r + 1; s.getRange(y, c).getCalculatedValue() != null && s.getRange(y, c).getCalculatedValue() !== ''; y++) seen.add(String(s.getRange(y, c).getCalculatedValue()))
     const options = [...seen].filter((v) => Number.isNaN(Number(v))).sort((a, b) => a.localeCompare(b))
     if (!options.length) return true
     const hide = s.getRange(r, c).showDropdown({
@@ -335,7 +335,7 @@ export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, o
 
 /** AutoSum (Alt+=); fn picks the AutoSum menu entry: SUM, AVERAGE, COUNT, MAX, MIN. */
 export function autosum(ws, r, fn = 'SUM') {
-  const row = r.getRow(), col = r.getColumn(), num = (a, b) => typeof ws.getRange(a, b).getRawValue() === 'number'
+  const row = r.getRow(), col = r.getColumn(), num = (a, b) => typeof ws.getRange(a, b).getCalculatedValue() === 'number'
   let top = row - 1
   while (top >= 0 && num(top, col)) top--
   const target = ws.getRange(row, col)

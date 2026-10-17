@@ -2,6 +2,7 @@
 import { keyTipState, setKeyTipTree } from './keytips.js'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
+import './values.js'
 import enUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
 import './fonts/fonts.css'
@@ -87,6 +88,7 @@ window.__IRenderManagerService = IRenderManagerService
 window.__SheetSkeletonManagerService = SheetSkeletonManagerService
 window.__HeaderUnhideRenderController = HeaderUnhideRenderController
 window.__IDrawingManagerService = IDrawingManagerService
+window.__IUndoRedoService = IUndoRedoService
 const shortcutSvc = univerAPI._injector.get(IShortcutService)
 window.__shortcuts = () => shortcutSvc.getAllShortcuts().map((x) => ({ id: x.id, b: x.binding, w: x.win, l: x.linux, d: shortcutSvc.getShortcutDisplay(x) }))
 window.__functions = () => [...univerAPI._injector.get(IFunctionService).getExecutors().keys()]
@@ -165,12 +167,24 @@ async function loadWorkbook(f) {
   }
   fromFile = true
   univerAPI.disposeUnit(univerAPI.getActiveWorkbook().getId())
-  const { sheetlyTables = [], ...data } = snap
+  const { sheetlyTables = [], sheetlyLegacyArrays = [], ...data } = snap
   const book = univerAPI.createWorkbook({ ...data, name: f.name, locale: LocaleType.EN_US })
   fitExcelGrid()
   // Recalculate everything, as Excel does for a workbook saved by another program: dynamic arrays spill again
   // (their spilled values are not kept from the file) and cached results are brought up to date.
   univerAPI.getFormula().executeCalculation()
+  // Legacy array formulas (Ctrl+Shift+Enter) that turn out to give a single value fill their whole range with the
+  // formula, as Excel shows them; array results spill. Opening a file is not an undo step.
+  if (sheetlyLegacyArrays.length) {
+    await univerAPI.getFormula().onCalculationResultApplied?.(10000).catch(() => {})
+    const spills = univerAPI._injector.get(FormulaDataModel).getArrayFormulaRange?.() ?? {}
+    for (const a of sheetlyLegacyArrays) {
+      if (spills[book.getId()]?.[a.sheetId]?.[a.row]?.[a.col]) continue
+      const sheet = book.getSheetBySheetId(a.sheetId)
+      for (let r = a.range.startRow; r <= a.range.endRow; r++) for (let c = a.range.startColumn; c <= a.range.endColumn; c++) if (r !== a.row || c !== a.col) sheet?.getRange(r, c).setFormula(a.formula)
+    }
+    univerAPI._injector.get(IUndoRedoService).clearUndoRedo(book.getId())
+  }
   // Tables from the file, through Univer's table API.
   for (const t of sheetlyTables) {
     try { await book.getSheetBySheetId(t.sheetId)?.addTable(t.name, t.range, undefined, { showHeader: t.showHeader, showFooter: t.showFooter }) } catch (e) { console.warn('table', t.name, e) }

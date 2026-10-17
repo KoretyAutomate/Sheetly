@@ -21,7 +21,7 @@ export function createQuickAnalysis(api, { dialogs, charts, sparklines }) {
   const average = (g) => {
     let sum = 0, n = 0
     for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) {
-      const v = ws().getRange(r, c).getRawValue()
+      const v = ws().getRange(r, c).getCalculatedValue()
       if (typeof v === 'number') { sum += v; n++ }
     }
     return n ? Math.round((sum / n) * 100) / 100 : 0
@@ -44,7 +44,7 @@ export function createQuickAnalysis(api, { dialogs, charts, sparklines }) {
     }
   }
   const hasNumbers = (g) => {
-    for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (typeof ws().getRange(r, c).getRawValue() === 'number') return true
+    for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) if (typeof ws().getRange(r, c).getCalculatedValue() === 'number') return true
     return false
   }
   const clearFormat = (g) => { ws().getRange(g.startRow, g.startColumn, g.endRow - g.startRow + 1, g.endColumn - g.startColumn + 1).clearConditionalFormatRules(); return true }
@@ -135,7 +135,7 @@ export function createQuickAnalysis(api, { dialogs, charts, sparklines }) {
     close()
     let g = ws().getActiveRange().getRange()
     if (g.startRow === g.endRow && g.startColumn === g.endColumn) {
-      const v = ws().getRange(g.startRow, g.startColumn).getRawValue()
+      const v = ws().getRange(g.startRow, g.startColumn).getCalculatedValue()
       if (v == null || v === '') return true
       g = dialogs.currentRegion(g.startRow, g.startColumn)
       if (g.startRow === g.endRow && g.startColumn === g.endColumn) return true

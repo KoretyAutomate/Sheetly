@@ -6,6 +6,7 @@ import { CommandType, ICommandService, IUndoRedoService, IUniverInstanceService 
 import { IRenderManagerService, SheetExtension } from '@univerjs/engine-render'
 import { el, field, openDialog } from './ui/dialog.js'
 import { parseRange, rangeA1 } from './xlsx-objects.js'
+import { spillValue } from './values.js'
 
 // Excel's default sparkline colours (Style 1 of the 2010 set): dark blue series, red negative points and markers.
 export const SPARK_DEFAULTS = { color: '#376092', negative: '#D00000', markers: '#D00000' }
@@ -114,7 +115,7 @@ export function createSparklines(api, refs) {
         if (it.row < seg.startRow - 1 || it.row > seg.endRow + 1 || it.col < seg.startColumn - 1 || it.col > seg.endColumn + 1) continue
         if (!w.getRowVisible(it.row) || !w.getColVisible(it.col)) continue
         const srcSheet = (book?.getSheetBySheetId?.(it.sheetId ?? w.getSheetId())) ?? w
-        const values = sparkValues((r, c) => srcSheet.getCellRaw(r, c)?.v ?? null, it.source)
+        const values = sparkValues((r, c) => srcSheet.getCellRaw(r, c)?.v ?? spillValue(injector, book?.getUnitId?.() ?? wb().getId(), srcSheet.getSheetId(), r, c), it.source)
         const cell = sk.getCellWithCoordByIndex(it.row, it.col, false)
         drawSparkline(ctx, g.type, values, { x: cell.startX, y: cell.startY, w: cell.endX - cell.startX, h: cell.endY - cell.startY }, { ...SPARK_DEFAULTS, ...g.colors })
       }

@@ -31,7 +31,7 @@ export function buildKeyTipTree(api, { dialogs, extras, charts, outline, pivots,
     else { const src = dc > 0 ? g.startColumn : g.endColumn; for (let r = g.startRow; r <= g.endRow; r++) copyCell(s, r, src, dc > 0 ? [src + 1, g.endColumn] : [g.startColumn, src - 1], 'col') }
   }
   function copyCell(s, r, c, [a, b], axis) {
-    const v = s.getRange(r, c).getRawValue(), f = s.getRange(r, c).getFormula()
+    const v = s.getRange(r, c).getCalculatedValue(), f = s.getRange(r, c).getFormula()
     for (let i = a; i <= b; i++) { const t = axis === 'row' ? s.getRange(i, c) : s.getRange(r, i); if (f) t.setFormula(f); else t.setValue(v) }
   }
   // Insert as many rows / columns as are selected, before the selection (Excel's Insert Sheet Rows / Columns).
