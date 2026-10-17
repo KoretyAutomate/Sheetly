@@ -239,7 +239,8 @@ function xlpm(f) {
     }
     const callable = (x) => !builtin(x) || holdsFunction.has(x.toLowerCase())
     // Whole names only: letters of any script count as part of a name (税x is not x).
-    const re = (name, calls) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![\\p{L}\\p{N}_.(!\u0000])"}`, 'giu')
+    // ($ after a name makes it a cell reference such as X$1, not a parameter x)
+    const re = (name, calls) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![\\p{L}\\p{N}_.(!$\u0000])"}`, 'giu')
     const scan = (name, startAt, endAt, calls) => { const span = m0.slice(startAt, endAt); let t; const r = re(name, calls); while ((t = r.exec(span))) edits.push(startAt + t.index + t[1].length) }
     // Where each name is bound: a LAMBDA parameter in the whole call; a LET name from its declaration on, skipping
     // its own value (LET(a,y,y,1,a+y): the first y is the workbook's y, not the parameter).
@@ -542,7 +543,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
       const f = cell.f || (cell.si ? formulaOf?.(id, +r, +c) : null)
       // GETPIVOTDATA reads a PivotTable, and PivotTables are saved as their values for now: Excel (and Sheetly on
       // reopening) would recalculate it to #REF!, so such a cell keeps its result as a value.
-      const pivotRead = f && /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i.test(f) && cell.v != null
+      // (a real call: quoted text and sheet names are masked first)
+      const pivotRead = f && /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i.test(mask(f)) && cell.v != null
       const spill = f && !pivotRead ? arrayRangeOf?.(id, +r, +c) : null
       const result = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined
       if (f && spill && (spill.endRow > spill.startRow || spill.endColumn > spill.startColumn)) {

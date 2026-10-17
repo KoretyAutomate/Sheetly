@@ -1,4 +1,4 @@
-round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-17T06:27:37.245Z
+round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-17T06:50:07.730Z
 PASS  Ctrl+F1 collapses the ribbon to its tabs
 PASS  Ctrl+F1: the grid moves up into the space
 PASS  Ctrl+F1 again expands it

@@ -1,4 +1,4 @@
-charts  2026-10-17T06:28:35.056Z
+charts  2026-10-17T06:51:05.407Z
 PASS  Alt+F1: clustered column, series by columns with the header row as names
 PASS  the chart follows its data: B2 = 99 redraws it
 PASS  formula results feed the chart too

@@ -307,7 +307,10 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const mixed = explicitSeries((r, c) => g[r]?.[c] ?? null, { categories: null, series: [{ name: null, nameText: 'A', values: R(0, 0, 2, 0) }, { name: null, nameText: 'B', values: R(1, 3, 1, 5) }] })
   const g2 = []; g2[0] = [1, null]; g2[1] = [2, null]; g2[2] = [3, null]; g2[4] = [null, 10]; g2[5] = [null, 20]; g2[6] = [null, 30]
   const vis = explicitSeries((r, c) => g2[r]?.[c] ?? null, { categories: null, series: [{ name: null, nameText: 'A', values: R(0, 0, 2, 0) }, { name: null, nameText: 'B', values: R(4, 1, 6, 1) }] }, { hiddenRow: (r) => r === 5 })
-  check('each series hides the points in its own hidden rows (row 6 hides B6 only)', J(vis.series.map((x) => x.values)) === J([[1, 2, 3], [10, 30]]), J(vis.series))
+  check('a point hidden in one series only is a gap there (row 6 hides B6; A keeps all)', J(vis.series.map((x) => x.values)) === J([[1, 2, 3], [10, null, 30]]), J(vis.series))
+  const g3 = []; g3[1] = ['A']; g3[2] = ['B']; g3[3] = ['C']; g3[4] = [null, 100]; g3[5] = [null, 200]; g3[6] = [null, 300]
+  const al = explicitSeries((r, c) => g3[r]?.[c] ?? null, { categories: R(1, 0, 3, 0), series: [{ name: null, nameText: 'S', values: R(4, 1, 6, 1) }] }, { hiddenRow: (r) => r === 5 })
+  check('values on other rows than their categories keep their categories when one is hidden (C still 300)', J(al.labels) === J(['A', 'B', 'C']) && J(al.series[0].values) === J([100, null, 300]), J(al))
   check('a column series and a row series are each read along their own direction', J(mixed.series.map((x) => x.values)) === J([[10, 20, 30], [40, 50, 60]]), J(mixed.series))
   const s13 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DATA_VALIDATION_PLUGIN', data: J({ s1: [{ uid: 'p', ranges: [R(0, 0)], type: 'whole', operator: 'between', formula1: '1', formula2: '5', showInputMessage: false, prompt: 'Kept but hidden' }] }) }],
     sheets: { s1: { id: 's1', name: 'Data', cellData: {} } } }
@@ -320,6 +323,9 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const s14 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=GETPIVOTDATA("Sales",$A$3)', v: 45, t: 2 }, 1: { f: '=A1*2', v: 90, t: 2 } } },
     custom: { sheetlySparklines: [{ id: 'g', type: 'line', colors: {}, displayHidden: true, items: [{ row: 5, col: 5, sheetId: 's1', source: R(0, 0, 0, 3) }] }] } } } }
   const b14 = await snapshotToXlsx(s14), w14 = new ExcelJS.Workbook(); await w14.xlsx.load(b14)
+  const s15 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=IF(B1="GETPIVOTDATA(",1,2)', v: 2, t: 2 } } } } } }
+  const w15 = new ExcelJS.Workbook(); await w15.xlsx.load(await snapshotToXlsx(s15))
+  check('text "GETPIVOTDATA(" inside quotes does not turn a formula into a value', w15.getWorksheet('Data').getCell('A1').value?.formula === 'IF(B1="GETPIVOTDATA(",1,2)', J(w15.getWorksheet('Data').getCell('A1').value))
   check('a GETPIVOTDATA cell is saved as its value; formulas using it stay formulas', w14.getWorksheet('Data').getCell('A1').value === 45 && w14.getWorksheet('Data').getCell('B1').value?.formula === 'A1*2', J([w14.getWorksheet('Data').getCell('A1').value, w14.getWorksheet('Data').getCell('B1').value]))
   const r14 = await xlsxToSnapshot(b14)
   check('a sparkline group set to show hidden cells keeps that setting', r14.sheets[r14.sheetOrder[0]].custom?.sheetlySparklines?.[0]?.displayHidden === true, J(r14.sheets[r14.sheetOrder[0]].custom))

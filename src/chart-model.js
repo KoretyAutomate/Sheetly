@@ -60,13 +60,20 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   // hidden column (vertical) or row (horizontal) drops just the series in it.
   // Each range's own cells decide which of its points are shown (a hidden row hides the points in that row).
   const keepFor = (g) => along(g).map(([r, c]) => (isVertical(g) ? !hiddenRow(r) : !hiddenCol(c)))
-  const keep = first ? keepFor(first) : []
   const seriesShown = (g) => (isVertical(g) ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
-  const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => {
-    const mask = keepFor(s.values) // once per series, shared by its values and scatter X values
-    return { name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
-      values: along(s.values).filter((_, k) => mask[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
-      ...(s.xValues ? { xs: along(s.xValues).filter((_, k) => mask[k] !== false).map(([r, c]) => val(get(r, c))) } : {}) }
+  // Points line up by position. A position is left out when it is hidden in every range (the categories and each
+  // series of the same direction — the usual case of everything on the same rows); otherwise a hidden point is a
+  // gap, so the remaining values keep their own categories.
+  const visible = src.series.filter(({ values }) => seriesShown(values))
+  const masks = visible.map(({ values }) => keepFor(values))
+  const catMask = src.categories ? keepFor(isVertical(src.categories) === vertical ? (vertical ? { ...src.categories, startColumn: src.categories.endColumn } : { ...src.categories, startRow: src.categories.endRow }) : src.categories) : null
+  const width = Math.max(0, ...masks.map((m) => m.length), catMask?.length ?? 0)
+  const drop = Array.from({ length: width }, (_, k) => (catMask ? catMask[k] === false : true) && masks.every((m, j) => isVertical(visible[j].values) !== vertical || m[k] === false))
+  const series = visible.map((s, j) => {
+    const i = src.series.indexOf(s), mask = masks[j]
+    const pick = (g) => along(g).map(([r, c], k) => (drop[k] ? undefined : mask[k] === false ? null : val(get(r, c)))).filter((x) => x !== undefined)
+    return { name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`, values: pick(s.values), nameCell: s.name,
+      ...(s.xValues ? { xs: pick(s.xValues) } : {}) }
   })
   const n = Math.max(0, ...series.map((s) => s.values.length))
   let labels = Array.from({ length: n }, (_, i) => String(i + 1)), levels = []
@@ -75,7 +82,7 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
     // inner level: the last column (vertical) or row (horizontal); outer levels before it
     const lines = vertical ? Array.from({ length: cat.endColumn - cat.startColumn + 1 }, (_, i) => cat.startColumn + i) : Array.from({ length: cat.endRow - cat.startRow + 1 }, (_, i) => cat.startRow + i)
     const cellsOf = (line) => (vertical ? along({ startRow: cat.startRow, endRow: cat.endRow, startColumn: line, endColumn: line }) : along({ startRow: line, endRow: line, startColumn: cat.startColumn, endColumn: cat.endColumn }))
-    const pick = (line) => { const cells = cellsOf(line), k2 = cells.map(([r, c]) => (vertical ? !hiddenRow(r) : !hiddenCol(c))); return cells.filter((_, k) => k2[k]) }
+    const pick = (line) => cellsOf(line).filter((_, k) => !drop[k])
     labels = pick(lines[lines.length - 1]).map(([r, c]) => String(get(r, c) ?? ''))
     for (let k = lines.length - 2; k >= 0; k--) {
       let prev = null
