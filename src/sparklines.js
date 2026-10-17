@@ -15,6 +15,9 @@ const PAD = 2
 const soon = (fn) => { let done = false; const run = () => { if (!done) { done = true; fn() } }; requestAnimationFrame(run); setTimeout(run, 60) }
 
 
+// Largest / smallest of a list of any length (spreading a long list into Math.max overflows the call stack).
+const maxOf = (list, start = -Infinity) => { let m = start; for (const x of list) if (x > m) m = x; return m }
+const minOf = (list, start = Infinity) => { let m = start; for (const x of list) if (x < m) m = x; return m }
 /** Values of one sparkline: numbers in order; text and blanks are gaps (null). */
 export const sparkValues = (get, g) => {
   const out = []
@@ -44,7 +47,7 @@ export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS) {
   const n = values.length
   ctx.save()
   if (type === 'column' || type === 'winloss') {
-    const lo = Math.min(0, ...nums), hi = Math.max(0, ...nums)
+    const lo = minOf(nums, 0), hi = maxOf(nums, 0)
     const slot = w / n, bw = Math.max(1, slot * 0.7)
     const y = (v) => (type === 'winloss' ? (v > 0 ? y0 : v < 0 ? y0 + h / 2 : null) : y0 + ((hi - v) / (hi - lo || 1)) * h)
     const zero = type === 'winloss' ? y0 + h / 2 : y0 + ((hi - 0) / (hi - lo || 1)) * h
@@ -55,7 +58,7 @@ export function drawSparkline(ctx, type, values, box, colors = SPARK_DEFAULTS) {
       ctx.fillRect(x0 + i * slot + (slot - bw) / 2, top, bw, height)
     })
   } else {
-    const lo = Math.min(...nums), hi = Math.max(...nums)
+    const lo = minOf(nums), hi = maxOf(nums)
     const px = (i) => x0 + (n === 1 ? w / 2 : (i / (n - 1)) * w), py = (v) => y0 + (hi === lo ? h / 2 : ((hi - v) / (hi - lo)) * h)
     ctx.strokeStyle = colors.color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
     ctx.beginPath()

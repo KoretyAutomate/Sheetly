@@ -21,6 +21,9 @@ Chart.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutCon
 const ACCENTS = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47']
 const shade = (hex, f) => '#' + [1, 3, 5].map((i) => Math.round(Math.min(255, Math.max(0, f < 0 ? parseInt(hex.slice(i, i + 2), 16) * (1 + f) : parseInt(hex.slice(i, i + 2), 16) + (255 - parseInt(hex.slice(i, i + 2), 16)) * f))).toString(16).padStart(2, '0')).join('')
 export const seriesColor = (i) => { const base = ACCENTS[i % 6], round = Math.floor(i / 6) % 3; return round === 0 ? base : round === 1 ? shade(base, -0.4) : shade(base, 0.4) }
+// Largest / smallest of a list of any length (spreading a long list into Math.max overflows the call stack).
+const maxOf = (list, start = -Infinity) => { let m = start; for (const x of list) if (x > m) m = x; return m }
+const minOf = (list, start = Infinity) => { let m = start; for (const x of list) if (x < m) m = x; return m }
 export const COMPONENT = 'sheetly-chart'
 // The next frame, or a short timer when the window is in the background (Chromium holds animation frames back there).
 const soon = (fn) => { let done = false; const run = () => { if (!done) { done = true; fn() } }; requestAnimationFrame(run); setTimeout(run, 60) }
@@ -93,7 +96,7 @@ export function chartConfig(spec, d) {
   // Excel starts the value axis at 0 unless the data are all on one side of 0 and their spread is under a sixth of
   // the largest magnitude.
   const all = d.series.flatMap((x) => x.values).filter((x) => x != null)
-  const lo = Math.min(...all), hi = Math.max(...all)
+  const lo = minOf(all), hi = maxOf(all)
   const zero = stacked || !all.length || !(lo > 0 ? hi - lo < hi / 6 : hi < 0 ? hi - lo < -lo / 6 : false)
   const fmt = (x) => { try { return d.pattern ? numfmt.format(d.pattern, x) : x } catch { return x } }
   const valueAxis = { stacked, beginAtZero: zero, grid: { color: '#d9d9d9' }, border: { display: false },

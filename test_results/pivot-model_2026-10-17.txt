@@ -1,4 +1,4 @@
-pivot model  2026-10-17T03:43:21.272Z
+pivot model  2026-10-17T04:07:49.079Z
 PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
 PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
 PASS  two row fields: compact form, subtotals on the group row, inner items indented
@@ -13,6 +13,8 @@ PASS  column field and two value fields: item row, then the value captions next 
 PASS  the number 1 and the text "1" are separate items, each counted once
 PASS  GETPIVOTDATA tells them apart: 1 -> 10, "1" -> 20
 PASS  a report filter on the text "1" keeps only that item
+PASS  Max / Min over 150,000 values do not overflow the stack
+PASS  TRUE, 1 and "TRUE" are three items; logicals sort after text
 PASS  GETPIVOTDATA("Sales", pt) = grand total 45
 PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
 PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
@@ -21,4 +23,4 @@ PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
 PASS  GETPIVOTDATA: combination with no data -> #REF!
 PASS  GETPIVOTDATA: unknown data field -> #REF!
 
-21/21 passed
+23/23 passed

@@ -53,15 +53,19 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   const val = (x) => (isNum(x) ? x : filled(x) && !isNaN(Number(x)) ? Number(x) : null)
   const first = src.series[0]?.values
   const vertical = !first || first.startColumn === first.endColumn
-  const along = (g) => { const out = []; if (vertical) for (let r = g.startRow; r <= g.endRow; r++) out.push([r, g.startColumn]); else for (let c = g.startColumn; c <= g.endColumn; c++) out.push([g.startRow, c]); return out }
+  // Each range is read along its own direction (a chart may mix a column range with a row range).
+  const isVertical = (g) => g.startColumn === g.endColumn && (g.startRow !== g.endRow || vertical)
+  const along = (g) => { const out = []; if (isVertical(g)) for (let r = g.startRow; r <= g.endRow; r++) out.push([r, g.startColumn]); else for (let c = g.startColumn; c <= g.endColumn; c++) out.push([g.startRow, c]); return out }
   // A hidden row (vertical series) or column (horizontal) drops that point from every series, with its category; a
   // hidden column (vertical) or row (horizontal) drops just the series in it.
   const keep = first ? along(first).map(([r, c]) => (vertical ? !hiddenRow(r) : !hiddenCol(c))) : []
-  const seriesShown = (g) => (vertical ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
+  // Points line up by position across series; a series of another direction keeps all its points.
+  const keepFor = (g) => (isVertical(g) === vertical ? keep : [])
+  const seriesShown = (g) => (isVertical(g) ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
   const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
-    values: along(s.values).filter((_, k) => keep[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
+    values: along(s.values).filter((_, k) => keepFor(s.values)[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
     // scatter: the series' own X values
-    ...(s.xValues ? { xs: along(s.xValues).filter((_, k) => keep[k] !== false).map(([r, c]) => val(get(r, c))) } : {}) }))
+    ...(s.xValues ? { xs: along(s.xValues).filter((_, k) => keepFor(s.values)[k] !== false).map(([r, c]) => val(get(r, c))) } : {}) }))
   const n = Math.max(0, ...series.map((s) => s.values.length))
   let labels = Array.from({ length: n }, (_, i) => String(i + 1)), levels = []
   const cat = src.categories

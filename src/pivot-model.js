@@ -6,6 +6,9 @@
 // last, subtotals at the top of each outer row group, column subtotals "<item> Total" after each outer column group,
 // Grand Total row and column, several value fields shown side by side as an innermost column level ("Values").
 
+// Largest / smallest of a list of any length (spreading a long list into Math.max overflows the call stack).
+const maxOf = (list, start = -Infinity) => { let m = start; for (const x of list) if (x > m) m = x; return m }
+const minOf = (list, start = Infinity) => { let m = start; for (const x of list) if (x < m) m = x; return m }
 export const FUNCS = ['sum', 'count', 'average', 'max', 'min', 'product', 'countNums', 'stdDev', 'stdDevp', 'var', 'varp']
 // Excel's caption prefixes; Count Numbers is captioned "Count of" too.
 export const FN_LABEL = { sum: 'Sum', count: 'Count', average: 'Average', max: 'Max', min: 'Min', product: 'Product', countNums: 'Count', stdDev: 'StdDev', stdDevp: 'StdDevp', var: 'Var', varp: 'Varp' }
@@ -15,7 +18,11 @@ export const valueName = (v) => v.name || `${FN_LABEL[v.fn] ?? 'Sum'} of ${v.fie
 
 const isBlank = (x) => x == null || x === ''
 const label = (x) => (isBlank(x) ? BLANK : x)
+// Excel's order: numbers, text, logicals (FALSE, TRUE), then (blank).
+const rank = (x) => (x === BLANK ? 3 : typeof x === 'number' ? 0 : typeof x === 'boolean' ? 2 : 1)
 const cmpItems = (a, b) => {
+  if (rank(a) !== rank(b)) return rank(a) - rank(b)
+  if (typeof a === 'boolean') return Number(a) - Number(b)
   if (a === BLANK) return b === BLANK ? 0 : 1
   if (b === BLANK) return -1
   if (typeof a === 'number' && typeof b === 'number') return a - b
@@ -24,8 +31,8 @@ const cmpItems = (a, b) => {
   return String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
 }
 // Items as Excel groups them: a number and a text that look alike are different items; text ignores case.
-const sameItem = (a, b) => (typeof a === 'number' || typeof b === 'number' ? typeof a === typeof b && a === b : String(a).toLowerCase() === String(b).toLowerCase())
-const itemKey = (x) => (typeof x === 'number' ? `n:${x}` : `s:${String(x).toLowerCase()}`)
+const sameItem = (a, b) => typeof a === typeof b && (typeof a === 'string' ? a.toLowerCase() === b.toLowerCase() : a === b)
+const itemKey = (x) => `${typeof x}:${typeof x === 'string' ? x.toLowerCase() : String(x)}`
 // Matching what a user typed (GETPIVOTDATA items, filter choices): "2024" finds the number 2024.
 const same = (a, b) => (typeof a === 'number' || typeof b === 'number' ? Number(a) === Number(b) : String(a).toLowerCase() === String(b).toLowerCase())
 
@@ -61,8 +68,8 @@ export function aggregate(fn, values) {
     case 'count': { const k = values.filter((x) => !isBlank(x)).length; return k || null }
     case 'countNums': return n || null
     case 'average': return n ? sum / n : null
-    case 'max': return n ? Math.max(...nums) : null
-    case 'min': return n ? Math.min(...nums) : null
+    case 'max': return n ? maxOf(nums) : null
+    case 'min': return n ? minOf(nums) : null
     case 'product': return n ? nums.reduce((a, b) => a * b, 1) : null
     case 'stdDev': { const v = varOf(false); return v == null ? null : Math.sqrt(v) }
     case 'stdDevp': { const v = varOf(true); return v == null ? null : Math.sqrt(v) }

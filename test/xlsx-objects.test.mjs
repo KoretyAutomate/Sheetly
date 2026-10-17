@@ -301,6 +301,17 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('a quote inside a text rule is doubled in its formula', f12 === 'LEFT(A1,LEN("a""b"))="a""b"', f12)
 }
 
+// ---- review round 9: mixed series directions, a switched-off input message
+{
+  const g = [[10, null, null, null, null, null], [20, null, null, 40, 50, 60], [30]]
+  const mixed = explicitSeries((r, c) => g[r]?.[c] ?? null, { categories: null, series: [{ name: null, nameText: 'A', values: R(0, 0, 2, 0) }, { name: null, nameText: 'B', values: R(1, 3, 1, 5) }] })
+  check('a column series and a row series are each read along their own direction', J(mixed.series.map((x) => x.values)) === J([[10, 20, 30], [40, 50, 60]]), J(mixed.series))
+  const s13 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DATA_VALIDATION_PLUGIN', data: J({ s1: [{ uid: 'p', ranges: [R(0, 0)], type: 'whole', operator: 'between', formula1: '1', formula2: '5', showInputMessage: false, prompt: 'Kept but hidden' }] }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: {} } } }
+  const b13 = await xlsxToSnapshot(await snapshotToXlsx(s13)), v13 = res(b13, 'SHEET_DATA_VALIDATION_PLUGIN')[b13.sheetOrder[0]]?.[0]
+  check('an input message that is switched off stays off (its text kept)', !v13?.showInputMessage && v13?.prompt === 'Kept but hidden', J(v13))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

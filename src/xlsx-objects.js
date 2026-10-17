@@ -194,7 +194,8 @@ export function dvOut(ws, rules = []) {
       ...(type !== 'list' && type !== 'custom' ? { operator: r.operator ?? 'between' } : {}),
       showErrorMessage: r.showErrorMessage !== false, ...(r.errorStyle != null ? { errorStyle: ERROR_STYLE_OUT[r.errorStyle] ?? 'stop' } : {}),
       ...(r.error ? { error: r.error } : {}), ...(r.errorTitle ? { errorTitle: r.errorTitle } : {}),
-      ...(r.showInputMessage || r.prompt ? { showInputMessage: true } : {}), ...(r.prompt ? { prompt: r.prompt } : {}), ...(r.promptTitle ? { promptTitle: r.promptTitle } : {}),
+      // the prompt text is kept even while showing it is switched off
+      ...(r.showInputMessage ? { showInputMessage: true } : {}), ...(r.prompt ? { prompt: r.prompt } : {}), ...(r.promptTitle ? { promptTitle: r.promptTitle } : {}),
     }
   }
 }

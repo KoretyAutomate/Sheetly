@@ -229,7 +229,16 @@ function xlpm(f) {
     const decls = args.map((x, k) => [x, k]).filter(([x, k]) => k < args.length - 1 && (!isLet || k % 2 === 0) && valid(x))
     // Names that can be called: LET names bound to a LAMBDA, and LAMBDA parameters (a function passed in) unless
     // they are spelled like a built-in function, which a call then means.
-    const callable = (x, k) => (isLet ? /^(_xlfn\.)?LAMBDA\(/i.test(args[k + 1] ?? '') : !BUILTIN_CALLS.has(x.toUpperCase()) && !XLFN.has(x.toUpperCase()) && !XLWS.has(x.toUpperCase()))
+    // A call to a bound name means the binding unless the name is spelled like a built-in function and the binding
+    // cannot hold a function (LET(sum,5,SUM(sum,1)) calls the function SUM). A LET value holds a function when it
+    // contains a LAMBDA or names an earlier binding that does (an alias).
+    const builtin = (x) => BUILTIN_CALLS.has(x.toUpperCase()) || XLFN.has(x.toUpperCase()) || XLWS.has(x.toUpperCase())
+    const holdsFunction = new Set()
+    if (isLet) for (let k = 0; k < args.length - 1; k += 2) {
+      const value = (args[k + 1] ?? '').trim()
+      if (/LAMBDA\(/i.test(value) || holdsFunction.has(value.toLowerCase())) holdsFunction.add(args[k].toLowerCase())
+    }
+    const callable = (x) => !builtin(x) || holdsFunction.has(x.toLowerCase())
     const re = (name, calls) => new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![A-Za-z0-9_.(!\u0000])"}`, 'gi')
     const scan = (name, startAt, endAt, calls) => { const span = m0.slice(startAt, endAt); let t; const r = re(name, calls); while ((t = r.exec(span))) edits.push(startAt + t.index + t[1].length) }
     // Where each name is bound: a LAMBDA parameter in the whole call; a LET name from its declaration on, skipping

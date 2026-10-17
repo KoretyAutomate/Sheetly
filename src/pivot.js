@@ -98,7 +98,7 @@ export function createPivots(api, { dialogs, refs }) {
     const top = Math.max(row, filters.length ? filters.length + 1 : 0)
     const hasGrid = L && (p.rows.length || p.cols.length || p.values.length)
     // Report filters take two columns (name, item), so the report owns at least two when it has filters.
-    const width = Math.max(hasGrid ? Math.max(...L.grid.map((r) => r.length)) : 0, filters.length ? 2 : 0)
+    const width = Math.max(hasGrid ? L.grid.reduce((m, r) => Math.max(m, r.length), 0) : 0, filters.length ? 2 : 0)
     const rows = hasGrid ? L.grid.length : 0
     const filterRows = filters.length ? filters.length + 1 : 0
     const next = width ? { row: top - filterRows, col, rows: rows + filterRows, cols: width } : null

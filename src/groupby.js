@@ -266,7 +266,7 @@ class PivotFunction extends BaseFunction {
       out.push(row)
     }
     if (out.length === 0) return err('#CALC!')
-    const width = Math.max(...out.map((r) => r.length))
+    const width = out.reduce((m, r) => Math.max(m, r.length), 0)
     for (const r of out) while (r.length < width) r.push(BLANK())
     return ArrayValueObject.create({ calculateValueList: out, rowCount: out.length, columnCount: width,
       unitId: this.unitId, sheetId: this.subUnitId, row: this.row, column: this.column })

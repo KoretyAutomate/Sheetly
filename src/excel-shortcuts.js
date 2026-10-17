@@ -9,8 +9,11 @@ const { CTRL_COMMAND: CTRL, SHIFT, ALT } = MetaKeys
 const CONTEXT_MENU_KEY = 93, PAGE_UP = 33, PAGE_DOWN = 34, SEMICOLON = 186, QUOTE = 222, BACKQUOTE = 192, BRACKET_L = 219, BRACKET_R = 221
 const EQUAL = KeyCode.EQUAL, MINUS = KeyCode.MINUS, PERIOD = KeyCode.PERIOD, BACK_SLASH = KeyCode.BACK_SLASH
 const DIGIT = (n) => KeyCode.Digit0 + n
-const excelSerial = (d) => Math.floor((d - new Date(1899, 11, 30)) / 864e5)
-const dayFraction = (d) => (d - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5
+// The local calendar date's serial (counted in UTC days: the time zone's offset in 1899 differed from today's,
+// which shifted the result by a day just after midnight).
+const excelSerial = (d) => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 864e5)
+// The wall-clock time as a fraction of a day (from hours, minutes, seconds: correct on daylight-saving days too).
+const dayFraction = (d) => (d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 86400
 const PRIORITY = 200
 
 export function installExcelShortcuts(api, shortcuts, dialogs, charts, extras, outline, quickAnalysis, pivots) {

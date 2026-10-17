@@ -253,7 +253,10 @@ const grid = async () => { await win.mouse.click(700, 500); await settle() }
   await ev(`S().getRange('G5').activate()`); await settle()
   await key('Control+Shift+Quote'); await key('Enter'); await settle(300)
   check('Ctrl+Shift+" copies the value 600, not the text "$600"', (await ev(`return S().getRange('G5').getRawValue()`)) === 600, String(await ev(`return JSON.stringify(S().getRange('G5').getRawValue())`)))
-  await ev(`S().getRange('G1:G5').clear()`)
+  await ev(`S().getRange('G1:G5').clear(); S().getRange('K1').setValue(true); S().getRange('K2').activate()`); await settle()
+  await key('Control+Shift+Quote'); await key('Enter'); await settle(300)
+  check('Ctrl+Shift+" copies TRUE as a logical, not 1', JSON.stringify(await ev(`return [S().getRange('K2').getCalculatedValue(), S().getSheet().getCellRaw(1,10)?.t]`)) === '[true,3]', JSON.stringify(await ev(`return S().getSheet().getCellRaw(1,10)`)))
+  await ev(`S().getRange('K1:K2').clear()`)
 }
 
 check('no page errors', errors.length === 0, errors.join(' | '))

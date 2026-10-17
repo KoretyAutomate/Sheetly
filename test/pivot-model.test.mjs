@@ -42,6 +42,13 @@ check('column field and two value fields: item row, then the value captions next
   const F2 = layout({ rows: [], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [{ field: 'K', items: ['1'] }] }, src2)
   check('a report filter on the text "1" keeps only that item', show(F2) === 'Sum of V\n20', '\n' + show(F2))
 }
+check('Max / Min over 150,000 values do not overflow the stack', aggregate('max', Array(150000).fill(1).map((x, i) => i)) === 149999 && aggregate('min', Array(150000).fill(5)) === 5)
+{
+  const rows3 = [['K', 'V'], [true, 1], [1, 2], ['TRUE', 4], [false, 8]]
+  const src3 = readSource((r, c) => rows3[r]?.[c] ?? null, { startRow: 0, endRow: 4, startColumn: 0, endColumn: 1 })
+  const L3 = layout({ rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }, src3)
+  check('TRUE, 1 and "TRUE" are three items; logicals sort after text', show(L3) === 'Row Labels | Sum of V\n1 | 2\nTRUE | 4\nfalse | 8\ntrue | 1\nGrand Total | 15', '\n' + show(L3))
+}
 const def = { rows: ['Region'], cols: ['Product'], values: sum, filters: [] }
 const g = (df, pairs) => { const x = getPivotData(def, src, df, pairs); return x.error ?? x.value }
 check('GETPIVOTDATA("Sales", pt) = grand total 45', g('Sales', []) === 45)
