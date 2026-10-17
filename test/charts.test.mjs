@@ -121,6 +121,20 @@ check('saved chart: multi-level categories over both label columns', xml.include
 await ev(`S().getRange('A1').activate()`)
 await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
 
+// ---- a chart with series picked one by one (categories A, series B and D) plots just those
+await ev(`S().getRange('A1:H20').clear(); S().getRange('A1:D4').setValues([['R','S1','skip','S2'],['x',1,100,4],['y',2,200,5],['z',3,300,6]])`); await settle()
+await ev(`S().addFloatDomToPosition({ componentKey: 'sheetly-chart', allowTransform: true, initPosition: { startX: 400, endX: 800, startY: 0, endY: 250 },
+  data: { v: 2, type: 'column', title: null, source: { sheetId: S().getSheetId(), range: { startRow: 0, endRow: 3, startColumn: 0, endColumn: 3 }, categories: { startRow: 1, endRow: 3, startColumn: 0, endColumn: 0 },
+    series: [{ name: [0, 1], values: { startRow: 1, endRow: 3, startColumn: 1, endColumn: 1 } }, { name: [0, 3], values: { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 } }] } } })`); await settle(800)
+st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|') + '|' + c.data.labels.join(',')`)
+check('series picked one by one: only those columns are plotted', st === 'S1:1,2,3|S2:4,5,6|x,y,z', st)
+await ev(`S().insertColumnsBefore(2, 1)`); await settle(700)
+st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|')`)
+check('and their references move with an inserted column', st === 'S1:1,2,3|S2:4,5,6', st)
+await removeCharts(); await ev(`S().deleteColumns(2, 1); S().getRange('A1:H20').clear()`); await settle()
+await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
+await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
+
 // ---- saved with the workbook
 const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); const k=Object.keys(d)[0]; return Object.values(d[k].data).map(x=>x.data).find(x=>x.type==='pie')`)
 check('the chart definition is saved (type + source range)', snap?.type === 'pie' && snap?.source?.range?.endRow === 5, JSON.stringify(snap))

@@ -122,7 +122,13 @@ export function cfIn(ws, sheetId) {
         const f = (x.formulae ?? []).map((v) => String(v))
         const text = f.length === 1 && /^".*"$/.test(f[0])
         if (text && ['equal', 'notEqual'].includes(x.operator)) rule = { type: 'highlightCell', subType: 'text', operator: x.operator, value: f[0].slice(1, -1).replace(/""/g, '"'), style }
-        else if (['between', 'notBetween'].includes(x.operator)) rule = { type: 'highlightCell', subType: 'number', operator: x.operator, value: [Number(f[0]), Number(f[1])], style }
+        else if (['between', 'notBetween'].includes(x.operator) && f.length === 2 && f.every((v) => !isNaN(Number(v)))) rule = { type: 'highlightCell', subType: 'number', operator: x.operator, value: [Number(f[0]), Number(f[1])], style }
+        else if (['between', 'notBetween'].includes(x.operator)) {
+          // Bounds that are references or formulas: the same test as a formula rule relative to the first cell.
+          const g = ranges[0], cell = `${colName(g.startColumn)}${g.startRow + 1}`
+          const test = `AND(${cell}>=MIN(${f[0]},${f[1]}),${cell}<=MAX(${f[0]},${f[1]}))`
+          rule = { type: 'highlightCell', subType: 'formula', value: `=${x.operator === 'between' ? test : `NOT(${test})`}`, style }
+        }
         else if (f.every((v) => !isNaN(Number(v)))) rule = { type: 'highlightCell', subType: 'number', operator: x.operator, value: Number(f[0]), style }
         else {
           // cellIs against a reference or formula: Univer's equivalent is a formula rule relative to the first cell.
@@ -214,7 +220,8 @@ export function dvIn(ws, sheetId) {
 
 // ---- tables
 const tableName = (s, used) => {
-  let n = String(s || 'Table').replace(/[^A-Za-z0-9_.]/g, '_').replace(/^([^A-Za-z_])/, '_$1')
+  // Excel allows letters of any script, digits, _ and . (first: a letter or _); only invalid characters change.
+  let n = String(s || 'Table').replace(/[^\p{L}\p{N}_.]/gu, '_').replace(/^([^\p{L}_])/u, '_$1')
   const base = n
   for (let i = 2; used.has(n.toLowerCase()); i++) n = `${base}${i}`
   used.add(n.toLowerCase())
@@ -271,6 +278,15 @@ export function sheetGeometry(sheet) {
 }
 const anchorIn = (a) => ({ column: a?.nativeCol ?? Math.floor(a?.col ?? 0), columnOffset: Math.round((a?.nativeColOff ?? 0) / EMU_PER_PX), row: a?.nativeRow ?? Math.floor(a?.row ?? 0), rowOffset: Math.round((a?.nativeRowOff ?? 0) / EMU_PER_PX) })
 export const anchorOut = (p) => ({ nativeCol: p.column, nativeColOff: Math.max(0, Math.round((p.columnOffset ?? 0) * EMU_PER_PX)), nativeRow: p.row, nativeRowOff: Math.max(0, Math.round((p.rowOffset ?? 0) * EMU_PER_PX)) })
+/** The cell anchor width x height px away from a start anchor. */
+export function endFrom(sheet, from, width, height) {
+  const geo = sheetGeometry(sheet)
+  let c = from.column, x = from.columnOffset + width
+  while (x > geo.cw(c) && c < 16383) { x -= geo.cw(c); c++ }
+  let r = from.row, y = from.rowOffset + height
+  while (y > geo.rh(r) && r < 1048575) { y -= geo.rh(r); r++ }
+  return { column: c, columnOffset: Math.round(x), row: r, rowOffset: Math.round(y) }
+}
 /** A Univer drawing placed by a from/to cell anchor. */
 export function placed(sheet, from, to, extra) {
   const geo = sheetGeometry(sheet)
@@ -309,7 +325,8 @@ export function imagesIn(wb, ws, sheet, unitId) {
     const ext = media.extension === 'jpeg' ? 'jpeg' : media.extension
     const b64 = toBase64(media.buffer)
     const from = anchorIn(im.range.tl)
-    const to = im.range.br ? anchorIn(im.range.br) : { ...from, column: from.column + 3, row: from.row + 5 }
+    // One-cell anchors store the picture's size (ext, px) instead of an end cell.
+    const to = im.range.br ? anchorIn(im.range.br) : endFrom(sheet, from, im.range.ext?.width ?? 192, im.range.ext?.height ?? 100)
     const drawingId = `img${++imgSeq}_${Date.now().toString(36)}`
     out.push(placed(sheet, from, to, { unitId, subUnitId: sheet.id, drawingId, drawingType: 0, imageSourceType: 'BASE64', source: `data:image/${ext};base64,${b64}`, anchorType: '0' }))
   }

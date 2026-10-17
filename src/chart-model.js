@@ -41,3 +41,16 @@ export function seriesFrom(get, g, plotBy, { hiddenRow = () => false, hiddenCol 
 
 /** Automatic title: the series name for one series, else "Chart Title"; '' = no title. */
 export const chartTitle = (spec, d) => (spec?.title != null ? spec.title : d.series.length === 1 ? d.series[0].name : 'Chart Title')
+
+/**
+ * Data of a chart whose series were picked one by one (not one block): source.series = [{ name: [r, c] | null,
+ * nameText, values: IRange }], source.categories: IRange | null. Values are read along each range.
+ */
+export function explicitSeries(get, src) {
+  const cells = (g) => { const out = []; for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) out.push([r, c]); return out }
+  const val = (x) => (isNum(x) ? x : filled(x) && !isNaN(Number(x)) ? Number(x) : null)
+  const series = src.series.map((s, i) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`, values: cells(s.values).map(([r, c]) => val(get(r, c))), nameCell: s.name }))
+  const n = Math.max(0, ...series.map((s) => s.values.length))
+  const labels = src.categories ? cells(src.categories).map(([r, c]) => String(get(r, c) ?? '')) : Array.from({ length: n }, (_, i) => String(i + 1))
+  return { labels, levels: [], series, byCols: true, headerRow: false, labelCol: !!src.categories, labelCount: src.categories ? 1 : 0, explicit: true }
+}

@@ -12,7 +12,7 @@ import { CommandType, ICommandService, numfmt } from '@univerjs/core'
 import { IDrawingManagerService } from '@univerjs/drawing'
 import { createElement, useEffect, useReducer, useRef } from 'react'
 import { el, openDialog, radios, check } from './ui/dialog.js'
-import { chartTitle, seriesFrom } from './chart-model.js'
+import { chartTitle, explicitSeries, seriesFrom } from './chart-model.js'
 
 Chart.register(ArcElement, BarController, BarElement, CategoryScale, DoughnutController, Filler, Legend, LinearScale, LineController,
   LineElement, PieController, PointElement, ScatterController, Title, Tooltip)
@@ -47,6 +47,7 @@ function dataOf(spec) {
   const sheet = apiRef?.getActiveWorkbook()?.getSheetBySheetId(spec.source.sheetId)
   if (!sheet) return { labels: [], series: [], title: spec.title ?? '' }
   const w = sheet.getSheet()
+  if (spec.source.series) { const d = explicitSeries((r, c) => sheet.getRange(r, c).getRawValue(), spec.source); return { ...d, title: chartTitle(spec, d), pattern: null } }
   const d = seriesFrom((r, c) => sheet.getRange(r, c).getRawValue(), spec.source.range, spec.plotBy,
     { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
   // The value axis shows numbers in the source's number format (sourceLinked, as in Excel).
@@ -67,8 +68,9 @@ export function chartConfig(spec, d) {
     datasets = [{ label: s.name, data: s.values, backgroundColor: d.labels.map((_, i) => seriesColor(i)), borderColor: '#fff', borderWidth: 1 }]
   } else if (type === 'scatter') {
     // X values come from the first series (Excel uses the first column as X when there is no label column).
-    const xs = d.series.length > 1 ? d.series[0].values : d.labels.map((l, i) => num(l) || i + 1)
-    const ys = d.series.length > 1 ? d.series.slice(1) : d.series
+    // Series picked one by one carry their X values as categories.
+    const xs = d.explicit ? d.labels.map((l, i) => num(l) || i + 1) : d.series.length > 1 ? d.series[0].values : d.labels.map((l, i) => num(l) || i + 1)
+    const ys = d.explicit || d.series.length <= 1 ? d.series : d.series.slice(1)
     datasets = ys.map((s, i) => ({ label: s.name, data: s.values.map((y, k) => ({ x: xs[k], y })), backgroundColor: seriesColor(i), borderColor: seriesColor(i), pointRadius: 4 }))
   } else {
     datasets = d.series.map((s, i) => ({ label: s.name, data: values(s), backgroundColor: seriesColor(i), borderColor: seriesColor(i),
@@ -206,8 +208,13 @@ export function createCharts(api, dialogs) {
       for (const sheet of book?.getSheets?.() ?? []) for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
         const spec = c.data
         if (spec?.source?.sheetId !== p.subUnitId) continue
-        const next = shifted(spec.source.range, axis, sign, s, e)
-        if (JSON.stringify(next) !== JSON.stringify(spec.source.range)) sheet.updateFloatDom(c.id, { data: { ...spec, source: { ...spec.source, range: next } } })
+        const src = { ...spec.source, range: shifted(spec.source.range, axis, sign, s, e) }
+        if (src.series) {
+          const cell = ([r, c2]) => { const g = shifted({ startRow: r, endRow: r, startColumn: c2, endColumn: c2 }, axis, sign, s, e); return [g.startRow, g.startColumn] }
+          src.series = src.series.map((x) => ({ ...x, values: shifted(x.values, axis, sign, s, e), name: x.name ? cell(x.name) : null }))
+          if (src.categories) src.categories = shifted(src.categories, axis, sign, s, e)
+        }
+        if (JSON.stringify(src) !== JSON.stringify(spec.source)) sheet.updateFloatDom(c.id, { data: { ...spec, source: src } })
       }
     })
   })

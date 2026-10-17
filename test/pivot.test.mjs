@@ -62,10 +62,13 @@ check('report filter: Region / West above the report; only West is summarised', 
 await ev(`P.setFilter(0, null)`); await settle(600)
 await ev(`W().getSheets()[1].getRange('C2').setValue(100)`); await settle(300)
 const before = await ev(`return S().getRange('B5').getRawValue()`)
+await ev(`S().getRange('H1').setFormula('=GETPIVOTDATA("Sales",A3,"Product","A")')`); await settle(500)
+const gpdBefore = await ev(`return S().getRange('H1').getRawValue()`)
 await ev(`S().getRange('A4').activate()`); await settle()
 await key('Alt+F5'); await settle(800)
 const after = await ev(`return S().getRange('B5').getRawValue()`)
 check('the report does not follow the source until Alt+F5 refreshes it', before !== after && after === (100 + 5 + 7) / 3, `${before} -> ${after}`)
+check('until then GETPIVOTDATA answers from the report as shown, not the changed source', gpdBefore === before, `${gpdBefore} vs ${before}`)
 // ---- saved with the workbook
 const saved = await ev(`const s=W().save(); return JSON.stringify(s.sheets[S().getSheetId()].custom?.sheetlyPivots?.[0] ?? null)`)
 check('the PivotTable definition is saved with the sheet', saved.includes('"name":"PivotTable1"') && saved.includes('"fn":"average"'), saved.slice(0, 200))

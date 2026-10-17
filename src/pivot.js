@@ -27,10 +27,13 @@ export function createPivots(api, { dialogs }) {
     sheet.getSheet().setCustomMetadata(Object.keys(custom).length ? custom : undefined)
   }
   const allPivots = () => wb().getSheets().flatMap((s) => listOf(s).map((p) => ({ sheet: s, p })))
-  const sourceOf = (p) => {
+  // Like Excel's PivotCache: the records a report was built from are kept with it (p.cache). Layout changes and
+  // GETPIVOTDATA use them; only creating and refreshing read the source again.
+  const readLive = (p) => {
     const s = wb().getSheetBySheetId(p.source.sheetId)
     return s ? readSource((r, c) => { const v = s.getRange(r, c).getRawValue(); return v === '' ? null : v }, p.source.range) : null
   }
+  const sourceOf = (p) => p.cache ?? readLive(p)
   const inside = (p, r, c) => r >= p.extent.row && r < p.extent.row + p.extent.rows && c >= p.extent.col && c < p.extent.col + p.extent.cols
   /** The PivotTable the active cell is in (on the active sheet). */
   function active() {
@@ -47,8 +50,9 @@ export function createPivots(api, { dialogs }) {
     const range = sheet.getRange(top, p.extent.col, p.extent.row + p.extent.rows - top, p.extent.cols)
     range.clear()
   }
-  function render(sheet, p) {
-    const src = sourceOf(p)
+  function render(sheet, p, { refresh = false } = {}) {
+    if (refresh || !p.cache) p.cache = readLive(p)
+    const src = p.cache
     clearExtent(sheet, p)
     const { row, col } = p.anchor
     if (!src) { p.extent = { row, col, rows: EMPTY_EXTENT.rows, cols: EMPTY_EXTENT.cols, filterRows: 0 }; return p }
@@ -138,7 +142,7 @@ export function createPivots(api, { dialogs }) {
     const p = { id: `pt${Date.now().toString(36)}${k}`, name: `PivotTable${k}`, source: { sheetId: src.sheet.getSheetId(), range: src.range },
       anchor, rows: [], cols: [], values: [], filters: [] }
     wb().setActiveSheet(target)
-    render(target, p)
+    render(target, p, { refresh: true })
     save(target, p)
     target.getRange(anchor.row, anchor.col).activate()
     setTimeout(showPane, 0)
@@ -209,7 +213,7 @@ export function createPivots(api, { dialogs }) {
   }
   function refresh(all) {
     const list = all ? allPivots() : (() => { const p = active(); return p ? [{ sheet: ws(), p }] : [] })()
-    for (const { sheet, p } of list) { const q = structuredClone(p); render(sheet, q); save(sheet, q) }
+    for (const { sheet, p } of list) { const q = structuredClone(p); render(sheet, q, { refresh: true }); save(sheet, q) }
     showPane()
     return true
   }

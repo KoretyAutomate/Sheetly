@@ -56,6 +56,14 @@ const sheetXml = await (await JSZip.loadAsync(bytes)).file('xl/worksheets/sheet1
 check('saved as x14 sparkline groups', (sheetXml.match(/<x14:sparklineGroup\b/g) ?? []).length === 4 && /<x14:sparklineGroup type="column"/.test(sheetXml), (sheetXml.match(/<x14:sparklineGroup[^>]*>/g) ?? []).join(' '))
 await ev(`await X.xlsx.load(new Uint8Array(${JSON.stringify([...bytes])}), 'spark.xlsx')`); await settle(1500)
 check('opened again: the sparklines are back and drawn', (await ev(`return SP.groups().reduce((n,g)=>n+g.items.length,0)`)) === 5 && (await shot('F3')) !== blankF3)
+// structural edits move sparklines with their data
+await ev(`S().insertRowsBefore(0, 1)`); await settle(500)
+const moved = await ev(`return JSON.stringify(SP.groups().flatMap(g=>g.items.map(i=>[i.row,i.col,i.source.startRow])).filter(x=>x[1]===5).sort((a,b)=>a[0]-b[0]))`)
+await ev(`S().insertColumnsBefore(0, 1)`); await settle(500)
+const moved2 = await ev(`return JSON.stringify(SP.groups().flatMap(g=>g.items.map(i=>[i.row,i.col,i.source.startColumn,i.source.endColumn])).filter(x=>x[1]===6).sort((a,b)=>a[0]-b[0]))`)
+check('a row inserted above moves sparklines and their data down; a column inserted left moves them right', moved === '[[2,5,2],[3,5,3],[4,5,4]]' && moved2 === '[[2,6,1,5],[3,6,1,5],[4,6,1,5]]', `${moved} ${moved2}`)
+await ev(`S().deleteColumns(0, 1); S().deleteRows(0, 1)`); await settle(500)
+
 // Clear
 await ev(`S().getRange('F2:F4').activate(); SP.clear()`); await settle(600)
 await ev(`S().getRange('J30').activate()`)

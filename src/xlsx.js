@@ -9,7 +9,7 @@
 // On load a summary flagged collapsed, or a group whose detail is all hidden, sets custom.outlineCollapsed.
 import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
-import { CF, CHART_COMPONENT, DRAWINGS, DV, TABLES, cfIn, cfOut, dvIn, dvOut, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
+import { CF, CHART_COMPONENT, DRAWINGS, DV, TABLES, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
 import { finishPackage, readCharts, readSparklines } from './xlsx-zip.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
@@ -377,9 +377,10 @@ export async function xlsxToSnapshot(buf) {
   for (const c of await readCharts(buf)) {
     const id = idByIndex[c.sheetIndex], sourceId = idByName[c.spec.source.sheetName]
     if (!id || !sourceId) continue
-    const spec = { ...c.spec, source: { sheetId: sourceId, range: c.spec.source.range } }
+    const { sheetName: _name, ...source } = c.spec.source
+    const spec = { ...c.spec, source: { ...source, sheetId: sourceId } }
     const drawingId = `chart${++chartSeq}_${Date.now().toString(36)}`
-    const d = placed(sheets[id], c.from, c.to, { unitId: 'wb', subUnitId: id, drawingId, drawingType: 8, componentKey: CHART_COMPONENT, data: spec, allowTransform: true })
+    const d = placed(sheets[id], c.from, c.to ?? endFrom(sheets[id], c.from, c.size.width, c.size.height), { unitId: 'wb', subUnitId: id, drawingId, drawingType: 8, componentKey: CHART_COMPONENT, data: spec, allowTransform: true })
     const entry = (drawings[id] ??= { data: {}, order: [] })
     entry.data[drawingId] = d; entry.order.push(drawingId)
   }

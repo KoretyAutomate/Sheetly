@@ -1,5 +1,5 @@
 diff --git a/node_modules/exceljs/dist/exceljs.js b/node_modules/exceljs/dist/exceljs.js
-index ab2c9d6..5d7d75a 100644
+index ab2c9d6..b2467e8 100644
 --- a/node_modules/exceljs/dist/exceljs.js
 +++ b/node_modules/exceljs/dist/exceljs.js
 @@ -1273,6 +1273,7 @@ class Column {
@@ -121,7 +121,7 @@ index ab2c9d6..5d7d75a 100644
        };
      default:
        return {
-@@ -9801,9 +9828,18 @@ class CfRuleXform extends CompositeXform {
+@@ -9801,16 +9828,27 @@ class CfRuleXform extends CompositeXform {
        case 'containsText':
          this.renderText(xmlStream, model);
          break;
@@ -136,23 +136,76 @@ index ab2c9d6..5d7d75a 100644
 +          type: model.type,
 +          dxfId: model.dxfId,
 +          priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
 +        });
 +        break;
      }
    }
    renderExpression(xmlStream, model) {
-@@ -9842,7 +9878,9 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.openNode(this.tag, {
+       type: 'expression',
+       dxfId: model.dxfId,
+-      priority: model.priority
++      priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false)
+     });
+     this.formulaXform.render(xmlStream, model.formulae[0]);
+     xmlStream.closeNode();
+@@ -9820,6 +9858,7 @@ class CfRuleXform extends CompositeXform {
+       type: 'cellIs',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       operator: model.operator
+     });
+     model.formulae.forEach(formula => {
+@@ -9832,6 +9871,7 @@ class CfRuleXform extends CompositeXform {
+       type: 'top10',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       percent: BaseXform.toBoolAttribute(model.percent, false),
+       bottom: BaseXform.toBoolAttribute(model.bottom, false),
+       rank: BaseXform.toIntValue(model.rank, 10, true)
+@@ -9842,13 +9882,17 @@ class CfRuleXform extends CompositeXform {
        type: 'aboveAverage',
        dxfId: model.dxfId,
        priority: model.priority,
 -      aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true)
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
 +            aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true),
 +      // Sheetly: "equal to or above / below average".
 +      equalAverage: BaseXform.toBoolAttribute(model.equalAverage, false),
      });
    }
    renderDataBar(xmlStream, model) {
-@@ -9875,11 +9913,13 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.openNode(this.tag, {
+       type: 'dataBar',
+-      priority: model.priority
++      priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false)
+     });
+     this.databarXform.render(xmlStream, model);
+     this.extLstRefXform.render(xmlStream, model);
+@@ -9857,7 +9901,8 @@ class CfRuleXform extends CompositeXform {
+   renderColorScale(xmlStream, model) {
+     xmlStream.openNode(this.tag, {
+       type: 'colorScale',
+-      priority: model.priority
++      priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false)
+     });
+     this.colorScaleXform.render(xmlStream, model);
+     xmlStream.closeNode();
+@@ -9869,17 +9914,21 @@ class CfRuleXform extends CompositeXform {
+     }
+     xmlStream.openNode(this.tag, {
+       type: 'iconSet',
+-      priority: model.priority
++      priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false)
+     });
+     this.iconSetXform.render(xmlStream, model);
      xmlStream.closeNode();
    }
    renderText(xmlStream, model) {
@@ -162,23 +215,33 @@ index ab2c9d6..5d7d75a 100644
        dxfId: model.dxfId,
        priority: model.priority,
 -      operator: BaseXform.toStringAttribute(model.operator, 'containsText')
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
 +      operator: model.operator === 'notContainsText' ? 'notContains' : BaseXform.toStringAttribute(model.operator, 'containsText'),
 +      text: ['containsText', 'notContainsText', 'beginsWith', 'endsWith'].includes(model.operator) ? model.text : undefined,
      });
      const formula = getTextFormula(model);
      if (formula) {
-@@ -9912,7 +9952,9 @@ class CfRuleXform extends CompositeXform {
+@@ -9892,6 +9941,7 @@ class CfRuleXform extends CompositeXform {
+       type: 'timePeriod',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       timePeriod: model.timePeriod
+     });
+     const formula = getTimePeriodFormula(model);
+@@ -9912,7 +9962,10 @@ class CfRuleXform extends CompositeXform {
        percent: BaseXform.toBoolValue(attributes.percent),
        bottom: BaseXform.toBoolValue(attributes.bottom),
        rank: BaseXform.toIntValue(attributes.rank),
 -      aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage)
-+            aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),
++            stopIfTrue: BaseXform.toBoolValue(attributes.stopIfTrue),
++      aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),
 +      equalAverage: BaseXform.toBoolValue(attributes.equalAverage),
 +      text: attributes.text,
      };
    }
    onParserClose(name, parser) {
-@@ -9943,16 +9985,21 @@ class CfvoXform extends BaseXform {
+@@ -9943,16 +9996,21 @@ class CfvoXform extends BaseXform {
      return 'cfvo';
    }
    render(xmlStream, model) {
@@ -203,7 +266,7 @@ index ab2c9d6..5d7d75a 100644
    }
    parseClose(name) {
      return name !== this.tag;
-@@ -10141,18 +10188,23 @@ class DatabarXform extends CompositeXform {
+@@ -10141,18 +10199,23 @@ class DatabarXform extends CompositeXform {
      return 'dataBar';
    }
    render(xmlStream, model) {
@@ -231,7 +294,7 @@ index ab2c9d6..5d7d75a 100644
    onParserClose(name, parser) {
      switch (name) {
        case 'cfvo':
-@@ -10426,8 +10478,16 @@ function optimiseDataValidations(model) {
+@@ -10426,8 +10489,16 @@ function optimiseDataValidations(model) {
      }
      return true;
    };
@@ -250,7 +313,7 @@ index ab2c9d6..5d7d75a 100644
        const addr = colCache.decodeEx(dv.address);
        if (addr.dimensions) {
          dvMap[addr.dimensions].marked = true;
-@@ -10520,8 +10580,9 @@ class DataValidationsXform extends BaseXform {
+@@ -10520,8 +10591,9 @@ class DataValidationsXform extends BaseXform {
          xmlStream.addAttribute('sqref', value.sqref);
          (value.formulae || []).forEach((formula, index) => {
            xmlStream.openNode(`formula${index + 1}`);
@@ -262,7 +325,7 @@ index ab2c9d6..5d7d75a 100644
            } else {
              xmlStream.writeText(formula);
            }
-@@ -10589,38 +10650,27 @@ class DataValidationsXform extends BaseXform {
+@@ -10589,38 +10661,27 @@ class DataValidationsXform extends BaseXform {
              delete this._dataValidation.formulae;
              delete this._dataValidation.operator;
            }
@@ -317,7 +380,7 @@ index ab2c9d6..5d7d75a 100644
            this._dataValidation.formulae.push(formula);
            this._formula = undefined;
            return true;
-@@ -10899,7 +10949,16 @@ class HyperlinkXform extends BaseXform {
+@@ -10899,7 +10960,16 @@ class HyperlinkXform extends BaseXform {
    get tag() {
      return 'hyperlink';
    }
@@ -335,7 +398,7 @@ index ab2c9d6..5d7d75a 100644
      if (this.isInternalLink(model)) {
        xmlStream.leafNode('hyperlink', {
          ref: model.address,
-@@ -11463,6 +11522,10 @@ class RowXform extends BaseXform {
+@@ -11463,6 +11533,10 @@ class RowXform extends BaseXform {
        if (node.attributes.ht) {
          model.height = parseFloat(node.attributes.ht);
        }
@@ -346,7 +409,7 @@ index ab2c9d6..5d7d75a 100644
        if (node.attributes.outlineLevel) {
          model.outlineLevel = parseInt(node.attributes.outlineLevel, 10);
        }
-@@ -11768,6 +11831,7 @@ class SheetViewXform extends BaseXform {
+@@ -11768,6 +11842,7 @@ class SheetViewXform extends BaseXform {
      add('showRuler', '0', model.showRuler === false);
      add('showRowColHeaders', '0', model.showRowColHeaders === false);
      add('showGridLines', '0', model.showGridLines === false);
@@ -354,7 +417,7 @@ index ab2c9d6..5d7d75a 100644
      add('zoomScale', model.zoomScale, model.zoomScale);
      add('zoomScaleNormal', model.zoomScaleNormal, model.zoomScaleNormal);
      add('view', model.style, model.style);
-@@ -11833,6 +11897,7 @@ class SheetViewXform extends BaseXform {
+@@ -11833,6 +11908,7 @@ class SheetViewXform extends BaseXform {
            showRuler: !(node.attributes.showRuler === '0'),
            showRowColHeaders: !(node.attributes.showRowColHeaders === '0'),
            showGridLines: !(node.attributes.showGridLines === '0'),
@@ -362,7 +425,7 @@ index ab2c9d6..5d7d75a 100644
            zoomScale: parseInt(node.attributes.zoomScale || '100', 10),
            zoomScaleNormal: parseInt(node.attributes.zoomScaleNormal || '100', 10),
            style: node.attributes.view
-@@ -11880,6 +11945,7 @@ class SheetViewXform extends BaseXform {
+@@ -11880,6 +11956,7 @@ class SheetViewXform extends BaseXform {
              showRuler: this.sheetView.showRuler,
              showRowColHeaders: this.sheetView.showRowColHeaders,
              showGridLines: this.sheetView.showGridLines,
@@ -370,7 +433,7 @@ index ab2c9d6..5d7d75a 100644
              zoomScale: this.sheetView.zoomScale,
              zoomScaleNormal: this.sheetView.zoomScaleNormal
            };
-@@ -11901,6 +11967,7 @@ class SheetViewXform extends BaseXform {
+@@ -11901,6 +11978,7 @@ class SheetViewXform extends BaseXform {
              showRuler: this.sheetView.showRuler,
              showRowColHeaders: this.sheetView.showRowColHeaders,
              showGridLines: this.sheetView.showGridLines,
@@ -378,7 +441,7 @@ index ab2c9d6..5d7d75a 100644
              zoomScale: this.sheetView.zoomScale,
              zoomScaleNormal: this.sheetView.zoomScaleNormal
            };
-@@ -12118,7 +12185,9 @@ class WorkSheetXform extends BaseXform {
+@@ -12118,7 +12196,9 @@ class WorkSheetXform extends BaseXform {
      function nextRid(r) {
        return `rId${r.length + 1}`;
      }
@@ -389,7 +452,7 @@ index ab2c9d6..5d7d75a 100644
        const rId = nextRid(rels);
        hyperlink.rId = rId;
        rels.push({
-@@ -12404,8 +12473,11 @@ class WorkSheetXform extends BaseXform {
+@@ -12404,8 +12484,11 @@ class WorkSheetXform extends BaseXform {
        return h;
      }, {});
      options.hyperlinkMap = (model.hyperlinks || []).reduce((h, hyperlink) => {
@@ -402,7 +465,7 @@ index ab2c9d6..5d7d75a 100644
        }
        return h;
      }, {});
-@@ -15418,8 +15490,8 @@ class TableXform extends BaseXform {
+@@ -15418,8 +15501,8 @@ class TableXform extends BaseXform {
            displayName: attributes.displayName || attributes.name,
            tableRef: attributes.ref,
            totalsRow: attributes.totalsRowCount === '1',
@@ -527,7 +590,7 @@ index 9ed8fec..9bad67d 100644
      if (this._parsedLocalSheetId !== undefined) {
        this.model.localSheetId = parseInt(this._parsedLocalSheetId, 10);
 diff --git a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
-index 22b3e44..c51401b 100644
+index 22b3e44..1fe4e58 100644
 --- a/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
 +++ b/node_modules/exceljs/lib/xlsx/xform/sheet/cf/cf-rule-xform.js
 @@ -25,6 +25,13 @@ const getTextFormula = model => {
@@ -554,7 +617,7 @@ index 22b3e44..c51401b 100644
        return {
          type: 'containsText',
          operator: type,
-@@ -145,6 +155,15 @@ class CfRuleXform extends CompositeXform {
+@@ -145,6 +155,17 @@ class CfRuleXform extends CompositeXform {
        case 'timePeriod':
          this.renderTimePeriod(xmlStream, model);
          break;
@@ -565,21 +628,80 @@ index 22b3e44..c51401b 100644
 +          type: model.type,
 +          dxfId: model.dxfId,
 +          priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
 +        });
 +        break;
      }
    }
  
-@@ -192,6 +211,8 @@ class CfRuleXform extends CompositeXform {
+@@ -153,6 +174,8 @@ class CfRuleXform extends CompositeXform {
+       type: 'expression',
        dxfId: model.dxfId,
        priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+     });
+ 
+     this.formulaXform.render(xmlStream, model.formulae[0]);
+@@ -165,6 +188,8 @@ class CfRuleXform extends CompositeXform {
+       type: 'cellIs',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       operator: model.operator,
+     });
+ 
+@@ -180,6 +205,8 @@ class CfRuleXform extends CompositeXform {
+       type: 'top10',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       percent: BaseXform.toBoolAttribute(model.percent, false),
+       bottom: BaseXform.toBoolAttribute(model.bottom, false),
+       rank: BaseXform.toIntValue(model.rank, 10, true),
+@@ -191,7 +218,11 @@ class CfRuleXform extends CompositeXform {
+       type: 'aboveAverage',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
        aboveAverage: BaseXform.toBoolAttribute(model.aboveAverage, true),
 +      // Sheetly: "equal to or above / below average".
 +      equalAverage: BaseXform.toBoolAttribute(model.equalAverage, false),
      });
    }
  
-@@ -235,11 +256,13 @@ class CfRuleXform extends CompositeXform {
+@@ -199,6 +230,8 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.openNode(this.tag, {
+       type: 'dataBar',
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+     });
+ 
+     this.databarXform.render(xmlStream, model);
+@@ -211,6 +244,8 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.openNode(this.tag, {
+       type: 'colorScale',
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+     });
+ 
+     this.colorScaleXform.render(xmlStream, model);
+@@ -227,6 +262,8 @@ class CfRuleXform extends CompositeXform {
+     xmlStream.openNode(this.tag, {
+       type: 'iconSet',
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+     });
+ 
+     this.iconSetXform.render(xmlStream, model);
+@@ -235,11 +272,15 @@ class CfRuleXform extends CompositeXform {
    }
  
    renderText(xmlStream, model) {
@@ -589,15 +711,27 @@ index 22b3e44..c51401b 100644
        dxfId: model.dxfId,
        priority: model.priority,
 -      operator: BaseXform.toStringAttribute(model.operator, 'containsText'),
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
 +      operator: model.operator === 'notContainsText' ? 'notContains' : BaseXform.toStringAttribute(model.operator, 'containsText'),
 +      text: ['containsText', 'notContainsText', 'beginsWith', 'endsWith'].includes(model.operator) ? model.text : undefined,
      });
  
      const formula = getTextFormula(model);
-@@ -276,6 +299,8 @@ class CfRuleXform extends CompositeXform {
+@@ -255,6 +296,8 @@ class CfRuleXform extends CompositeXform {
+       type: 'timePeriod',
+       dxfId: model.dxfId,
+       priority: model.priority,
++      // Sheetly: Stop If True.
++      stopIfTrue: BaseXform.toBoolAttribute(model.stopIfTrue, false),
+       timePeriod: model.timePeriod,
+     });
+ 
+@@ -276,6 +319,9 @@ class CfRuleXform extends CompositeXform {
        bottom: BaseXform.toBoolValue(attributes.bottom),
        rank: BaseXform.toIntValue(attributes.rank),
        aboveAverage: BaseXform.toBoolValue(attributes.aboveAverage),
++      stopIfTrue: BaseXform.toBoolValue(attributes.stopIfTrue),
 +      equalAverage: BaseXform.toBoolValue(attributes.equalAverage),
 +      text: attributes.text,
      };

@@ -146,6 +146,44 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
     && sp[1].type === 'winloss' && sp[1].colors.color === '#00B050', J(sp))
 }
 
+// ---- review findings (Codex, 2026-10-17)
+{
+  // Unicode table name, Stop If True, between with references
+  const s4 = structuredClone(snap)
+  const res4 = Object.fromEntries(s4.resources.map((r) => [r.name, JSON.parse(r.data)]))
+  res4.SHEET_TABLE_PLUGIN.s1.tables[0].name = '売上'
+  res4.SHEET_CONDITIONAL_FORMATTING_PLUGIN.s1 = [{ cfId: 'z', ranges: [R(0, 1, 9, 1)], stopIfTrue: true, rule: { type: 'highlightCell', subType: 'number', operator: 'greaterThan', value: 5, style: red } }]
+  s4.resources = Object.entries(res4).map(([name, d]) => ({ name, data: J(d) }))
+  const b4 = await snapshotToXlsx(s4), w4 = new ExcelJS.Workbook(); await w4.xlsx.load(b4)
+  const t4 = w4.getWorksheet('Data').getTables()
+  check('a Japanese table name is kept (売上)', J(t4.map((t) => t.table?.name ?? t.name)).includes('売上'), J(t4.map((t) => t.table?.name ?? t.name)))
+  const z4 = await JSZip.loadAsync(b4), x4 = await z4.file('xl/worksheets/sheet1.xml').async('string')
+  const back4 = await xlsxToSnapshot(b4)
+  check('Stop If True written and read back', /stopIfTrue="1"/.test(x4) && res(back4, 'SHEET_CONDITIONAL_FORMATTING_PLUGIN')[back4.sheetOrder[0]]?.[0]?.stopIfTrue === true, (x4.match(/<cfRule[^>]*>/) ?? [''])[0])
+  const w5 = new ExcelJS.Workbook(), ws5 = w5.addWorksheet('S')
+  ws5.addConditionalFormatting({ ref: 'A1:A5', rules: [{ type: 'cellIs', operator: 'between', formulae: ['$B$1', '$C$1'], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } } } }] })
+  // a one-cell-anchored picture keeps its size
+  const img = w5.addImage({ base64: PNG, extension: 'png' }); ws5.addImage(img, { tl: { col: 3, row: 1 }, ext: { width: 480, height: 288 }, editAs: 'oneCell' })
+  const s5 = await xlsxToSnapshot(await w5.xlsx.writeBuffer())
+  const cf5 = res(s5, 'SHEET_CONDITIONAL_FORMATTING_PLUGIN')[s5.sheetOrder[0]]?.[0]?.rule
+  check('between with cell references becomes an equivalent formula rule (bounds kept)', cf5?.subType === 'formula' && cf5.value === '=AND(A1>=MIN($B$1,$C$1),A1<=MAX($B$1,$C$1))', J(cf5))
+  const pic5 = Object.values(res(s5, 'SHEET_DRAWING_PLUGIN')[s5.sheetOrder[0]]?.data ?? {})[0]
+  check('a one-cell-anchored picture keeps its size (480 x 288)', Math.round(pic5?.transform?.width) === 480 && Math.round(pic5?.transform?.height) === 288, J(pic5?.transform))
+  // a chart whose series are not side by side (categories in K, series in L and N)
+  const s6 = structuredClone(snap)
+  for (let r = 0; r < 4; r++) s6.sheets.s1.cellData[r][13] = r ? { v: r * 100, t: 2 } : { v: 'Cost', t: 1 }
+  const res6 = Object.fromEntries(s6.resources.map((r) => [r.name, JSON.parse(r.data)]))
+  res6.SHEET_DRAWING_PLUGIN.s1.data.c1.data = { ...chartSpec, source: { sheetId: 's1', range: R(0, 10, 3, 13), categories: R(1, 10, 3, 10),
+    series: [{ name: [0, 11], values: R(1, 11, 3, 11) }, { name: [0, 13], values: R(1, 13, 3, 13) }] } }
+  s6.resources = Object.entries(res6).map(([name, d]) => ({ name, data: J(d) }))
+  const b6 = await snapshotToXlsx(s6), z6 = await JSZip.loadAsync(b6)
+  const c6 = await z6.file(Object.keys(z6.files).find((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))).async('string')
+  check('non-adjacent series are written with their own references (no column M)', c6.includes('Data!$L$2:$L$4') && c6.includes('Data!$N$2:$N$4') && !c6.includes('$M$'), (c6.match(/<c:f>[^<]*<\/c:f>/g) ?? []).join(' '))
+  const back6 = await xlsxToSnapshot(b6)
+  const spec6 = Object.values(res(back6, 'SHEET_DRAWING_PLUGIN')[back6.sheetOrder[0]].data).find((d) => d.drawingType === 8)?.data
+  check('and read back as two series (Sales, Cost), not three', spec6?.source?.series?.length === 2 && J(spec6.source.series[1].values) === J(R(1, 13, 3, 13)) && J(spec6.source.categories) === J(R(1, 10, 3, 10)), J(spec6?.source))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

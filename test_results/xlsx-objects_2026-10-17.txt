@@ -1,0 +1,42 @@
+xlsx objects  2026-10-17T00:28:36.942Z
+PASS  every XML part in the package is well formed
+PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
+PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
+PASS  DV written with Excel forms ("Yes,No" list, range without =, warning style)
+PASS  table written (name cleaned of spaces)
+PASS  picture written
+PASS  chart part written: clustered column over Data!$L$2:$L$4 with names and categories
+PASS  chart and picture share the sheet's one drawing; content types listed
+PASS  dynamic array: t="array" ref="A13:A15" with cm="1" and xl/metadata.xml
+PASS  Excel is asked to recalculate on open
+PASS  CF round trip keeps every rule
+PASS  CF values: >5, between [2,4], text "ab", rank bottom 10%, average <=, formula =B1>A1
+PASS  CF style: Light Red Fill with Dark Red Text
+PASS  icon set: bands, operators and icons back in Univer order
+PASS  color scale: 3 stops with percentile 50
+PASS  DV round trip: list literal / list range / whole between / decimal ref / date / custom on two ranges
+PASS  table read back for creation in the app
+PASS  picture read back as a Univer drawing at its cell anchor
+PASS  chart read back as a linked Sheetly chart (type, range, data labels, axis titles)
+PASS  spilled cells are not kept as constants
+PASS  chart type bar written and read back (title text)
+PASS  chart type columnStacked100 written and read back (title text)
+PASS  chart type line written and read back (title text)
+PASS  chart type lineMarkers written and read back (title text)
+PASS  chart type pie written and read back (no title)
+PASS  chart type doughnut written and read back (title text)
+PASS  chart type area written and read back (title text)
+PASS  chart type scatter written and read back (title text)
+PASS  sparklines written as x14:sparklineGroups in the sheet's extLst, next to the x14 conditional formats
+PASS  sparklines read back (types, cells, ranges, colour)
+PASS  a Japanese table name is kept (売上)
+PASS  Stop If True written and read back
+PASS  between with cell references becomes an equivalent formula rule (bounds kept)
+PASS  a one-cell-anchored picture keeps its size (480 x 288)
+PASS  non-adjacent series are written with their own references (no column M)
+PASS  and read back as two series (Sales, Cost), not three
+PASS  1904 workbook: serials kept in the 1904 system and Univer told so
+PASS  and written back as a 1904 workbook
+PASS  whole-column validation loads as one rule, quickly
+
+39/39 passed

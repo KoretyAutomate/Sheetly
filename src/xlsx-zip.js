@@ -4,7 +4,7 @@
 //  - dynamic arrays: formulas that spill carry cm="1" pointing at xl/metadata.xml (XLDAPR), as Excel 365 writes
 //    them; without it Excel treats them as legacy array formulas.
 import JSZip from 'jszip'
-import { chartTitle, seriesFrom } from './chart-model.js'
+import { chartTitle, explicitSeries, seriesFrom } from './chart-model.js'
 import { colName, parseRange } from './xlsx-objects.js'
 
 const NS = {
@@ -35,11 +35,13 @@ const dLbls = (on, pie) => (on ? `<c:dLbls>${pie ? '<c:dLblPos val="bestFit"/>' 
 
 /** DrawingML for a Sheetly chart spec over a sheet (get(r, c) reads cell values). */
 export function chartXml(spec, sheetName, get) {
-  const g = spec.source.range, d = seriesFrom(get, g, spec.plotBy), t = spec.type ?? 'column'
+  const g = spec.source.range, ex = !!spec.source.series, t = spec.type ?? 'column'
+  const d = ex ? explicitSeries(get, spec.source) : seriesFrom(get, g, spec.plotBy)
   const sn = sheetRef(sheetName)
-  // References of each series: name, categories, values.
-  const lineRef = (s) => (d.byCols ? `${sn}!${abs(d.r0, s.line)}:${abs(g.endRow, s.line)}` : `${sn}!${abs(s.line, d.c0)}:${abs(s.line, g.endColumn)}`)
-  const catRef = d.byCols ? (d.labelCol ? `${sn}!${abs(d.r0, g.startColumn)}:${abs(g.endRow, d.c0 - 1)}` : null)
+  const span = (x) => `${sn}!${abs(x.startRow, x.startColumn)}:${abs(x.endRow, x.endColumn)}`
+  // References of each series: name, categories, values (a chart picked series by series keeps its own refs).
+  const lineRef = (s, i) => (ex ? span(spec.source.series[i].values) : d.byCols ? `${sn}!${abs(d.r0, s.line)}:${abs(g.endRow, s.line)}` : `${sn}!${abs(s.line, d.c0)}:${abs(s.line, g.endColumn)}`)
+  const catRef = ex ? (spec.source.categories ? span(spec.source.categories) : null) : d.byCols ? (d.labelCol ? `${sn}!${abs(d.r0, g.startColumn)}:${abs(g.endRow, d.c0 - 1)}` : null)
     : (d.headerRow ? `${sn}!${abs(g.startRow, d.c0)}:${abs(g.startRow, g.endColumn)}` : null)
   const nameRef = (s) => (s.nameCell ? `${sn}!${abs(s.nameCell[0], s.nameCell[1])}` : null)
   const tx = (s) => (nameRef(s) ? `<c:tx>${strRef(nameRef(s), [s.name])}</c:tx>` : '')
@@ -51,13 +53,14 @@ export function chartXml(spec, sheetName, get) {
   let plot
   if (pie) {
     const s = d.series[0]
-    const ser = s ? `<c:ser><c:idx val="0"/><c:order val="0"/>${tx(s)}${d.labels.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>`).join('')}${dLbls(labels, true)}${cat()}<c:val>${numRef(lineRef(s), s.values)}</c:val></c:ser>` : ''
+    const ser = s ? `<c:ser><c:idx val="0"/><c:order val="0"/>${tx(s)}${d.labels.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>`).join('')}${dLbls(labels, true)}${cat()}<c:val>${numRef(lineRef(s, 0), s.values)}</c:val></c:ser>` : ''
     plot = t === 'pie' ? `<c:pieChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/></c:pieChart>`
       : `<c:doughnutChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/><c:holeSize val="75"/></c:doughnutChart>`
   } else if (t === 'scatter') {
-    const xs = d.series.length > 1 ? d.series[0] : null, ys = xs ? d.series.slice(1) : d.series
-    const sers = ys.map((s, i) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill></c:spPr></c:marker>${dLbls(labels)}`
-      + `${xs ? `<c:xVal>${numRef(lineRef(xs), xs.values)}</c:xVal>` : ''}<c:yVal>${numRef(lineRef(s), s.values)}</c:yVal><c:smooth val="0"/></c:ser>`).join('')
+    const xs = ex ? null : d.series.length > 1 ? d.series[0] : null, ys = xs ? d.series.slice(1) : d.series
+    const xRef = ex && catRef ? `<c:xVal>${numRef(catRef, d.labels.map(Number))}</c:xVal>` : ''
+    const sers = ys.map((s, i) => { const k = xs ? i + 1 : i; return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill></c:spPr></c:marker>${dLbls(labels)}`
+      + `${xs ? `<c:xVal>${numRef(lineRef(xs, 0), xs.values)}</c:xVal>` : xRef}<c:yVal>${numRef(lineRef(s, k), s.values)}</c:yVal><c:smooth val="0"/></c:ser>` }).join('')
     plot = `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:scatterChart>`
   } else {
     const kind = t.startsWith('line') ? 'line' : t.startsWith('area') ? 'area' : 'bar'
@@ -65,7 +68,7 @@ export function chartXml(spec, sheetName, get) {
     const sers = d.series.map((s, i) => {
       const fill = kind === 'line' ? `<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill><a:round/></a:ln></c:spPr><c:marker><c:symbol val="${t === 'lineMarkers' ? 'circle' : 'none'}"/>${t === 'lineMarkers' ? '<c:size val="5"/>' : ''}</c:marker>`
         : `<c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill></c:spPr>${kind === 'bar' ? '<c:invertIfNegative val="0"/>' : ''}`
-      return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}${fill}${dLbls(labels)}${cat()}<c:val>${numRef(lineRef(s), s.values)}</c:val>${kind === 'line' ? '<c:smooth val="0"/>' : ''}</c:ser>`
+      return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}${fill}${dLbls(labels)}${cat()}<c:val>${numRef(lineRef(s, i), s.values)}</c:val>${kind === 'line' ? '<c:smooth val="0"/>' : ''}</c:ser>`
     }).join('')
     const axIds = '<c:axId val="500000001"/><c:axId val="500000002"/>'
     plot = kind === 'bar'
@@ -263,8 +266,9 @@ export async function readCharts(buf) {
         if (!spec) continue
         const from = anchorIn(/<xdr:from>([\s\S]*?)<\/xdr:from>/.exec(body)?.[1] ?? '')
         const toXml = /<xdr:to>([\s\S]*?)<\/xdr:to>/.exec(body)?.[1]
-        const to = toXml ? anchorIn(toXml) : { ...from, column: from.column + 8, row: from.row + 15 }
-        out.push({ sheetIndex, spec, from, to })
+        // A one-cell anchor stores the chart's size (xdr:ext, EMU) instead of an end cell.
+        const ext = /<xdr:ext\b[^>]*cx="(\d+)"[^>]*cy="(\d+)"/.exec(body)
+        out.push({ sheetIndex, spec, from, to: toXml ? anchorIn(toXml) : null, size: { width: ext ? +ext[1] / EMU : 480, height: ext ? +ext[2] / EMU : 288 } })
       }
     }
   }
@@ -303,5 +307,18 @@ export function specFromXml(xml) {
   const axisTitle = (tag) => texts(new RegExp(`<c:${tag}>[\\s\\S]*?<c:title>([\\s\\S]*?)<\\/c:title>[\\s\\S]*?<\\/c:${tag}>`).exec(plot)?.[1])
   const ax = /<c:catAx>/.test(plot) ? axisTitle('catAx') : axisTitle('valAx'), ay = axisTitle('valAx')
   const axisTitles = ax || (ay && /<c:catAx>/.test(plot)) ? { x: ax || '', y: /<c:catAx>/.test(plot) ? ay : '' } : null
-  return { v: 2, type, source: { sheetName: parsed[0].sheet, range: box }, plotBy, title, legend, dataLabels, axisTitles }
+  // Series picked one by one (gaps between them, or not lined up with the categories) keep their own references.
+  const serXml = [...plot.matchAll(/<c:ser>([\s\S]*?)<\/c:ser>/g)].map((m) => m[1])
+  const refIn = (x, tag) => { const f = new RegExp(`<c:${tag}>[\\s\\S]*?<c:f>([^<]*)<\\/c:f>`).exec(x)?.[1]; return f ? parseRange(unesc(f).replace(/^.*!/, '')) : null }
+  const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), nameText: texts(/<c:tx>([\s\S]*?)<\/c:tx>/.exec(x)?.[1]) || null }))
+  const categories = serXml.length ? refIn(serXml[0], 'cat') ?? refIn(serXml[0], 'xVal') : null
+  const lines = series.map((x) => x.values && (plotBy === 'rows' ? x.values.startRow : x.values.startColumn))
+  const contiguous = plotBy !== null && series.every((x) => x.values) && lines.every((l, i) => i === 0 || l === lines[i - 1] + 1)
+  const regular = contiguous && (!categories || (plotBy === 'cols' ? categories.endColumn === lines[0] - 1 : categories.endRow === lines[0] - 1))
+  const source = { sheetName: parsed[0].sheet, range: box }
+  if (!regular && series.every((x) => x.values)) {
+    source.series = series.map((x) => ({ name: x.name ? [x.name.startRow, x.name.startColumn] : null, nameText: x.nameText, values: x.values }))
+    source.categories = categories
+  }
+  return { v: 2, type, source, plotBy, title, legend, dataLabels, axisTitles }
 }
