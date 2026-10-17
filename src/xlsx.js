@@ -416,10 +416,11 @@ export async function xlsxToSnapshot(buf) {
     const vals = dvIn(ws, id)
     if (vals.length) dvs[id] = vals
     // Tables with their header row hidden keep their definition (column names live only there): Univer's tables
-    // would name the columns from the first data row. They are written back as they were.
+    // would name the columns from the first data row. They are kept as they are (sheetlyTablesKept) and written
+    // back so; so are tables Univer refuses when the workbook is opened (main.js).
     for (const t of tablesIn(ws)) {
       if (t.showHeader) tables.push({ sheetId: id, ...t })
-      else (sheet.custom.sheetlyTablesNoHeader ??= []).push({ name: t.name, range: t.range, showFooter: t.showFooter, columns: t.columns })
+      else (sheet.custom.sheetlyTablesKept ??= []).push({ name: t.name, range: t.range, showHeader: false, showFooter: t.showFooter, columns: t.columns })
     }
     const pics = imagesIn(wb, ws, sheet, 'wb')
     if (pics.length) drawings[id] = { data: Object.fromEntries(pics.map((d) => [d.drawingId, d])), order: pics.map((d) => d.drawingId) }
@@ -590,8 +591,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     if (sg.length) sparklines.push({ sheetIndex, groups: sg })
     cfOut(ws, cfs[id])
     dvOut(ws, dvs[id])
-    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesNoHeader ?? []).map((t) => ({ name: t.name, range: t.range,
-      options: { showHeader: false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
+    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesKept ?? []).map((t) => ({ name: t.name, range: t.range,
+      options: { showHeader: t.showHeader !== false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
     const list = Object.values(allDrawings[id]?.data ?? {})
     imagesOut(wb, ws, list)
     for (const d of list) {

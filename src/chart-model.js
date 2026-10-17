@@ -62,10 +62,12 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   const keepFor = (g) => along(g).map(([r, c]) => (isVertical(g) ? !hiddenRow(r) : !hiddenCol(c)))
   const keep = first ? keepFor(first) : []
   const seriesShown = (g) => (isVertical(g) ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
-  const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
-    values: along(s.values).filter((_, k) => keepFor(s.values)[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
-    // scatter: the series' own X values
-    ...(s.xValues ? { xs: along(s.xValues).filter((_, k) => keepFor(s.values)[k] !== false).map(([r, c]) => val(get(r, c))) } : {}) }))
+  const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => {
+    const mask = keepFor(s.values) // once per series, shared by its values and scatter X values
+    return { name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
+      values: along(s.values).filter((_, k) => mask[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
+      ...(s.xValues ? { xs: along(s.xValues).filter((_, k) => mask[k] !== false).map(([r, c]) => val(get(r, c))) } : {}) }
+  })
   const n = Math.max(0, ...series.map((s) => s.values.length))
   let labels = Array.from({ length: n }, (_, i) => String(i + 1)), levels = []
   const cat = src.categories

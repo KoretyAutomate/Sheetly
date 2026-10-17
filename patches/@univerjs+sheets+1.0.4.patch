@@ -1,0 +1,39 @@
+diff --git a/node_modules/@univerjs/sheets/lib/cjs/index.js b/node_modules/@univerjs/sheets/lib/cjs/index.js
+index ffde901..189e058 100644
+--- a/node_modules/@univerjs/sheets/lib/cjs/index.js
++++ b/node_modules/@univerjs/sheets/lib/cjs/index.js
+@@ -22,6 +22,8 @@ function isCellImage(documentData) {
+ function getCellType(styles, newVal, oldVal) {
+ 	var _oldStyle$n2;
+ 	if (newVal.t) return newVal.t;
++	// Sheetly: an update that does not set a value (a style change) keeps the cell's type: text "001" stays text.
++	if (newVal.v === void 0 && oldVal.t != null) return oldVal.t;
+ 	if (newVal.v === null) return null;
+ 	const newStyle = styles.getStyleByCell(newVal);
+ 	const oldStyle = styles.getStyleByCell(oldVal);
+diff --git a/node_modules/@univerjs/sheets/lib/es/index.js b/node_modules/@univerjs/sheets/lib/es/index.js
+index c29e7c2..0a67b4e 100644
+--- a/node_modules/@univerjs/sheets/lib/es/index.js
++++ b/node_modules/@univerjs/sheets/lib/es/index.js
+@@ -21,6 +21,8 @@ function isCellImage(documentData) {
+ function getCellType(styles, newVal, oldVal) {
+ 	var _oldStyle$n2;
+ 	if (newVal.t) return newVal.t;
++	// Sheetly: an update that does not set a value (a style change) keeps the cell's type: text "001" stays text.
++	if (newVal.v === void 0 && oldVal.t != null) return oldVal.t;
+ 	if (newVal.v === null) return null;
+ 	const newStyle = styles.getStyleByCell(newVal);
+ 	const oldStyle = styles.getStyleByCell(oldVal);
+diff --git a/node_modules/@univerjs/sheets/lib/index.js b/node_modules/@univerjs/sheets/lib/index.js
+index c29e7c2..0a67b4e 100644
+--- a/node_modules/@univerjs/sheets/lib/index.js
++++ b/node_modules/@univerjs/sheets/lib/index.js
+@@ -21,6 +21,8 @@ function isCellImage(documentData) {
+ function getCellType(styles, newVal, oldVal) {
+ 	var _oldStyle$n2;
+ 	if (newVal.t) return newVal.t;
++	// Sheetly: an update that does not set a value (a style change) keeps the cell's type: text "001" stays text.
++	if (newVal.v === void 0 && oldVal.t != null) return oldVal.t;
+ 	if (newVal.v === null) return null;
+ 	const newStyle = styles.getStyleByCell(newVal);
+ 	const oldStyle = styles.getStyleByCell(oldVal);

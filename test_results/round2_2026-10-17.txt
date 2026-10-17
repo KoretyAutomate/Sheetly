@@ -1,4 +1,4 @@
-round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-17T04:49:19.297Z
+round 2 (F6, Ctrl+F1, Ctrl+Q, Shift+F8, outline settings, Auto Outline, xlsx styles)  2026-10-17T06:03:48.426Z
 PASS  Ctrl+F1 collapses the ribbon to its tabs
 PASS  Ctrl+F1: the grid moves up into the space
 PASS  Ctrl+F1 again expands it
@@ -46,7 +46,8 @@ PASS  Ctrl+D filled formulas are saved with their own formula text
 PASS  AutoSum finds currency-formatted numbers above
 PASS  AutoSum sees the values a spilling formula puts above (I1:I3)
 PASS  Ctrl+Shift+" copies the value 600, not the text "$600"
+PASS  formatting text that looks like a number ("001": bold, border) keeps it text
 PASS  Ctrl+Shift+" copies TRUE as a logical, not 1
 PASS  no page errors
 
-49/49 passed
+50/50 passed

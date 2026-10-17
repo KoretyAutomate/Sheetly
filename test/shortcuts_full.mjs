@@ -149,7 +149,8 @@ T("Ctrl+' then Esc restores the cell", `S().getRange('F1').setFormula('=A1+1'); 
 T("Ctrl+' formula from above (edit mode)", `S().getRange('F1').setFormula('=A1+1'); act('F2')`, ["Control+'",'Enter'], `f('F2')==='=A1+1'`)
 // ---- added: remaining Excel keys
 T('Ctrl+` show formulas', `S().getRange('F1').setFormula('=A1+1'); act('A1')`, ['Control+`'], `window.__sheetly.extras.isShowingFormulas()&&S().getRange('F1').getDisplayValue()==='=A1+1'`)
-T('Shift+F3 insert function', `act('F1')`, ['Shift+F3','T:SUM','Enter','W:600','T:A1:A4)','Enter'], `f('F1')==='=SUM(A1:A4)'&&v('F1')==28`)
+// E:text waits (up to 15 s) until the cell editor shows text, as a person would before typing on.
+T('Shift+F3 insert function', `act('F1')`, ['Shift+F3','T:SUM','Enter','E:=SUM(','T:A1:A4)','Enter'], `f('F1')==='=SUM(A1:A4)'&&v('F1')==28`)
 T('F3 paste name', `wb().insertDefinedName('qty','Sheet1!$A$1:$A$4'); act('F1')`, ['F3','Enter','W:600','Enter'], `f('F1')==='=qty'`)
 T('Ctrl+Shift+A argument names', `act('F1')`, ['T:=ROUND','Control+Shift+a','W:400'], `window.__sheetly.extras.editorText().startsWith('=ROUND(')`)
 T('Ctrl+E flash fill', `S().getRange('H1').setValue('John Smith'); S().getRange('H2').setValue('Mary Jones'); S().getRange('H3').setValue('Ann Lee'); S().getRange('I1').setValue('John'); act('I2')`, ['Control+e'], `v('I2')==='Mary'&&v('I3')==='Ann'`)
@@ -241,7 +242,13 @@ for (const t of tests.filter((x) => !only || only.test(x.name))) {
     await win.mouse.click(700, 560); await win.waitForTimeout(80); lap('click')
     await reset(); await win.waitForTimeout(120); lap('reset')
     await run(t.setup); await win.waitForTimeout(150); lap('setup')
-    for (const k of t.keys) { if (k.startsWith('T:')) await win.keyboard.type(k.slice(2), { delay: 15 }); else if (k.startsWith('W:')) await win.waitForTimeout(+k.slice(2)); else await win.keyboard.press(k); await win.waitForTimeout(90) }
+    for (const k of t.keys) {
+      if (k.startsWith('T:')) await win.keyboard.type(k.slice(2), { delay: 15 })
+      else if (k.startsWith('W:')) await win.waitForTimeout(+k.slice(2))
+      else if (k.startsWith('E:')) await win.waitForFunction((text) => [...document.querySelectorAll('[data-u-comp="editor"]')].some((e) => e.textContent.includes(text)), k.slice(2), { timeout: 15000 }).catch(() => {})
+      else await win.keyboard.press(k)
+      await win.waitForTimeout(90)
+    }
     await win.waitForTimeout(350); lap('keys')
     // Poll the check for up to 2 s: some effects (recalculation, spills, panels) land asynchronously.
     for (waited = 0; waited <= (t.timeout ?? 2000) && !ok; waited += 150) {

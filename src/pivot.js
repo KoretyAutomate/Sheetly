@@ -113,7 +113,7 @@ export function createPivots(api, { dialogs, refs }) {
     if (!next) { p.extent = null; return p }
     filters.forEach(([name, value], i) => {
       const r = top - filters.length - 1 + i
-      sheet.getRange(r, col, 1, 2).setValues([[name, value]])
+      sheet.getRange(r, col, 1, 2).setValues([[typed(name), typed(value)]])
       sheet.getRange(r, col).setFontWeight('bold')
     })
     p.extent = { written: true, dRow: top - row, rows, cols: width, filterRows }
@@ -121,7 +121,7 @@ export function createPivots(api, { dialogs, refs }) {
     // A new name each time: undo brings back the earlier definition with its own name, still on the earlier area.
     p.writtenRef = refs?.track(sheet.getSheetId(), area) ?? undefined
     if (!hasGrid) return p
-    const values = L.grid.map((r) => [...r.map((c) => c.v ?? null), ...Array(width - r.length).fill(null)])
+    const values = L.grid.map((r) => [...r.map((c) => typed(c.v ?? null)), ...Array(width - r.length).fill(null)])
     sheet.getRange(top, col, values.length, width).setValues(values)
     // Excel's default look: header rows on a light blue band in bold, subtotal and Grand Total rows in bold.
     const headerRows = L.grid.findIndex((r) => r.some((c) => ['rowLabel', 'subtotalLabel', 'value', 'grandLabel', 'grand'].includes(c.kind) && c.kind !== 'colHeader'))
@@ -133,6 +133,13 @@ export function createPivots(api, { dialogs, refs }) {
     // Compact form indents inner row items.
     L.grid.forEach((r, i) => { if (r[0]?.indent) indent(sheet, top + i, col, r[0].indent) })
     return p
+  }
+  // Report cells are written with their type: text stays text ("001", "TRUE", "=1+2" are labels, not a number,
+  // a logical or a formula), logicals stay logicals.
+  function typed(v) {
+    if (typeof v === 'string') return { v, t: 1 }
+    if (typeof v === 'boolean') return { v: v ? 1 : 0, t: 3 }
+    return v
   }
   // Indentation as left padding (Excel indents compact-form items by one level each).
   function indent(sheet, r, c, level) {
@@ -175,7 +182,10 @@ export function createPivots(api, { dialogs, refs }) {
     const t = /^\s*[\p{L}_][\p{L}\p{N}_.]*\s*$/u.test(text) && !parseRange(text) ? wb().getTableInfoByName?.(text.trim()) : null
     if (t?.range) {
       const sheet = wb().getSheetBySheetId(t.subUnitId)
-      const g = { ...t.range, endRow: t.range.endRow - (t.options?.showFooter ? 1 : 0) }
+      // The table's totals row (from its saved definition) is not data.
+      let footer = false
+      try { footer = !!JSON.parse(wb().save().resources?.find((r) => r.name === 'SHEET_TABLE_PLUGIN')?.data ?? '{}')?.[t.subUnitId]?.tables?.find((x) => x.id === t.id)?.options?.showFooter } catch { footer = false }
+      const g = { ...t.range, endRow: t.range.endRow - (footer ? 1 : 0) }
       if (sheet) return { sheet, range: g }
     }
     const m = /^\s*(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(text)

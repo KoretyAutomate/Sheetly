@@ -156,6 +156,16 @@ await ev(`S().getRange('AB1').setFormula('=GETPIVOTDATA("Amt",W3,"Flag",TRUE)');
 const gb = await ev(`return [S().getRange('AB1').getCalculatedValue(), S().getRange('AB2').getCalculatedValue()].join('|')`)
 check('GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20', gb === '10|20', `${gb} ${stored}`)
 
+// ---- a table with a totals row: the totals are not data; text labels like 001 stay text
+await ev(`const sh=W().getSheets()[W().getSheets().length-1]; W().setActiveSheet(sh); S().getRange('AE1:AF4').setValues([['Code','Amt'],[{ v: '001', t: 1 },10],[{ v: '002', t: 1 },20],['Total',30]])`); await settle(300)
+await ev(`await S().addTable('WithTotals', { startRow: 0, endRow: 3, startColumn: 30, endColumn: 31 }, undefined, { showFooter: true })`); await settle(500)
+const totalsOn = await ev(`try { return !!JSON.parse(W().save().resources.find(r=>r.name==='SHEET_TABLE_PLUGIN').data)[S().getSheetId()].tables.find(t=>t.name==='WithTotals')?.options?.showFooter } catch { return false }`)
+await ev(`P.create('WithTotals', 'existing', S().getSheetName() + '!AH3')`); await settle(500)
+await ev(`P.place('Code', 'rows'); P.place('Amt', 'values')`); await settle(700)
+console.log('DBG', await ev(`return JSON.stringify([S().getSheet().getCellRaw(3,33), S().getSheet().getCellRaw(2,33), P.list().slice(-1)[0]?.cache?.records?.slice(0,2)])`))
+const tt = await ev(`const v=(a)=>S().getRange(a).getCalculatedValue(); return JSON.stringify([v('AH4'), v('AH5'), S().getSheet().getCellRaw(3,33)?.t, v('AI6')])`)
+check('a table\'s totals row is left out (Grand Total 30, not 60); "001" stays the text 001', !totalsOn || tt === JSON.stringify(['001', '002', 1, 30]), `${totalsOn} ${tt}`)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

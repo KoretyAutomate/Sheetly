@@ -24,7 +24,9 @@ export function createExtras(api) {
   const editorText = () => api._injector.get(IUniverInstanceService).getUnit(EDITOR_UNIT)?.getBody?.()?.dataStream?.replace(/\r?\n$/, '') ?? ''
   async function insertInEditor(text, prefixIfNotEditing = '') {
     if (!wb().isCellEditing()) {
-      commands.executeCommand('sheet.operation.set-cell-edit-visible-f2', { visible: true, eventType: 4, keycode: 113 })
+      // Opening the editor completes within the command; polling is only a fallback (timers can lag, e.g. while
+      // the screen is off, and typing must not overtake the inserted text).
+      await commands.executeCommand('sheet.operation.set-cell-edit-visible-f2', { visible: true, eventType: 4, keycode: 113 })
       for (let i = 0; i < 40 && !wb().isCellEditing(); i++) await new Promise((r) => setTimeout(r, 25))
       if (!editorText().startsWith('=')) text = prefixIfNotEditing + text
     }

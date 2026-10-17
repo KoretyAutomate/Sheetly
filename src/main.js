@@ -183,12 +183,22 @@ async function loadWorkbook(f) {
       const sheet = book.getSheetBySheetId(a.sheetId)
       for (let r = a.range.startRow; r <= a.range.endRow; r++) for (let c = a.range.startColumn; c <= a.range.endColumn; c++) if (r !== a.row || c !== a.col) sheet?.getRange(r, c).setFormula(a.formula)
     }
-    univerAPI._injector.get(IUndoRedoService).clearUndoRedo(book.getId())
   }
   // Tables from the file, through Univer's table API.
+  // A table Univer refuses (a name that is also a sheet's, which Excel allows) keeps its definition and is written
+  // back as it was.
   for (const t of sheetlyTables) {
-    try { await book.getSheetBySheetId(t.sheetId)?.addTable(t.name, t.range, undefined, { showHeader: t.showHeader, showFooter: t.showFooter }) } catch (e) { console.warn('table', t.name, e) }
+    const sheet = book.getSheetBySheetId(t.sheetId)
+    let ok = false
+    try { ok = (await sheet?.addTable(t.name, t.range, undefined, { showHeader: t.showHeader, showFooter: t.showFooter })) !== false } catch (e) { console.warn('table', t.name, e) }
+    if (!ok && sheet) {
+      const w = sheet.getSheet(), custom = { ...(w.getCustomMetadata?.() ?? {}) }
+      custom.sheetlyTablesKept = [...(custom.sheetlyTablesKept ?? []), { name: t.name, range: t.range, showHeader: t.showHeader, showFooter: t.showFooter, columns: t.columns }]
+      w.setCustomMetadata(custom)
+    }
   }
+  // Opening a file is not something to undo.
+  univerAPI._injector.get(IUndoRedoService).clearUndoRedo(book.getId())
   window.sheetly.setCurrent(f.path)
 }
 // Filled-down formulas are kept by Univer as shared-formula ids; their text comes from the live workbook.

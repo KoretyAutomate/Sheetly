@@ -227,7 +227,7 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   const w = new ExcelJS.Workbook(), s9 = w.addWorksheet('T')
   s9.addTable({ name: 'Sales', ref: 'A1', headerRow: false, columns: [{ name: 'Amount' }, { name: 'Qty' }], rows: [[10, 1], [20, 2]] })
   const r9 = await xlsxToSnapshot(await w.xlsx.writeBuffer()), sh = r9.sheets[r9.sheetOrder[0]]
-  check('a headerless table is not handed to Univer (which would name columns from the data)', !(r9.sheetlyTables ?? []).length && sh.custom?.sheetlyTablesNoHeader?.[0]?.columns?.join() === 'Amount,Qty', J([r9.sheetlyTables, sh.custom]))
+  check('a headerless table is not handed to Univer (which would name columns from the data)', !(r9.sheetlyTables ?? []).length && sh.custom?.sheetlyTablesKept?.[0]?.columns?.join() === 'Amount,Qty' && sh.custom.sheetlyTablesKept[0].showHeader === false, J([r9.sheetlyTables, sh.custom]))
   const w2 = new ExcelJS.Workbook(); await w2.xlsx.load(await snapshotToXlsx(r9))
   const t9 = w2.getWorksheet('T').getTables()[0]
   const m9 = t9?.table ?? t9

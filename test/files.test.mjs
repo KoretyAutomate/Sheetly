@@ -86,6 +86,20 @@ check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperli
   check('opening the file left nothing to undo', (await ev(`return api._injector.get(window.__IUndoRedoService).getUndoRedoStatus(W().getId()).undos`)) === 0)
 }
 
+// a table named like a sheet (Excel allows it; Univer refuses it) survives open + save; opening leaves no undo
+{
+  const w = new ExcelJS.Workbook(), t = w.addWorksheet('Sales')
+  t.addTable({ name: 'Sales', ref: 'A1', headerRow: true, columns: [{ name: 'Item' }, { name: 'Qty' }], rows: [['a', 1], ['b', 2]] })
+  t.addTable({ name: 'Other', ref: 'D1', headerRow: true, columns: [{ name: 'K' }], rows: [['x']] })
+  const b = Array.from(new Uint8Array(await w.xlsx.writeBuffer()))
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'tables.xlsx')`, b); await win.waitForTimeout(1500)
+  check('opening a workbook with tables leaves nothing to undo', (await ev(`return api._injector.get(window.__IUndoRedoService).getUndoRedoStatus(W().getId()).undos`)) === 0)
+  const saved = Buffer.from(await ev(`return Array.from(await X.xlsx.save())`))
+  const w2 = new ExcelJS.Workbook(); await w2.xlsx.load(saved)
+  const names = w2.getWorksheet('Sales').getTables().map((x) => (x.table ?? x).name).sort().join(',')
+  check('a table named like its sheet ("Sales") is kept on save, next to the other table', names === 'Other,Sales', names)
+}
+
 // Ctrl+; in a 1904 workbook writes today's 1904 serial
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true; w.addWorksheet('D').getCell('A1').value = 1
