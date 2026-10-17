@@ -439,7 +439,7 @@ export async function xlsxToSnapshot(buf) {
   for (const { sheetIndex, groups } of await readSparklines(buf)) {
     const id = idByIndex[sheetIndex]
     if (!id) continue
-    sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors,
+    sheets[id].custom.sheetlySparklines = groups.map((g, k) => ({ id: `spk${k}`, type: g.type, colors: g.colors, ...(g.displayHidden ? { displayHidden: true } : {}),
       items: g.items.filter((x) => idByName[x.sheetName]).map((x) => ({ row: x.row, col: x.col, sheetId: idByName[x.sheetName], source: x.source,
         cellRef: track(sheets[id].name, { startRow: x.row, endRow: x.row, startColumn: x.col, endColumn: x.col }), sourceRef: track(x.sheetName, x.source) })) })).filter((g) => g.items.length)
   }
@@ -540,13 +540,17 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
       if (!cell) continue
       const x = ws.getCell(+r + 1, +c + 1)
       const f = cell.f || (cell.si ? formulaOf?.(id, +r, +c) : null)
-      const spill = f ? arrayRangeOf?.(id, +r, +c) : null
+      // GETPIVOTDATA reads a PivotTable, and PivotTables are saved as their values for now: Excel (and Sheetly on
+      // reopening) would recalculate it to #REF!, so such a cell keeps its result as a value.
+      const pivotRead = f && /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i.test(f) && cell.v != null
+      const spill = f && !pivotRead ? arrayRangeOf?.(id, +r, +c) : null
       const result = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined
       if (f && spill && (spill.endRow > spill.startRow || spill.endColumn > spill.startColumn)) {
         // A formula that spills: Excel's dynamic array (t="array" over the spill range, cm="1" added by finishPackage).
         x.value = { formula: formulaOut(f.replace(/^=/, '')), result, shareType: 'array', ref: `${a1(spill.startRow, spill.startColumn)}:${a1(spill.endRow, spill.endColumn)}` }
         spills.add(`${sheetIndex}!${a1(+r, +c)}`)
-      } else if (f) x.value = { formula: formulaOut(f.replace(/^=/, '')), result }
+      } else if (pivotRead) x.value = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.t === 3 ? !!cell.v : cell.v
+      else if (f) x.value = { formula: formulaOut(f.replace(/^=/, '')), result }
       else if (typeof cell.v === 'string' && ERRORS.has(cell.v) && cell.t !== 1) x.value = { error: cell.v }
       else if (cell.v !== undefined && cell.v !== null && cell.v !== '') x.value = cell.t === 3 ? !!cell.v : cell.v
       else if (cell.p?.body?.dataStream) x.value = docText(cell.p)

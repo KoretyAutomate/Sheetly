@@ -315,6 +315,16 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('an input message that is switched off stays off (its text kept)', !v13?.showInputMessage && v13?.prompt === 'Kept but hidden', J(v13))
 }
 
+// ---- review round 12: GETPIVOTDATA saved as its value (PivotTables are written as values), sparkline displayHidden
+{
+  const s14 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=GETPIVOTDATA("Sales",$A$3)', v: 45, t: 2 }, 1: { f: '=A1*2', v: 90, t: 2 } } },
+    custom: { sheetlySparklines: [{ id: 'g', type: 'line', colors: {}, displayHidden: true, items: [{ row: 5, col: 5, sheetId: 's1', source: R(0, 0, 0, 3) }] }] } } } }
+  const b14 = await snapshotToXlsx(s14), w14 = new ExcelJS.Workbook(); await w14.xlsx.load(b14)
+  check('a GETPIVOTDATA cell is saved as its value; formulas using it stay formulas', w14.getWorksheet('Data').getCell('A1').value === 45 && w14.getWorksheet('Data').getCell('B1').value?.formula === 'A1*2', J([w14.getWorksheet('Data').getCell('A1').value, w14.getWorksheet('Data').getCell('B1').value]))
+  const r14 = await xlsxToSnapshot(b14)
+  check('a sparkline group set to show hidden cells keeps that setting', r14.sheets[r14.sheetOrder[0]].custom?.sheetlySparklines?.[0]?.displayHidden === true, J(r14.sheets[r14.sheetOrder[0]].custom))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

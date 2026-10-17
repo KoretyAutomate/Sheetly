@@ -188,7 +188,8 @@ export function getPivotData(def, src, dataField, pairs) {
   const V = (def.values ?? [])
   const v = V.find((x) => same(valueName(x), dataField)) ?? V.find((x) => same(x.field, dataField))
   if (!v) return { error: '#REF!' }
-  const shown = [...(def.rows ?? []), ...(def.cols ?? [])]
+  // Fields on rows or columns, and report filters (whose shown items are the selected ones).
+  const shown = [...(def.rows ?? []), ...(def.cols ?? []), ...(def.filters ?? []).map((f) => f.field)]
   const recs = filtered(def, src)
   let sel = recs
   for (const [field, item] of pairs) {

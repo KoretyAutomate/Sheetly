@@ -55,6 +55,11 @@ check('GETPIVOTDATA("Sales", pt) = grand total 45', g('Sales', []) === 45)
 check('GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30', g('Sum of Sales', [['Region', 'East']]) === 30)
 check('GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive', g('sales', [['region', 'west'], ['product', 'a']]) === 12)
 check('GETPIVOTDATA: item not in the report -> #REF!', g('Sales', [['Region', 'North']]) === '#REF!')
+{
+  const fdef = { rows: ['Product'], cols: [], values: sum, filters: [{ field: 'Region', items: ['West'] }] }
+  const gf = (pairs) => { const x = getPivotData(fdef, src, 'Sales', pairs); return x.error ?? x.value }
+  check('GETPIVOTDATA with a report-filter field: the selected item gives its total; another item is #REF!', gf([['Region', 'West']]) === 12 && gf([['Region', 'East']]) === '#REF!', `${gf([['Region', 'West']])} ${gf([['Region', 'East']])}`)
+}
 check('GETPIVOTDATA: field not on rows/columns -> #REF!', g('Sales', [['Date', 45000]]) === '#REF!')
 check('GETPIVOTDATA: combination with no data -> #REF!', g('Sales', [['Region', 'West'], ['Product', 'B']]) === '#REF!')
 check('GETPIVOTDATA: unknown data field -> #REF!', g('Profit', []) === '#REF!')

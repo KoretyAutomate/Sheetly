@@ -1,4 +1,4 @@
-pivot model  2026-10-17T06:03:04.928Z
+pivot model  2026-10-17T06:26:54.117Z
 PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
 PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
 PASS  two row fields: compact form, subtotals on the group row, inner items indented
@@ -19,8 +19,9 @@ PASS  GETPIVOTDATA("Sales", pt) = grand total 45
 PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
 PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
 PASS  GETPIVOTDATA: item not in the report -> #REF!
+PASS  GETPIVOTDATA with a report-filter field: the selected item gives its total; another item is #REF!
 PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
 PASS  GETPIVOTDATA: combination with no data -> #REF!
 PASS  GETPIVOTDATA: unknown data field -> #REF!
 
-23/23 passed
+24/24 passed

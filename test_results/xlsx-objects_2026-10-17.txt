@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T06:03:04.867Z
+xlsx objects  2026-10-17T06:26:54.050Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -57,8 +57,10 @@ PASS  a quote inside a text rule is doubled in its formula
 PASS  each series hides the points in its own hidden rows (row 6 hides B6 only)
 PASS  a column series and a row series are each read along their own direction
 PASS  an input message that is switched off stays off (its text kept)
+PASS  a GETPIVOTDATA cell is saved as its value; formulas using it stay formulas
+PASS  a sparkline group set to show hidden cells keeps that setting
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-61/61 passed
+63/63 passed

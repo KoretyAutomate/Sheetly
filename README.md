@@ -98,7 +98,8 @@ python3 test/coverage.py test_results/coverage.txt   # function coverage vs Exce
 
 - TRANSLATE, DETECTLANGUAGE and STOCKHISTORY return `#CONNECT!`, because they need Microsoft's online services.
 - CUBE functions return `#NAME?` (there is no Data Model), and GETPIVOTDATA returns `#REF!` (there are no PivotTables).
-- PivotTables are saved to .xlsx as their values; the PivotTable itself (its cache) is not written yet.
+- PivotTables are saved to .xlsx as their values; the PivotTable itself (its cache) is not written yet, so cells
+  with GETPIVOTDATA are saved as their results.
 - Chart sheets (F11) are saved as a worksheet holding the chart.
 - Quick Analysis has no live preview. Typing `=` and clicking a PivotTable cell does not write a GETPIVOTDATA
   formula for you.

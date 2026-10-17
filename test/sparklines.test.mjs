@@ -94,6 +94,15 @@ await ev(`const U=(id)=>api._injector.get(window.__ICommandService).executeComma
 const redone = await ev(`const c=W().getSheets().find(s=>s.getSheetId()!==W().getSheets()[0].getSheetId()); if(!c) return 'no copy'; W().setActiveSheet(c); await new Promise(r=>setTimeout(r,500)); const out=JSON.stringify([SP.groups().reduce((n,g)=>n+g.items.length,0), SP.groups().every(g=>g.items.every(i=>i.sheetId===S().getSheetId()))]); W().setActiveSheet(W().getSheets()[0]); return out`)
 check('after Copy Sheet, Undo and Redo the copy keeps its own sparklines', redone === `[${before},true]`, redone)
 
+// a hidden source column is left out of the sparkline
+await ev(`S().getRange('A11:D11').setValues([[1,100,2,3]]); SP.add('line','A11:D11','F11')`); await settle(500)
+const withAll = await shot('F11')
+await ev(`S().hideColumns(1, 1)`); await settle(600)
+const hidden = await shot('F11')
+await ev(`S().showColumns(1, 1)`); await settle(600)
+check('hiding a source column changes the sparkline (its value is left out), showing it again restores it', withAll !== hidden && (await shot('F11')) === withAll)
+await ev(`S().getRange('F11').activate(); SP.clear(); S().getRange('A11:D11').clear()`); await settle(300)
+
 // Clear
 await ev(`S().getRange('F2:F4').activate(); SP.clear()`); await settle(600)
 await ev(`S().getRange('J30').activate()`)

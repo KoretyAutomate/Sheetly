@@ -19,9 +19,12 @@ const soon = (fn) => { let done = false; const run = () => { if (!done) { done =
 const maxOf = (list, start = -Infinity) => { let m = start; for (const x of list) if (x > m) m = x; return m }
 const minOf = (list, start = Infinity) => { let m = start; for (const x of list) if (x < m) m = x; return m }
 /** Values of one sparkline: numbers in order; text and blanks are gaps (null). */
-export const sparkValues = (get, g) => {
+export const sparkValues = (get, g, shown = null) => {
   const out = []
-  for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) { const v = get(r, c); out.push(typeof v === 'number' ? v : null) }
+  for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) {
+    if (shown && !shown(r, c)) continue
+    const v = get(r, c); out.push(typeof v === 'number' ? v : null)
+  }
   return out
 }
 
@@ -118,7 +121,9 @@ export function createSparklines(api, refs) {
         if (it.row < seg.startRow - 1 || it.row > seg.endRow + 1 || it.col < seg.startColumn - 1 || it.col > seg.endColumn + 1) continue
         if (!w.getRowVisible(it.row) || !w.getColVisible(it.col)) continue
         const srcSheet = (book?.getSheetBySheetId?.(it.sheetId ?? w.getSheetId())) ?? w
-        const values = sparkValues((r, c) => srcSheet.getCellRaw(r, c)?.v ?? spillValue(injector, book?.getUnitId?.() ?? wb().getId(), srcSheet.getSheetId(), r, c), it.source)
+        // Hidden source rows and columns are left out (Excel's default; a group may say to show them).
+        const shown = g.displayHidden ? null : (r, c) => srcSheet.getRowVisible(r) && srcSheet.getColVisible(c)
+        const values = sparkValues((r, c) => srcSheet.getCellRaw(r, c)?.v ?? spillValue(injector, book?.getUnitId?.() ?? wb().getId(), srcSheet.getSheetId(), r, c), it.source, shown)
         const cell = sk.getCellWithCoordByIndex(it.row, it.col, false)
         drawSparkline(ctx, g.type, values, { x: cell.startX, y: cell.startY, w: cell.endX - cell.startX, h: cell.endY - cell.startY }, { ...SPARK_DEFAULTS, ...g.colors })
       }

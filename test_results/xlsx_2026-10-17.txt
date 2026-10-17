@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-17T06:03:04.477Z
+xlsx fidelity  2026-10-17T06:26:53.666Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
