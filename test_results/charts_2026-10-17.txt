@@ -1,4 +1,4 @@
-charts  2026-10-17T01:59:05.364Z
+charts  2026-10-17T02:27:06.749Z
 PASS  Alt+F1: clustered column, series by columns with the header row as names
 PASS  the chart follows its data: B2 = 99 redraws it
 PASS  formula results feed the chart too
@@ -25,7 +25,8 @@ PASS  and their references move with an inserted column
 PASS  internal reference names are not listed among the workbook's names
 PASS  Name Manager does not show the internal names
 PASS  scatter points keep X = 0
+PASS  a copied sheet's chart follows the copy's data, not the original's
 PASS  the chart definition is saved (type + source range)
 PASS  no page errors
 
-28/28 passed
+29/29 passed

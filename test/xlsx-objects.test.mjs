@@ -234,6 +234,21 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('and it is written back with its names and no header row', m9?.headerRow === false && J((m9.columns ?? []).map((c) => c.name)) === J(['Amount', 'Qty']), J(m9 && { headerRow: m9.headerRow, columns: m9.columns }))
 }
 
+// ---- scatter series keep their own X ranges
+{
+  const xml = '<c:chartSpace><c:chart><c:plotArea><c:scatterChart><c:scatterStyle val="lineMarker"/>'
+    + '<c:ser><c:idx val="0"/><c:tx><c:v>P</c:v></c:tx><c:xVal><c:numRef><c:f>Data!$A$2:$A$4</c:f></c:numRef></c:xVal><c:yVal><c:numRef><c:f>Data!$B$2:$B$4</c:f></c:numRef></c:yVal></c:ser>'
+    + '<c:ser><c:idx val="1"/><c:tx><c:v>Q</c:v></c:tx><c:xVal><c:numRef><c:f>Data!$C$2:$C$4</c:f></c:numRef></c:xVal><c:yVal><c:numRef><c:f>Data!$D$2:$D$4</c:f></c:numRef></c:yVal></c:ser>'
+    + '</c:scatterChart></c:plotArea></c:chart></c:chartSpace>'
+  const sp = specFromXml(xml)
+  check('scatter: each series keeps its X range on read', J(sp?.source?.series?.map((x) => x.xValues)) === J([R(1, 0, 3, 0), R(1, 2, 3, 2)]), J(sp?.source?.series))
+  const s10 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DRAWING_PLUGIN', data: J({ s1: { data: { c: { drawingId: 'c', drawingType: 8, componentKey: 'sheetly-chart',
+    data: { v: 2, type: 'scatter', title: null, source: { sheetId: 's1', ...sp.source, sheetName: undefined } }, sheetTransform: { from: { column: 6, columnOffset: 0, row: 0, rowOffset: 0 }, to: { column: 12, columnOffset: 0, row: 12, rowOffset: 0 } } } }, order: ['c'] } }) }],
+    sheets: { s1: { id: 's1', name: 'Data', cellData: { 1: { 0: { v: 1, t: 2 }, 1: { v: 2, t: 2 }, 2: { v: 10, t: 2 }, 3: { v: 20, t: 2 } }, 2: { 0: { v: 2, t: 2 }, 1: { v: 3, t: 2 }, 2: { v: 11, t: 2 }, 3: { v: 21, t: 2 } }, 3: { 0: { v: 3, t: 2 }, 1: { v: 4, t: 2 }, 2: { v: 12, t: 2 }, 3: { v: 22, t: 2 } } } } } }
+  const z10 = await JSZip.loadAsync(await snapshotToXlsx(s10)), x10 = await z10.file(Object.keys(z10.files).find((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))).async('string')
+  check('scatter: each series is written with its own X range', (x10.match(/<c:xVal><c:numRef><c:f>[^<]*<\/c:f>/g) ?? []).map((t) => t.replace(/.*<c:f>/, '').replace('</c:f>', '')).join(',') === 'Data!$A$2:$A$4,Data!$C$2:$C$4', (x10.match(/<c:xVal>[\s\S]{0,60}/g) ?? []).join(' '))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

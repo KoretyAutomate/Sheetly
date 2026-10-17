@@ -157,8 +157,22 @@ await removeCharts(); await ev(`S().getRange('A1:B3').clear()`)
 await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
 await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
 
+// ---- Copy Sheet: the copy's chart reads the copy's data
+await removeCharts(); await ev(`S().getRange('A1:H20').clear(); S().getRange('A1:B3').setValues([['k','v'],['a',1],['b',2]]); S().getRange('A1').activate()`); await settle()
+await key('Alt+F1'); await settle(800)
+const ids = await ev(`return W().getSheets().map(s=>s.getSheetId()).join(',')`)
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('sheet.command.copy-sheet', { unitId: W().getId(), subUnitId: S().getSheetId() })`); await settle(1000)
+const orig = await ev(`return S().getSheetId()`)
+await ev(`const before='${ids}'.split(','); const c=W().getSheets().find(s=>!before.includes(s.getSheetId())); W().setActiveSheet(c); await new Promise(r=>setTimeout(r,600)); S().getRange('B2').setValue(50); await new Promise(r=>setTimeout(r,800))`)
+st = await ev(`return canv().map(c=>c.__chart?.data.datasets[0].data.join(',')).join('|') + '|' + (CH.sourceOf(CH.charts()[0])?.sheetId === S().getSheetId())`)
+check('a copied sheet\'s chart follows the copy\'s data, not the original\'s', st.split('|').includes('50,2') && st.endsWith('true'), st)
+await ev(`W().setActiveSheet(W().getSheetBySheetId('${orig}') ?? W().getSheets()[0])`); await settle(600)
+await removeCharts(); await ev(`S().getRange('A1:B3').clear()`); await settle()
+await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
+await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
+
 // ---- saved with the workbook
-const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); const k=Object.keys(d)[0]; return Object.values(d[k].data).map(x=>x.data).find(x=>x.type==='pie')`)
+const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); return Object.values(d).flatMap(v=>Object.values(v.data)).map(x=>x.data).find(x=>x?.type==='pie')`)
 check('the chart definition is saved (type + source range)', snap?.type === 'pie' && snap?.source?.range?.endRow === 5, JSON.stringify(snap))
 await removeCharts()
 check('no page errors', errors.length === 0, errors.join(' | '))

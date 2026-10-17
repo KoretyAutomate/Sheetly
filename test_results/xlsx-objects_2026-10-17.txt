@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T01:57:25.994Z
+xlsx objects  2026-10-17T02:25:29.675Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -44,8 +44,10 @@ PASS  hiding a series column drops only that series (C hidden -> B stays; B hidd
 PASS  a hidden row is left out of explicit series and their categories
 PASS  a headerless table is not handed to Univer (which would name columns from the data)
 PASS  and it is written back with its names and no header row
+PASS  scatter: each series keeps its X range on read
+PASS  scatter: each series is written with its own X range
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-48/48 passed
+50/50 passed

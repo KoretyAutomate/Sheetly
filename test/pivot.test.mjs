@@ -112,6 +112,29 @@ await ev(`await api._injector.get(window.__ICommandService).executeCommand('shee
 const copy = await ev(`const before='${ids0}'.split(','); const c=W().getSheets().find(s=>!before.includes(s.getSheetId())); W().setActiveSheet(c); await new Promise(r=>setTimeout(r,300)); S().getRange('F6').activate(); await new Promise(r=>setTimeout(r,300)); return [S().getSheetName(), P.active()?.name ?? null].join('|')`)
 check('a copied sheet\'s PivotTable is found on the copy', /\|PivotTable\d+$/.test(copy) && !copy.startsWith('Sheet1|'), copy)
 
+// ---- one undo step per change: Ctrl+Z puts back the report and its definition together
+await ev(`W().setActiveSheet(W().getSheets()[0]); S().getRange('A4').activate()`); await settle(400)
+const def0 = await ev(`return JSON.stringify(P.active() && [P.active().rows, P.active().values.map(v=>v.fn)])`), a30 = await grid('A3:B4')
+await ev(`P.toggleField('Product', true)`); await settle(700)
+const changed = await grid('A3:B4')
+await ev(`await api._injector.get(window.__ICommandService).executeCommand('univer.command.undo')`); await settle(700)
+const def1 = await ev(`S().getRange('A4').activate(); await new Promise(r=>setTimeout(r,200)); return JSON.stringify(P.active() && [P.active().rows, P.active().values.map(v=>v.fn)])`)
+check('Ctrl+Z undoes a field change in one step (cells and definition)', changed !== a30 && (await grid('A3:B4')) === a30 && def1 === def0, `${def0} ${def1}`)
+// ---- a table name works as the source
+await ev(`W().setActiveSheet(W().getSheets()[W().getSheets().length-1]); S().getRange('K1:L3').setValues([['Item','Qty'],['x',1],['y',2]]); await S().addTable('Stock', { startRow: 0, endRow: 2, startColumn: 10, endColumn: 11 })`); await settle(600)
+const okTable = await ev(`return P.create('Stock', 'new', '') && P.active()?.name`)
+check('Create PivotTable accepts a table name ("Stock")', typeof okTable === 'string' && okTable.startsWith('PivotTable'), String(okTable))
+await settle(400)
+
+// ---- report filters own two columns even when the report is one column wide
+await ev(`W().setActiveSheet(W().getSheets()[W().getSheets().length-1]); S().getRange('Q1').setValue('neighbour')`); await settle()
+await ev(`P.create(W().getSheets()[W().getSheets().length-1].getSheetName() + '!$K$1:$L$3', 'existing', W().getSheets()[W().getSheets().length-1].getSheetName() + '!P3')`); await settle(600)
+await ev(`P.place('Qty', 'values')`); await settle(500)
+await ev(`P.place('Item', 'filters')`); await settle(600)
+const asked3 = await ev(`return document.querySelector('.sx-dialog p')?.textContent ?? ''`)
+check('a filter that would overwrite the cell beside it asks first', asked3.startsWith("There's already data in") && (await ev(`return S().getRange('Q1').getRawValue()`)) === 'neighbour', asked3)
+await key('Escape'); await settle(300)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

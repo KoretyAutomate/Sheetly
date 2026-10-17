@@ -1,4 +1,4 @@
-pivot tables  2026-10-17T01:59:49.069Z
+pivot tables  2026-10-17T02:27:57.521Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -19,7 +19,10 @@ PASS  Cancel leaves the data and the report as they were
 PASS  after inserting rows above source and report, the report is found and Refresh reads the moved source
 PASS  after a row inside the report is deleted, Refresh asks before overwriting the cell that moved up
 PASS  a copied sheet's PivotTable is found on the copy
+PASS  Ctrl+Z undoes a field change in one step (cells and definition)
+PASS  Create PivotTable accepts a table name ("Stock")
+PASS  a filter that would overwrite the cell beside it asks first
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-22/22 passed
+25/25 passed

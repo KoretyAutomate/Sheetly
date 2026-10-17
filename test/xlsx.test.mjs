@@ -172,9 +172,9 @@ const J = JSON.stringify
 // ---- hyperlinks: web and in-workbook
 {
   const link = (text, url) => ({ p: { id: 'd', body: { dataStream: text + '\r\n', paragraphs: [{ startIndex: text.length }], customRanges: [{ startIndex: 0, endIndex: text.length - 1, rangeType: 0, rangeId: 'r', properties: { url } }] } } })
-  const snap = { sheetOrder: ['s1', 's2'], sheets: {
-    s1: { id: 's1', name: 'Sheet1', cellData: { 0: { 0: link('site', 'https://example.com/'), 1: link('jump', '#gid=s2&range=B3') } } },
-    s2: { id: 's2', name: 'My Data', cellData: {} } } }
+  const snap = { sheetOrder: ['s1', 's2', 's3'], sheets: {
+    s1: { id: 's1', name: 'Sheet1', cellData: { 0: { 0: link('site', 'https://example.com/'), 1: link('jump', '#gid=s2&range=B3'), 2: link('obrien', '#gid=s3&range=A1') } } },
+    s2: { id: 's2', name: 'My Data', cellData: {} }, s3: { id: 's3', name: "O'Brien", cellData: {} } } }
   const buf = await snapshotToXlsx(snap)
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf)
   const ws = wb.getWorksheet('Sheet1')
@@ -184,6 +184,7 @@ const J = JSON.stringify
   const url = (x) => x?.p?.body?.customRanges?.[0]?.properties?.url
   check('round-trip: web hyperlink', url(c[0][0]) === 'https://example.com/' && c[0][0].p.body.dataStream === 'site\r\n', J(c[0][0]))
   check('round-trip: in-workbook link back to #gid form', url(c[0][1]) === `#gid=${back.sheetOrder[1]}&range=B3`, J(c[0][1]))
+  check("round-trip: a link to a sheet named O'Brien", url(c[0][2]) === `#gid=${back.sheetOrder[2]}&range=A1`, J(c[0][2]))
 }
 
 // ---- LET / LAMBDA parameters are stored as _xlpm.name (Excel would read a bare name as a defined name)
@@ -192,7 +193,7 @@ const J = JSON.stringify
     ['LET(x,"x",x&"x")', '_xlfn.LET(_xlpm.x,"x",_xlpm.x&"x")'], ['SUM(x1,A1)', 'SUM(x1,A1)'], ['LET(a1x,5,a1x+A1)', '_xlfn.LET(_xlpm.a1x,5,_xlpm.a1x+A1)'],
     ['IF(A1="LET(x,1,x)",1,0)', 'IF(A1="LET(x,1,x)",1,0)'], ['LET(x,1,SUM(Table1[x]))', '_xlfn.LET(_xlpm.x,1,SUM(Table1[x]))'], ['LET(x,1,x&"x""x")', '_xlfn.LET(_xlpm.x,1,_xlpm.x&"x""x")'],
     ['LET(fn,LAMBDA(x,x+1),fn(5))', '_xlfn.LET(_xlpm.fn,_xlfn.LAMBDA(_xlpm.x,_xlpm.x+1),_xlpm.fn(5))'], ['LAMBDA(f,v,f(v))(SQRT,4)', '_xlfn.LAMBDA(_xlpm.f,_xlpm.v,_xlpm.f(_xlpm.v))(SQRT,4)'],
-    ['LAMBDA(max,MAX(max,1))', '_xlfn.LAMBDA(_xlpm.max,MAX(_xlpm.max,1))'], ['LET(sum,5,SUM(sum,1))', '_xlfn.LET(_xlpm.sum,5,SUM(_xlpm.sum,1))'], ["LET(x,1,'Sales x Plan'!A1+x)", "_xlfn.LET(_xlpm.x,1,'Sales x Plan'!A1+_xlpm.x)"], ["LET(x,1,'It''s x'!A1+x)", "_xlfn.LET(_xlpm.x,1,'It''s x'!A1+_xlpm.x)"]]
+    ['LAMBDA(max,MAX(max,1))', '_xlfn.LAMBDA(_xlpm.max,MAX(_xlpm.max,1))'], ['LET(sum,5,SUM(sum,1))', '_xlfn.LET(_xlpm.sum,5,SUM(_xlpm.sum,1))'], ["LET(x,1,'Sales x Plan'!A1+x)", "_xlfn.LET(_xlpm.x,1,'Sales x Plan'!A1+_xlpm.x)"], ["LET(x,1,'It''s x'!A1+x)", "_xlfn.LET(_xlpm.x,1,'It''s x'!A1+_xlpm.x)"], ['LET(a,y,y,1,a+y)', '_xlfn.LET(_xlpm.a,y,_xlpm.y,1,_xlpm.a+_xlpm.y)'], ['LET(x,x+1,x)', '_xlfn.LET(_xlpm.x,x+1,_xlpm.x)']]
   const bad = cases.filter(([f, want]) => formulaOut(f) !== want || formulaIn(formulaOut(f)) !== f)
   check('write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare', !bad.length, J(bad.map(([f]) => [f, formulaOut(f)])))
 }

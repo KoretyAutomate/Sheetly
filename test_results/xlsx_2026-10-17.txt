@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-17T01:57:25.605Z
+xlsx fidelity  2026-10-17T02:25:29.306Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
@@ -59,6 +59,7 @@ PASS  write: web hyperlink
 PASS  write: link into the workbook uses the sheet name
 PASS  round-trip: web hyperlink
 PASS  round-trip: in-workbook link back to #gid form
+PASS  round-trip: a link to a sheet named O'Brien
 PASS  write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare
 
-61/61 passed
+62/62 passed

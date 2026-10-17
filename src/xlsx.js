@@ -226,17 +226,27 @@ function xlpm(f) {
     const args = bounds.slice(0, -1).map((b, k) => m0.slice(b + 1, bounds[k + 1]).trim())
     const isLet = m[2].toUpperCase() === 'LET'
     const valid = (x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x)
-    const names = args.slice(0, -1).filter((_, k) => !isLet || k % 2 === 0).filter(valid)
-    if (!names.length) continue
+    // Declarations with their argument positions (LET: names at even positions; LAMBDA: all but the body).
+    const decls = args.map((x, k) => [x, k]).filter(([x, k]) => k < args.length - 1 && (!isLet || k % 2 === 0) && valid(x))
     // Names that can be called: LET names bound to a LAMBDA, and LAMBDA parameters (a function passed in) unless
     // they are spelled like a built-in function, which a call then means.
-    const callable = isLet ? names.filter((x) => { const k = args.indexOf(x); return /^(_xlfn\.)?LAMBDA\(/i.test(args[k + 1] ?? '') })
-      : names.filter((x) => !BUILTIN_CALLS.has(x.toUpperCase()) && !XLFN.has(x.toUpperCase()) && !XLWS.has(x.toUpperCase()))
-    const alt = (list) => list.map((x) => x.replace(/\./g, '\\.')).join('|')
-    const span = m0.slice(open, close + 1)
-    const add = (re) => { let t; while ((t = re.exec(span))) edits.push(open + t.index + t[1].length) }
-    add(new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${alt(names)})(?![A-Za-z0-9_.(!\u0000])`, 'gi'))
-    if (callable.length) add(new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${alt(callable)})(?=\\()`, 'gi'))
+    const callable = (x, k) => (isLet ? /^(_xlfn\.)?LAMBDA\(/i.test(args[k + 1] ?? '') : !BUILTIN_CALLS.has(x.toUpperCase()) && !XLFN.has(x.toUpperCase()) && !XLWS.has(x.toUpperCase()))
+    const re = (name, calls) => new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![A-Za-z0-9_.(!\u0000])"}`, 'gi')
+    const scan = (name, startAt, endAt, calls) => { const span = m0.slice(startAt, endAt); let t; const r = re(name, calls); while ((t = r.exec(span))) edits.push(startAt + t.index + t[1].length) }
+    // Where each name is bound: a LAMBDA parameter in the whole call; a LET name from its declaration on, skipping
+    // its own value (LET(a,y,y,1,a+y): the first y is the workbook's y, not the parameter).
+    for (const [name, k] of decls) {
+      if (isLet) {
+        const declAt = bounds[k] + 1, decl = m0.slice(declAt, bounds[k + 1])
+        edits.push(declAt + (decl.length - decl.trimStart().length))
+        const from = bounds[k + 2] ?? close
+        scan(name, from, close + 1, false)
+        if (callable(name, k)) scan(name, from, close + 1, true)
+      } else {
+        scan(name, open, close + 1, false)
+        if (callable(name, k)) scan(name, open, close + 1, true)
+      }
+    }
   }
   // Apply from the end so earlier positions stay valid; a position is prefixed once.
   for (const pos of [...new Set(edits)].sort((x, y) => y - x)) f = f.slice(0, pos) + '_xlpm.' + f.slice(pos)
@@ -422,7 +432,7 @@ export async function xlsxToSnapshot(buf) {
     const { sheetName, ...source } = c.spec.source
     source.ref = track(sheetName, source.range)
     if (source.series) {
-      source.series = source.series.map((x) => ({ ...x, valuesRef: track(sheetName, x.values),
+      source.series = source.series.map((x) => ({ ...x, valuesRef: track(sheetName, x.values), xValuesRef: track(sheetName, x.xValues),
         nameRef: x.name ? track(sheetName, { startRow: x.name[0], endRow: x.name[0], startColumn: x.name[1], endColumn: x.name[1] }) : undefined }))
       source.categoriesRef = track(sheetName, source.categories)
     }
@@ -435,8 +445,10 @@ export async function xlsxToSnapshot(buf) {
   // Hyperlinks become Univer link text: a rich-text cell whose text carries the URL; links into the workbook
   // ("#Sheet2!A1") use Univer's "#gid=<sheet id>&range=A1" form.
   for (const [o, url] of links) {
-    const m = /^#'?(.+?)'?!(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$/.exec(url)
-    const target = m && idByName[m[1]] ? `#gid=${idByName[m[1]]}&range=${m[2].replace(/\$/g, '')}` : url
+    // '#Sheet'!A1 or #Sheet!A1; a quoted name doubles its apostrophes ('O''Brien').
+    const m = /^#(?:'((?:[^']|'')+)'|([^!']+))!(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)$/.exec(url)
+    const sheetName = m ? (m[1] ?? m[2]).replace(/''/g, "'") : null
+    const target = m && idByName[sheetName] ? `#gid=${idByName[sheetName]}&range=${m[3].replace(/\$/g, '')}` : url
     o.p = linkDoc(String(o.v ?? url), target)
   }
   const names = {}

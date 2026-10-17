@@ -10,6 +10,7 @@ import { ArcElement, BarController, BarElement, CategoryScale, Chart, DoughnutCo
   LineElement, PieController, PointElement, ScatterController, Title, Tooltip } from 'chart.js'
 import { CommandType, ICommandService, numfmt } from '@univerjs/core'
 import { IDrawingManagerService } from '@univerjs/drawing'
+import { DrawingApplyType, ISheetDrawingService, SetDrawingApplyMutation } from '@univerjs/sheets-drawing'
 import { createElement, useEffect, useReducer, useRef } from 'react'
 import { el, openDialog, radios, check } from './ui/dialog.js'
 import { chartTitle, explicitSeries, resolveSource, seriesFrom } from './chart-model.js'
@@ -80,7 +81,7 @@ export function chartConfig(spec, d) {
     const xNum = (l, i) => (l !== '' && Number.isFinite(Number(l)) ? Number(l) : i + 1)
     const xs = d.explicit ? d.labels.map(xNum) : d.series.length > 1 ? d.series[0].values : d.labels.map(xNum)
     const ys = d.explicit || d.series.length <= 1 ? d.series : d.series.slice(1)
-    datasets = ys.map((s, i) => ({ label: s.name, data: s.values.map((y, k) => ({ x: xs[k], y })), backgroundColor: seriesColor(i), borderColor: seriesColor(i), pointRadius: 4 }))
+    datasets = ys.map((s, i) => ({ label: s.name, data: s.values.map((y, k) => ({ x: s.xs ? s.xs[k] : xs[k], y })), backgroundColor: seriesColor(i), borderColor: seriesColor(i), pointRadius: 4 }))
   } else {
     datasets = d.series.map((s, i) => ({ label: s.name, data: values(s), backgroundColor: seriesColor(i), borderColor: seriesColor(i),
       ...(base === 'line' ? { borderWidth: 2.25, pointRadius: type === 'lineMarkers' ? 4 : 0, fill: type.startsWith('area') ? (stacked && i > 0 ? '-1' : 'origin') : false, tension: 0 } : {}),
@@ -157,6 +158,7 @@ function ChartView({ data }) {
 export function createCharts(api, dialogs, refs) {
   apiRef = api
   refsRef = refs
+  const commands = api._injector.get(ICommandService)
   api.registerComponent(COMPONENT, ChartView)
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
@@ -251,7 +253,33 @@ export function createCharts(api, dialogs, refs) {
     return true
   }
 
-  return { chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts,
+  /** After Copy Sheet: the copy's charts read the copy's data (references into other sheets stay). The drawing is
+   *  updated through its mutation alone, so this is part of the copy, not an undo step of its own. */
+  function remapCopy(fromId, sheet) {
+    const unitId = wb().getId(), subUnitId = sheet.getSheetId()
+    const drawingsSvc = api._injector.get(ISheetDrawingService)
+    for (const c of (sheet.getAllFloatDoms?.() ?? []).filter((x) => x.componentKey === COMPONENT)) {
+      const src = c.data?.source
+      if (!src) continue
+      const re = (name, sheetId, range) => {
+        const at = name ? refs?.resolve(name) : range ? { sheetId, range } : null
+        if (!at || at.sheetId !== fromId) return name
+        return refs?.track(subUnitId, at.range) ?? name
+      }
+      const next = { ...src, sheetId: src.sheetId === fromId ? subUnitId : src.sheetId, ref: re(src.ref, src.sheetId, src.range) }
+      if (src.series) {
+        next.series = src.series.map((x) => ({ ...x, valuesRef: re(x.valuesRef, src.sheetId, x.values), xValuesRef: x.xValuesRef || x.xValues ? re(x.xValuesRef, src.sheetId, x.xValues) : undefined,
+          nameRef: x.nameRef ? re(x.nameRef) : undefined }))
+        next.categoriesRef = src.categoriesRef || src.categories ? re(src.categoriesRef, src.sheetId, src.categories) : undefined
+      }
+      const drawing = drawingsSvc.getDrawingByParam?.({ unitId, subUnitId, drawingId: c.id })
+      if (!drawing) continue
+      const { redo, objects } = drawingsSvc.getBatchUpdateOp([{ ...drawing, data: { ...drawing.data, source: next } }])
+      commands.syncExecuteCommand(SetDrawingApplyMutation.id, { unitId, subUnitId, type: DrawingApplyType.UPDATE, op: redo, objects })
+    }
+  }
+
+  return { remapCopy, chartData, embeddedChart, chartSheet, insertChartDialog, changeTypeDialog, elementsDialog, setType, switchRowColumn, toggle, selected, selectedNow, charts,
     /** Where a chart's data is now (its references follow structural edits). */
     sourceOf: (c) => liveSource(c?.data?.source) }
 }

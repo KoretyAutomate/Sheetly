@@ -59,9 +59,10 @@ export function chartXml(spec, sheetName, get) {
       : `<c:doughnutChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/><c:holeSize val="75"/></c:doughnutChart>`
   } else if (t === 'scatter') {
     const xs = ex ? null : d.series.length > 1 ? d.series[0] : null, ys = xs ? d.series.slice(1) : d.series
-    const xRef = ex && catRef ? `<c:xVal>${numRef(catRef, d.labels.map(Number))}</c:xVal>` : ''
+    // series picked one by one: each its own X values (else the shared categories)
+    const xRef = (k) => { const own = ex ? spec.source.series[k]?.xValues : null; return own ? `<c:xVal>${numRef(span(own), d.series[k]?.xs ?? [])}</c:xVal>` : ex && catRef ? `<c:xVal>${numRef(catRef, d.labels.map(Number))}</c:xVal>` : '' }
     const sers = ys.map((s, i) => { const k = xs ? i + 1 : i; return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx(s)}<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill></c:spPr></c:marker>${dLbls(labels)}`
-      + `${xs ? `<c:xVal>${numRef(lineRef(xs, 0), xs.values)}</c:xVal>` : xRef}<c:yVal>${numRef(lineRef(s, k), s.values)}</c:yVal><c:smooth val="0"/></c:ser>` }).join('')
+      + `${xs ? `<c:xVal>${numRef(lineRef(xs, 0), xs.values)}</c:xVal>` : xRef(k)}<c:yVal>${numRef(lineRef(s, k), s.values)}</c:yVal><c:smooth val="0"/></c:ser>` }).join('')
     plot = `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}<c:axId val="500000001"/><c:axId val="500000002"/></c:scatterChart>`
   } else {
     const kind = t.startsWith('line') ? 'line' : t.startsWith('area') ? 'area' : 'bar'
@@ -314,13 +315,14 @@ export function specFromXml(xml) {
   const refIn = (x, tag) => { const f = /<c:f>([^<]*)<\/c:f>/.exec(inner(x, tag) ?? '')?.[1]; return f ? parseRange(unesc(f).replace(/^.*!/, '')) : null }
   // A literal series name: <c:tx><c:v>Revenue</c:v></c:tx> or rich text.
   const literalName = (x) => { const t = inner(x, 'tx'); if (!t || /<c:f>/.test(t)) return null; const v = /<c:v>([^<]*)<\/c:v>/.exec(t)?.[1]; return v != null ? unesc(v) : texts(t) || null }
-  const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), nameText: literalName(x) }))
+  // (scatter series each have their own X values)
+  const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), xValues: refIn(x, 'xVal'), nameText: literalName(x) }))
   const categories = serXml.length ? refIn(serXml[0], 'cat') ?? refIn(serXml[0], 'xVal') : null
   const source = { sheetName: parsed[0].sheet, range: box }
   // A chart from a file keeps its series exactly as referenced: re-reading the block by cell types could, for
   // example, take numeric category labels (years) for a series.
   if (series.every((x) => x.values)) {
-    source.series = series.map((x) => ({ name: x.name ? [x.name.startRow, x.name.startColumn] : null, nameText: x.nameText, values: x.values }))
+    source.series = series.map((x) => ({ name: x.name ? [x.name.startRow, x.name.startColumn] : null, nameText: x.nameText, values: x.values, ...(x.xValues ? { xValues: x.xValues } : {}) }))
     source.categories = categories
   }
   return { v: 2, type, source, plotBy, title, legend, dataLabels, axisTitles }

@@ -133,7 +133,7 @@ commandService.beforeCommandExecuted((cmd) => {
 commandService.onCommandExecuted((cmd) => {
   if (cmd.id !== 'sheet.command.copy-sheet' || !sheetsBeforeCopy) return
   const fromId = copiedFrom
-  for (const s of univerAPI.getActiveWorkbook().getSheets()) if (!sheetsBeforeCopy.has(s.getSheetId())) { sparklines.remapCopy(fromId, s); pivots.remapCopy(fromId, s) }
+  for (const s of univerAPI.getActiveWorkbook().getSheets()) if (!sheetsBeforeCopy.has(s.getSheetId())) { sparklines.remapCopy(fromId, s); pivots.remapCopy(fromId, s); charts.remapCopy(fromId, s) }
   sheetsBeforeCopy = null
 })
 // Excel's grid size: 1,048,576 rows x 16,384 columns (A..XFD)

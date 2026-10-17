@@ -4,7 +4,7 @@
 // The report is written into cells in Excel's Compact Form with the default PivotStyleLight16 look. Like Excel it
 // does not follow the source until it is refreshed. Definitions live in the report sheet's custom data
 // (custom.sheetlyPivots), so they are saved with the workbook; an .xlsx keeps the report's values.
-import { BorderStyleTypes, BorderType, ICommandService } from '@univerjs/core'
+import { BorderStyleTypes, BorderType, CommandType, ICommandService, IUndoRedoService, IUniverInstanceService } from '@univerjs/core'
 import { el, field, openDialog, radios } from './ui/dialog.js'
 import { BLANK, FN_LABEL, FN_MENU, FUNCS, defaultFn, filterCells, getPivotData, isNumericField, layout, readSource, valueName } from './pivot-model.js'
 import { parseRange, rangeA1 } from './xlsx-objects.js'
@@ -21,10 +21,32 @@ export function createPivots(api, { dialogs, refs }) {
   const wb = () => api.getActiveWorkbook()
   const ws = () => wb().getActiveSheet()
   const listOf = (sheet) => sheet.getSheet().getCustomMetadata?.()?.sheetlyPivots ?? []
-  const store = (sheet, list) => {
-    const custom = { ...(sheet.getSheet().getCustomMetadata?.() ?? {}) }
+  const storeIn = (w, list) => {
+    const custom = { ...(w.getCustomMetadata?.() ?? {}) }
     if (list.length) custom.sheetlyPivots = list; else delete custom.sheetlyPivots
-    sheet.getSheet().setCustomMetadata(Object.keys(custom).length ? custom : undefined)
+    w.setCustomMetadata(Object.keys(custom).length ? custom : undefined)
+  }
+  const store = (sheet, list) => storeIn(sheet.getSheet(), list)
+  // Definitions change through a mutation with the previous list as its undo; a whole change (cells, formats and
+  // definition) is one undo step (atomic, below).
+  const SET = 'sheetly.mutation.set-pivots'
+  commands.registerCommand({ id: SET, type: CommandType.MUTATION, handler: (_a, p) => {
+    const w = api._injector.get(IUniverInstanceService).getUnit(p.unitId)?.getSheetBySheetId(p.subUnitId)
+    if (!w) return false
+    storeIn(w, p.list)
+    return true
+  } })
+  const undoRedo = api._injector.get(IUndoRedoService)
+  function commitList(sheet, list) {
+    const unitId = wb().getId(), subUnitId = sheet.getSheetId()
+    const before = structuredClone(listOf(sheet)), after = structuredClone(list)
+    commands.syncExecuteCommand(SET, { unitId, subUnitId, list: after })
+    undoRedo.pushUndoRedo({ unitID: unitId, undoMutations: [{ id: SET, params: { unitId, subUnitId, list: before } }], redoMutations: [{ id: SET, params: { unitId, subUnitId, list: after } }] })
+  }
+  /** Runs fn as a single undo step (everything it changes is undone together). */
+  function atomic(fn) {
+    const g = undoRedo.beginUndoRedoGroup(wb().getId(), `pivot-${Date.now()}-${Math.random()}`, 'append')
+    try { return fn() } finally { g.dispose() }
   }
   const allPivots = () => wb().getSheets().flatMap((s) => listOf(s).map((p) => ({ sheet: s, p })))
   // The source and the report's place are hidden defined names (refs.js): Univer moves them with inserted and
@@ -75,7 +97,8 @@ export function createPivots(api, { dialogs, refs }) {
     // Report filters sit above the report with one blank row between; the report moves down to make room.
     const top = Math.max(row, filters.length ? filters.length + 1 : 0)
     const hasGrid = L && (p.rows.length || p.cols.length || p.values.length)
-    const width = hasGrid ? Math.max(...L.grid.map((r) => r.length)) : filters.length ? 2 : 0
+    // Report filters take two columns (name, item), so the report owns at least two when it has filters.
+    const width = Math.max(hasGrid ? Math.max(...L.grid.map((r) => r.length)) : 0, filters.length ? 2 : 0)
     const rows = hasGrid ? L.grid.length : 0
     const filterRows = filters.length ? filters.length + 1 : 0
     const next = width ? { row: top - filterRows, col, rows: rows + filterRows, cols: width } : null
@@ -118,14 +141,15 @@ export function createPivots(api, { dialogs, refs }) {
   }
   function save(sheet, p) {
     const list = listOf(sheet).filter((x) => x.id !== p.id)
-    store(sheet, [...list, structuredClone(p)])
+    commitList(sheet, [...list, structuredClone(p)])
   }
   // Excel asks before a report grows over other data.
   const askReplace = (sheet, then) => openDialog({ title: 'Sheetly', width: 400, okLabel: 'OK',
     body: el('p', { style: { margin: 0 } }, `There's already data in [${sheet.getSheetName()}]. Do you want to replace it?`), onOk: then })
   function update(sheet, p, opts = {}) {
-    if (render(sheet, p, opts)?.conflict) { askReplace(sheet, () => { render(sheet, p, { ...opts, force: true }); save(sheet, p); showPane() }); return true }
-    save(sheet, p); showPane(); return true
+    const go = (o) => atomic(() => { const r = render(sheet, p, o); if (!r?.conflict) save(sheet, p); return r })
+    if (go(opts)?.conflict) { askReplace(sheet, () => { go({ ...opts, force: true }); showPane() }); return true }
+    showPane(); return true
   }
 
   // ---- Insert > PivotTable
@@ -146,12 +170,21 @@ export function createPivots(api, { dialogs, refs }) {
   }
   const sheetByName = (name) => wb().getSheets().find((s) => s.getSheetName().toLowerCase() === name.toLowerCase())
   function refOf(text) {
+    // A table's name stands for its data with the header row (as Excel takes it), without a totals row.
+    const t = /^\s*[\p{L}_][\p{L}\p{N}_.]*\s*$/u.test(text) && !parseRange(text) ? wb().getTableInfoByName?.(text.trim()) : null
+    if (t?.range) {
+      const sheet = wb().getSheetBySheetId(t.subUnitId)
+      const g = { ...t.range, endRow: t.range.endRow - (t.options?.showFooter ? 1 : 0) }
+      if (sheet) return { sheet, range: g }
+    }
     const m = /^\s*(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(text)
     const sheet = m ? sheetByName((m[1] ?? m[2]).replace(/''/g, "'")) : ws()
     const g = parseRange(m ? m[3] : text)
     return sheet && g ? { sheet, range: g } : null
   }
-  function create(rangeText, where, locText) {
+  // Creating a PivotTable (new sheet, report, definition) is one undo step.
+  const create = (...a) => atomic(() => createNow(...a))
+  function createNow(rangeText, where, locText) {
     const src = refOf(rangeText)
     if (!src || src.range.endRow <= src.range.startRow) return message('The reference is not valid.') && false
     const data = readSource((r, c) => { const v = src.sheet.getRange(r, c).getRawValue(); return v === '' ? null : v }, src.range)
