@@ -82,17 +82,20 @@ ipcMain.handle('save', async (e, data, saveAs) => {
   }
   fs.writeFileSync(p, Buffer.from(data)); files.set(e.sender.id, p); return p
 })
-ipcMain.on('current', (e, p) => files.set(e.sender.id, p))
+// The page has loaded the file: it is this window's own from now on (and no longer only pending).
+ipcMain.on('current', (e, p) => { files.set(e.sender.id, p); pending.delete(e.sender.id) })
+// The page could not open the file it was started for: the window stays without one.
+ipcMain.on('load-failed', (e) => pending.delete(e.sender.id))
 // File > Open over an edited workbook: Excel keeps it and opens the file in a window of its own.
 ipcMain.handle('open-in-new-window', (_e, p) => { openWorkbook(p) })
 // The page asks once it is ready whether this window was opened for a file.
 ipcMain.handle('initial-file', (e) => {
   const p = pending.get(e.sender.id)
-  pending.delete(e.sender.id)
   if (!p) return null
   // The window takes the file as its own only once the page has loaded it ('current'): a file that fails to open
-  // must never become the target of Save.
-  try { return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) } } catch { return null }
+  // must never become the target of Save. Until then it stays pending, so opening the same file again meanwhile
+  // focuses this window instead of starting a second copy.
+  try { return { path: p, name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) } } catch { pending.delete(e.sender.id); return null }
 })
 // INFO("directory"): folder of the open workbook (else home), with a trailing separator like Excel.
 ipcMain.on('directory', (e) => { const p = fileOf(e); e.returnValue = (p ? path.dirname(p) : os.homedir()) + path.sep })

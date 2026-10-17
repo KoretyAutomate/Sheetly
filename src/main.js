@@ -163,8 +163,12 @@ async function loadWorkbook(f) {
     // Unreadable (damaged, encrypted, not a workbook): nothing changes, and the window does not take the file.
     console.warn('open', f.name, e)
     openDialog({ title: 'Sheetly', width: 420, body: el('p', { style: { margin: 0 } }, `Sheetly cannot open the file '${f.name}' because the file format or file extension is not valid, or the file is protected with a password.`), cancelLabel: 'Close' })
+    window.sheetly.loadFailed?.()
     return false
   }
+  // The file is readable: it is this window's from here, before the first calculation (INFO("directory") is its
+  // folder).
+  window.sheetly.setCurrent(f.path)
   fromFile = true
   univerAPI.disposeUnit(univerAPI.getActiveWorkbook().getId())
   const { sheetlyTables = [], sheetlyLegacyArrays = [], ...data } = snap
@@ -200,7 +204,6 @@ async function loadWorkbook(f) {
   }
   // Opening a file is not something to undo.
   univerAPI._injector.get(IUndoRedoService).clearUndoRedo(book.getId())
-  window.sheetly.setCurrent(f.path)
 }
 // Filled-down formulas are kept by Univer as shared-formula ids; their text comes from the live workbook.
 // Formulas that spill are written as Excel dynamic arrays over their spill range.

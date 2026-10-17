@@ -175,6 +175,14 @@ await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('E
 const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); return Object.values(d).flatMap(v=>Object.values(v.data)).map(x=>x.data).find(x=>x?.type==='pie')`)
 check('the chart definition is saved (type + source range)', snap?.type === 'pie' && snap?.source?.range?.endRow === 5, JSON.stringify(snap))
 await removeCharts()
+// ---- a single-series chart starts without a legend: the first Legend toggle shows it
+await ev(`S().getRange('A1:F6').clear(); S().getRange('A1:B3').setValues([['', 'Sales'], ['a', 1], ['b', 2]]); S().getRange('A1').activate()`); await settle()
+await key('Alt+F1'); await settle(800)
+const lg0 = await ev(`return cj(0)?.options.plugins.legend.display`)
+await ev(`CH.toggle('legend')`); await settle(500)
+const lg1 = await ev(`return cj(0)?.options.plugins.legend.display`)
+check('one series: no legend at first; Legend shows it on the first press', lg0 === false && lg1 === true, `${lg0} ${lg1}`)
+await removeCharts()
 check('no page errors', errors.length === 0, errors.join(' | '))
 await app.close()
 const pass = out.filter((l) => l.startsWith('PASS')).length

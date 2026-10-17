@@ -67,6 +67,8 @@ function dataOf(spec0) {
   return { ...d, title: chartTitle(spec, d), pattern: pattern && pattern !== 'General' ? pattern : null }
 }
 
+/** The legend a chart shows: its own setting, else Excel's automatic one (pie and several series: bottom; else none). */
+export const legendOf = (spec, d) => spec?.legend ?? ((spec?.type === 'pie' || spec?.type === 'doughnut') || d.series.length > 1 ? 'bottom' : 'none')
 /** Chart.js configuration for a spec and its data. */
 export function chartConfig(spec, d) {
   const type = spec?.type ?? 'column'
@@ -91,7 +93,7 @@ export function chartConfig(spec, d) {
       // Excel's default gap width 219% / overlap -27% (clustered) or 100% (stacked), approximated.
       ...(base === 'bar' ? { categoryPercentage: stacked ? 0.6 : 0.62, barPercentage: stacked ? 1 : 0.85 } : {}) }))
   }
-  const legend = spec?.legend ?? (pie || d.series.length > 1 ? 'bottom' : 'none')
+  const legend = legendOf(spec, d)
   const axisTitle = (t) => (t ? { display: true, text: t } : { display: false })
   // Excel starts the value axis at 0 unless the data are all on one side of 0 and their spread is under a sixth of
   // the largest magnitude.
@@ -231,7 +233,7 @@ export function createCharts(api, dialogs, refs) {
   const switchRowColumn = () => update((s) => ({ plotBy: (s.plotBy ?? (dataOf(s).byCols ? 'cols' : 'rows')) === 'cols' ? 'rows' : 'cols',
     source: { ...s.source, series: undefined, categories: undefined, categoriesRef: undefined } }))
   const toggle = (what) => update((s) => (what === 'title' ? { title: s.title === '' ? null : '' }
-    : what === 'legend' ? { legend: (s.legend ?? 'bottom') === 'none' ? 'bottom' : 'none' }
+    : what === 'legend' ? { legend: legendOf(s, dataOf(s)) === 'none' ? 'bottom' : 'none' }
       : what === 'dataLabels' ? { dataLabels: !s.dataLabels }
         : { axisTitles: s.axisTitles ? null : { x: 'Axis Title', y: 'Axis Title' } }))
 
@@ -249,10 +251,10 @@ export function createCharts(api, dialogs, refs) {
     const c = selected()
     if (!c) return message('Select a chart first.')
     const s = c.data ?? {}
-    const boxes = { title: check('Chart &Title', s.title !== ''), legend: check('&Legend', (s.legend ?? 'bottom') !== 'none'),
+    const boxes = { title: check('Chart &Title', s.title !== ''), legend: check('&Legend', legendOf(s, dataOf(s)) !== 'none'),
       dataLabels: check('&Data Labels', !!s.dataLabels), axisTitles: check('&Axis Titles', !!s.axisTitles) }
     openDialog({ title: 'Chart Elements', width: 260, body: el('div', {}, ...Object.values(boxes).map((b) => b.node)), onOk: () => {
-      update((sp) => ({ title: boxes.title.input.checked ? (sp.title === '' ? null : sp.title) : '', legend: boxes.legend.input.checked ? (sp.legend && sp.legend !== 'none' ? sp.legend : 'bottom') : 'none',
+      update((sp) => ({ title: boxes.title.input.checked ? (sp.title === '' ? null : sp.title) : '', legend: boxes.legend.input.checked === (legendOf(sp, dataOf(sp)) !== 'none') ? sp.legend : boxes.legend.input.checked ? 'bottom' : 'none',
         dataLabels: boxes.dataLabels.input.checked, axisTitles: boxes.axisTitles.input.checked ? (sp.axisTitles ?? { x: 'Axis Title', y: 'Axis Title' }) : null }))
     } })
     return true

@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('sheetly', {
   openInNewWindow: (p) => ipcRenderer.invoke('open-in-new-window', p),
   save: (data, saveAs) => ipcRenderer.invoke('save', data, saveAs),
   setCurrent: (p) => ipcRenderer.send('current', p),
+  loadFailed: () => ipcRenderer.send('load-failed'),
   directory: () => ipcRenderer.sendSync('directory'),
   osversion: () => ipcRenderer.sendSync('osversion'),
   webservice: (url) => ipcRenderer.invoke('webservice', url),

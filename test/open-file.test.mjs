@@ -6,6 +6,7 @@ import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import path from 'path'
 import { snapshotToXlsx } from '../src/xlsx.js'
+import ExcelJS from 'exceljs'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -49,6 +50,21 @@ const msg = await w3.evaluate(() => document.querySelector('.sx-dialog p')?.text
 const where = await w3.evaluate(() => window.sheetly.directory())
 check('a file that cannot be read: a message, and the window does not take it as its file', msg.startsWith("Sheetly cannot open the file 'broken.xlsx'") && !where.startsWith(dir), `${msg} | ${where}`)
 await app2.close()
+// INFO("directory") in a workbook that is opened: its own folder from the first calculation
+const info = path.join(dir, 'info.xlsx')
+// (with a legacy array formula, which makes opening wait for the first calculation)
+{
+  const x = new ExcelJS.Workbook(), ws = x.addWorksheet('Data')
+  ws.getCell('A1').value = 'info'; ws.getCell('A2').value = { formula: 'INFO("directory")', result: '' }
+  ws.getCell('C1').value = { formula: 'A1:A2', shareType: 'array', ref: 'C1:C2', result: 'info' }
+  writeFileSync(info, Buffer.from(await x.xlsx.writeBuffer()))
+}
+const app3 = await electron.launch({ args: ['.', '--no-sandbox', info], env: { ...env, SHEETLY_USER_DATA: path.join(dir, 'profile3') } })
+const w4 = await app3.firstWindow()
+await ready(w4)
+const got = await w4.waitForFunction(() => window.univerAPI.getActiveWorkbook().getActiveSheet().getRange('A2').getValue() || null, null, { timeout: 30000 }).then((h) => h.jsonValue()).catch(() => null)
+check('INFO("directory") in an opened workbook is its folder', got === dir + path.sep, `${got}`)
+await app3.close()
 const pass = out.filter((l) => l.startsWith('PASS')).length
 console.log(`open file from the command line  ${new Date().toISOString()}\n${out.join('\n')}\n\n${pass}/${out.length} passed`)
 process.exitCode = pass === out.length ? 0 : 1
