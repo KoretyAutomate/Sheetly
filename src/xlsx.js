@@ -12,6 +12,7 @@ import { outlineGroups, outlineSettings } from './outline-model.js'
 import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
 import { finishPackage, readCharts, readDynamicArrays, readSparklines } from './xlsx-zip.js'
 import { resolveSource } from './chart-model.js'
+import { EXCEL_FUNCTIONS } from './excel-function-names.js'
 
 const NOTE = 'SHEET_NOTE_PLUGIN', NAMES = 'SHEET_DEFINED_NAME_PLUGIN', ALL_SHEETS = 'AllDefaultWorkbook'
 const EPOCH = Date.UTC(1899, 11, 30), EPOCH_1904 = Date.UTC(1904, 0, 1)
@@ -188,8 +189,6 @@ export const formulaIn = (f) => outsideStrings(f, (p) => p.replace(/_xlfn\.(_xlw
 // LET / LAMBDA parameter names are stored as _xlpm.name inside their call (Excel reads a bare name as a defined name).
 // The formula is scanned with its string literals, quoted sheet names and structured references ([...]) masked, so
 // text such as "LET(x,1,x)" in quotes, 'Sales x Plan'!A1 or Table1[x] is never taken for a call or a parameter.
-// Common worksheet functions a LAMBDA parameter could be spelled like (a call then means the function).
-const BUILTIN_CALLS = new Set('SUM AVERAGE COUNT COUNTA MAX MIN IF IFS AND OR NOT INDEX MATCH VLOOKUP HLOOKUP LOOKUP ROUND ABS LEN LEFT RIGHT MID TEXT VALUE ROW ROWS COLUMN COLUMNS DATE YEAR MONTH DAY NOW TODAY PRODUCT POWER SQRT EXP LN LOG MOD INT TRIM UPPER LOWER CONCATENATE CHOOSE OFFSET INDIRECT SUMIF SUMIFS COUNTIF COUNTIFS AVERAGEIF ISNUMBER ISTEXT ISBLANK ISERROR IFERROR N T TYPE RAND'.split(' '))
 function mask(f) {
   let out = '', inStr = false, inSheet = false, depth = 0
   for (let i = 0; i < f.length; i++) {
@@ -232,14 +231,15 @@ function xlpm(f) {
     // A call to a bound name means the binding unless the name is spelled like a built-in function and the binding
     // cannot hold a function (LET(sum,5,SUM(sum,1)) calls the function SUM). A LET value holds a function when it
     // contains a LAMBDA or names an earlier binding that does (an alias).
-    const builtin = (x) => BUILTIN_CALLS.has(x.toUpperCase()) || XLFN.has(x.toUpperCase()) || XLWS.has(x.toUpperCase())
+    const builtin = (x) => EXCEL_FUNCTIONS.has(x.toUpperCase()) || XLFN.has(x.toUpperCase()) || XLWS.has(x.toUpperCase())
     const holdsFunction = new Set()
     if (isLet) for (let k = 0; k < args.length - 1; k += 2) {
       const value = (args[k + 1] ?? '').trim()
       if (/LAMBDA\(/i.test(value) || holdsFunction.has(value.toLowerCase())) holdsFunction.add(args[k].toLowerCase())
     }
     const callable = (x) => !builtin(x) || holdsFunction.has(x.toLowerCase())
-    const re = (name, calls) => new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![A-Za-z0-9_.(!\u0000])"}`, 'gi')
+    // Whole names only: letters of any script count as part of a name (税x is not x).
+    const re = (name, calls) => new RegExp(`(^|[^\\p{L}\\p{N}_.!$'\u0000])(${name.replace(/\./g, '\\.')})${calls ? '(?=\\()' : "(?![\\p{L}\\p{N}_.(!\u0000])"}`, 'giu')
     const scan = (name, startAt, endAt, calls) => { const span = m0.slice(startAt, endAt); let t; const r = re(name, calls); while ((t = r.exec(span))) edits.push(startAt + t.index + t[1].length) }
     // Where each name is bound: a LAMBDA parameter in the whole call; a LET name from its declaration on, skipping
     // its own value (LET(a,y,y,1,a+y): the first y is the workbook's y, not the parameter).

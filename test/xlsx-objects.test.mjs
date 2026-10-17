@@ -305,6 +305,9 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
 {
   const g = [[10, null, null, null, null, null], [20, null, null, 40, 50, 60], [30]]
   const mixed = explicitSeries((r, c) => g[r]?.[c] ?? null, { categories: null, series: [{ name: null, nameText: 'A', values: R(0, 0, 2, 0) }, { name: null, nameText: 'B', values: R(1, 3, 1, 5) }] })
+  const g2 = []; g2[0] = [1, null]; g2[1] = [2, null]; g2[2] = [3, null]; g2[4] = [null, 10]; g2[5] = [null, 20]; g2[6] = [null, 30]
+  const vis = explicitSeries((r, c) => g2[r]?.[c] ?? null, { categories: null, series: [{ name: null, nameText: 'A', values: R(0, 0, 2, 0) }, { name: null, nameText: 'B', values: R(4, 1, 6, 1) }] }, { hiddenRow: (r) => r === 5 })
+  check('each series hides the points in its own hidden rows (row 6 hides B6 only)', J(vis.series.map((x) => x.values)) === J([[1, 2, 3], [10, 30]]), J(vis.series))
   check('a column series and a row series are each read along their own direction', J(mixed.series.map((x) => x.values)) === J([[10, 20, 30], [40, 50, 60]]), J(mixed.series))
   const s13 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DATA_VALIDATION_PLUGIN', data: J({ s1: [{ uid: 'p', ranges: [R(0, 0)], type: 'whole', operator: 'between', formula1: '1', formula2: '5', showInputMessage: false, prompt: 'Kept but hidden' }] }) }],
     sheets: { s1: { id: 's1', name: 'Data', cellData: {} } } }

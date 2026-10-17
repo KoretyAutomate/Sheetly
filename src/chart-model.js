@@ -58,9 +58,9 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
   const along = (g) => { const out = []; if (isVertical(g)) for (let r = g.startRow; r <= g.endRow; r++) out.push([r, g.startColumn]); else for (let c = g.startColumn; c <= g.endColumn; c++) out.push([g.startRow, c]); return out }
   // A hidden row (vertical series) or column (horizontal) drops that point from every series, with its category; a
   // hidden column (vertical) or row (horizontal) drops just the series in it.
-  const keep = first ? along(first).map(([r, c]) => (vertical ? !hiddenRow(r) : !hiddenCol(c))) : []
-  // Points line up by position across series; a series of another direction keeps all its points.
-  const keepFor = (g) => (isVertical(g) === vertical ? keep : [])
+  // Each range's own cells decide which of its points are shown (a hidden row hides the points in that row).
+  const keepFor = (g) => along(g).map(([r, c]) => (isVertical(g) ? !hiddenRow(r) : !hiddenCol(c)))
+  const keep = first ? keepFor(first) : []
   const seriesShown = (g) => (isVertical(g) ? !hiddenCol(g.startColumn) : !hiddenRow(g.startRow))
   const series = src.series.map((s, i) => ({ s, i })).filter(({ s }) => seriesShown(s.values)).map(({ s, i }) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
     values: along(s.values).filter((_, k) => keepFor(s.values)[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name,
@@ -73,7 +73,7 @@ export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = 
     // inner level: the last column (vertical) or row (horizontal); outer levels before it
     const lines = vertical ? Array.from({ length: cat.endColumn - cat.startColumn + 1 }, (_, i) => cat.startColumn + i) : Array.from({ length: cat.endRow - cat.startRow + 1 }, (_, i) => cat.startRow + i)
     const cellsOf = (line) => (vertical ? along({ startRow: cat.startRow, endRow: cat.endRow, startColumn: line, endColumn: line }) : along({ startRow: line, endRow: line, startColumn: cat.startColumn, endColumn: cat.endColumn }))
-    const pick = (line) => cellsOf(line).filter((_, k) => keep[k] !== false)
+    const pick = (line) => { const cells = cellsOf(line), k2 = cells.map(([r, c]) => (vertical ? !hiddenRow(r) : !hiddenCol(c))); return cells.filter((_, k) => k2[k]) }
     labels = pick(lines[lines.length - 1]).map(([r, c]) => String(get(r, c) ?? ''))
     for (let k = lines.length - 2; k >= 0; k--) {
       let prev = null

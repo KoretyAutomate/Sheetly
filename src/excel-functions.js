@@ -65,7 +65,7 @@ export function excelFunctions(getApi, env = {}) {
         const f = first(pairs[i]), it = first(pairs[i + 1])
         if (f?.isError?.()) return f
         if (it?.isError?.()) return it
-        items.push([String(f.getValue()), it.isNumber() ? +it.getValue() : String(it.getValue())])
+        items.push([String(f.getValue()), it.isNumber() ? +it.getValue() : it.isBoolean() ? !!it.getValue() : String(it.getValue())])
       }
       const g = table.getRangeData()
       const res = env.pivotLookup(table.getForcedSheetId() || table.getDefaultSheetId(), g.startRow, g.startColumn, String(df.getValue()), items)

@@ -147,6 +147,15 @@ const asked3 = await ev(`return document.querySelector('.sx-dialog p')?.textCont
 check('a filter that would overwrite the cell beside it asks first', asked3.startsWith("There's already data in") && (await ev(`return S().getRange('Q1').getRawValue()`)) === 'neighbour', asked3)
 await key('Escape'); await settle(300)
 
+// ---- GETPIVOTDATA with a logical item tells TRUE from the text "TRUE"
+await ev(`const sh=W().getSheets()[W().getSheets().length-1]; W().setActiveSheet(sh); S().getRange('T1:U3').setValues([['Flag','Amt'],[true,10],[{ v: 'TRUE', t: 1 },20]])`); await settle(300)
+const stored = await ev(`return JSON.stringify([S().getSheet().getCellRaw(1,19), S().getSheet().getCellRaw(2,19)])`)
+await ev(`P.create(S().getSheetName() + '!$T$1:$U$3', 'existing', S().getSheetName() + '!W3')`); await settle(500)
+await ev(`P.place('Flag', 'rows'); P.place('Amt', 'values')`); await settle(700)
+await ev(`S().getRange('AB1').setFormula('=GETPIVOTDATA("Amt",W3,"Flag",TRUE)'); S().getRange('AB2').setFormula('=GETPIVOTDATA("Amt",W3,"Flag","TRUE")')`); await settle(800)
+const gb = await ev(`return [S().getRange('AB1').getCalculatedValue(), S().getRange('AB2').getCalculatedValue()].join('|')`)
+check('GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20', gb === '10|20', `${gb} ${stored}`)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()
