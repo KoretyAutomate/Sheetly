@@ -49,6 +49,16 @@ check('Max / Min over 150,000 values do not overflow the stack', aggregate('max'
   const L3 = layout({ rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }, src3)
   check('TRUE, 1 and "TRUE" are three items; logicals sort after text', show(L3) === 'Row Labels | Sum of V\n1 | 2\nTRUE | 4\nfalse | 8\ntrue | 1\nGrand Total | 15', '\n' + show(L3))
 }
+{
+  const rows4 = [['Region', 'Sales', 'Sales'], ['E', 10, 100], ['W', 20, 200]]
+  const src4 = readSource((r, c) => rows4[r]?.[c] ?? null, { startRow: 0, endRow: 2, startColumn: 0, endColumn: 2 })
+  const L4 = layout({ rows: [], cols: [], values: [{ field: src4.fields[2], fn: 'sum' }], filters: [] }, src4)
+  check('repeated headers are separate fields (Sales, Sales2): the second one sums its own column (300)', src4.fields.join() === 'Region,Sales,Sales2' && show(L4) === 'Sum of Sales2\n300', src4.fields.join() + ' ' + show(L4))
+  const big = [['K', 'V']]; for (let i = 0; i < 10000; i++) big.push([`k${i}`, i])
+  const srcB = readSource((r, c) => big[r]?.[c] ?? null, { startRow: 0, endRow: big.length - 1, startColumn: 0, endColumn: 1 })
+  const t0 = Date.now(), LB = layout({ rows: ['K'], cols: [], values: [{ field: 'V', fn: 'sum' }], filters: [] }, srcB), ms = Date.now() - t0
+  check('10,000 row items lay out quickly (records grouped once)', LB.grid.length === 10002 && ms < 1500, `${ms} ms`)
+}
 const def = { rows: ['Region'], cols: ['Product'], values: sum, filters: [] }
 const g = (df, pairs) => { const x = getPivotData(def, src, df, pairs); return x.error ?? x.value }
 check('GETPIVOTDATA("Sales", pt) = grand total 45', g('Sales', []) === 45)

@@ -1,5 +1,5 @@
-DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"-7aQz7"},[["001",10],["002",20]]]
-pivot tables  2026-10-17T06:52:16.000Z
+DBG [{"v":"001","t":1},{"v":"Row Labels","t":1,"s":"KQvzDK"},[["001",10],["002",20]]]
+pivot tables  2026-10-17T07:23:31.839Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -26,7 +26,8 @@ PASS  Create PivotTable accepts a table name ("Stock")
 PASS  a filter that would overwrite the cell beside it asks first
 PASS  GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20
 PASS  a table's totals row is left out (Grand Total 30, not 60); "001" stays the text 001
+PASS  a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)
 PASS  a source with a blank header is refused with Excel's message
 PASS  no page errors
 
-28/28 passed
+29/29 passed

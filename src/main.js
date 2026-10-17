@@ -193,7 +193,8 @@ async function loadWorkbook(f) {
     try { ok = (await sheet?.addTable(t.name, t.range, undefined, { showHeader: t.showHeader, showFooter: t.showFooter })) !== false } catch (e) { console.warn('table', t.name, e) }
     if (!ok && sheet) {
       const w = sheet.getSheet(), custom = { ...(w.getCustomMetadata?.() ?? {}) }
-      custom.sheetlyTablesKept = [...(custom.sheetlyTablesKept ?? []), { name: t.name, range: t.range, showHeader: t.showHeader, showFooter: t.showFooter, columns: t.columns }]
+      custom.sheetlyTablesKept = [...(custom.sheetlyTablesKept ?? []), { name: t.name, range: t.range, showHeader: t.showHeader, showFooter: t.showFooter, columns: t.columns,
+        rangeRef: refs.track(t.sheetId, t.range, book) ?? undefined }]
       w.setCustomMetadata(custom)
     }
   }

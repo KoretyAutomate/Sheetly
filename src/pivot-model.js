@@ -41,6 +41,13 @@ export function readSource(get, g) {
   const fields = []
   for (let c = g.startColumn; c <= g.endColumn; c++) fields.push(get(g.startRow, c))
   if (fields.some(isBlank)) return null
+  // Repeated headers become separate fields, numbered as Excel does (Sales, Sales2, ...).
+  const seen = new Map()
+  for (let k = 0; k < fields.length; k++) {
+    const base = String(fields[k]), key = base.toLowerCase(), n = (seen.get(key) ?? 0) + 1
+    seen.set(key, n)
+    if (n > 1) { let name = `${base}${n}`; while (fields.some((f) => String(f).toLowerCase() === name.toLowerCase())) name += '_'; fields[k] = name }
+  }
   const records = []
   for (let r = g.startRow + 1; r <= g.endRow; r++) {
     const rec = []
@@ -98,13 +105,13 @@ export function filtered(def, src) {
 function tree(fields, records, src, path = []) {
   if (!fields.length) return []
   const i = src.fields.indexOf(fields[0])
-  const items = [...new Map(records.map((r) => [itemKey(label(r[i])), label(r[i])])).values()].sort(cmpItems)
-  return items.map((item) => {
-    const sub = records.filter((r) => sameItem(label(r[i]), item))
-    return { item, path: [...path, item], children: tree(fields.slice(1), sub, src, [...path, item]) }
-  })
+  // One pass groups the records by item (no rescanning per item).
+  const groups = new Map()
+  for (const r of records) { const it = label(r[i]), k = itemKey(it); let g = groups.get(k); if (!g) groups.set(k, g = { item: it, recs: [] }); g.recs.push(r) }
+  return [...groups.values()].sort((a, b) => cmpItems(a.item, b.item))
+    .map(({ item, recs }) => ({ item, path: [...path, item], children: tree(fields.slice(1), recs, src, [...path, item]) }))
 }
-const matches = (rec, src, fields, path) => path.every((it, k) => sameItem(label(rec[src.fields.indexOf(fields[k])]), it))
+const pathKey = (path) => path.map(itemKey).join('\u0001')
 
 /**
  * The report as a grid of cells { v, kind, indent? } plus where things are:
@@ -114,9 +121,18 @@ export function layout(def, src) {
   const recs = filtered(def, src)
   const V = (def.values ?? []).filter((v) => src.fields.includes(v.field))
   const rowF = (def.rows ?? []).filter((f) => src.fields.includes(f)), colF = (def.cols ?? []).filter((f) => src.fields.includes(f))
+  // The values of every (row path prefix, column path prefix) pair, gathered in one pass over the records.
+  const rIdx = rowF.map((f) => src.fields.indexOf(f)), cIdx = colF.map((f) => src.fields.indexOf(f))
+  const buckets = new Map()
+  for (const rec of recs) {
+    const rk = [''], ck = ['']
+    for (const i of rIdx) rk.push((rk.length > 1 ? rk[rk.length - 1] + '\u0001' : '') + itemKey(label(rec[i])))
+    for (const i of cIdx) ck.push((ck.length > 1 ? ck[ck.length - 1] + '\u0001' : '') + itemKey(label(rec[i])))
+    for (const a of rk) for (const b of ck) { const key = `${a}\u0002${b}`; let list = buckets.get(key); if (!list) buckets.set(key, list = []); list.push(rec) }
+  }
   const valueOf = (rpath, cpath, v) => {
     const vi = src.fields.indexOf(v.field)
-    const sel = recs.filter((r) => matches(r, src, rowF, rpath) && matches(r, src, colF, cpath))
+    const sel = buckets.get(`${pathKey(rpath)}\u0002${pathKey(cpath)}`) ?? []
     return aggregate(v.fn, sel.map((r) => r[vi]))
   }
   // Column leaves: each a { cpath, v, kind } — items, subtotals of outer groups, the grand total, per value field.

@@ -180,7 +180,8 @@ function listOut(f) {
   let items
   try { const j = JSON.parse(s); items = Array.isArray(j) ? j : null } catch { items = null }
   items ??= s.split(',')
-  return `"${items.map((x) => String(x).replace(/"/g, '')).join(',')}"`
+  // a quote inside an item is doubled in the literal (12" -> 12"")
+  return `"${items.map((x) => String(x).replace(/"/g, '""')).join(',')}"`
 }
 export function dvOut(ws, rules = []) {
   for (const r of rules) {
@@ -208,7 +209,13 @@ export function dvIn(ws, sheetId) {
     if (!ranges.length) continue
     const raw = (x) => (x == null ? undefined : x instanceof Date ? String(Math.round((x.getTime() - Date.UTC(1899, 11, 30)) / 864e5)) : typeof x === 'number' ? String(x) : String(x))
     let formula1 = raw(v.formulae?.[0]), formula2 = raw(v.formulae?.[1])
-    if (v.type === 'list') formula1 = formula1 && /^".*"$/.test(formula1) ? formula1.slice(1, -1) : formula1 ? `=${formula1}` : ''
+    // a literal list keeps its items exactly (doubled quotes become one); items with a comma or quote go as JSON
+    if (v.type === 'list') {
+      if (formula1 && /^".*"$/s.test(formula1)) {
+        const items = formula1.slice(1, -1).replace(/""/g, '"').split(',')
+        formula1 = items.some((x) => x.includes('"')) ? JSON.stringify(items) : items.join(',')
+      } else formula1 = formula1 ? `=${formula1}` : ''
+    }
     else {
       const ref = (x) => (x === undefined || !isNaN(Number(x)) ? x : `=${x}`)
       formula1 = ref(formula1); formula2 = ref(formula2)

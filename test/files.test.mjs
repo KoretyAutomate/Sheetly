@@ -98,6 +98,11 @@ check('saved: links (external and in-workbook)', ws.getCell('D1').value?.hyperli
   const w2 = new ExcelJS.Workbook(); await w2.xlsx.load(saved)
   const names = w2.getWorksheet('Sales').getTables().map((x) => (x.table ?? x).name).sort().join(',')
   check('a table named like its sheet ("Sales") is kept on save, next to the other table', names === 'Other,Sales', names)
+  await ev(`S().insertRowsBefore(0, 2)`); await win.waitForTimeout(500)
+  const moved = Buffer.from(await ev(`return Array.from(await X.xlsx.save())`))
+  const w3 = new ExcelJS.Workbook(); await w3.xlsx.load(moved)
+  const ref = w3.getWorksheet('Sales').getTables().map((x) => x.table ?? x).find((x) => x.name === 'Sales')?.tableRef ?? w3.getWorksheet('Sales').getTables().map((x) => x.table ?? x).find((x) => x.name === 'Sales')?.ref
+  check('the kept table moves with rows inserted above it (A1:B3 -> A3:B5)', ref === 'A3:B5', String(ref))
 }
 
 // Ctrl+; in a 1904 workbook writes today's 1904 serial

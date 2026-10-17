@@ -166,6 +166,18 @@ console.log('DBG', await ev(`return JSON.stringify([S().getSheet().getCellRaw(3,
 const tt = await ev(`const v=(a)=>S().getRange(a).getCalculatedValue(); return JSON.stringify([v('AH4'), v('AH5'), S().getSheet().getCellRaw(3,33)?.t, v('AI6')])`)
 check('a table\'s totals row is left out (Grand Total 30, not 60); "001" stays the text 001', !totalsOn || tt === JSON.stringify(['001', '002', 1, 30]), `${totalsOn} ${tt}`)
 
+// ---- a table source picks up rows added to the table on Refresh
+await ev(`const sh=W().getSheets()[W().getSheets().length-1]; W().setActiveSheet(sh); S().getRange('AN1:AO3').setValues([['T','N'],['a',1],['b',2]]); await S().addTable('Grow', { startRow: 0, endRow: 2, startColumn: 39, endColumn: 40 })`); await settle(500)
+await ev(`P.create('Grow', 'existing', S().getSheetName() + '!AQ3')`); await settle(500)
+await ev(`P.place('N', 'values')`); await settle(600)
+const before2 = await ev(`return S().getRange('AQ4').getCalculatedValue()`)
+await ev(`S().getRange('AN4:AO4').setValues([['c',7]]); S().setTableRange?.(W().getTableInfoByName('Grow').id, { startRow: 0, endRow: 3, startColumn: 39, endColumn: 40 })`); await settle(500)
+const grown = await ev(`return JSON.stringify(W().getTableInfoByName('Grow').range)`)
+await ev(`S().getRange('AQ4').activate()`); await settle(300)
+await key('Alt+F5'); await settle(800)
+const after2 = await ev(`return S().getRange('AQ4').getCalculatedValue()`)
+check('a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)', before2 === 3 && after2 === 10, `${before2} ${after2} ${grown}`)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

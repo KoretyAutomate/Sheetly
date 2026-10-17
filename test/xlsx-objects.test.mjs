@@ -331,6 +331,13 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('a sparkline group set to show hidden cells keeps that setting', r14.sheets[r14.sheetOrder[0]].custom?.sheetlySparklines?.[0]?.displayHidden === true, J(r14.sheets[r14.sheetOrder[0]].custom))
 }
 
+// ---- review round 14: quotes in list items
+{
+  const s16 = { sheetOrder: ['s1'], resources: [{ name: 'SHEET_DATA_VALIDATION_PLUGIN', data: J({ s1: [{ uid: 'q', ranges: [R(0, 0)], type: 'list', formula1: J(['12"', '24"']) }] }) }], sheets: { s1: { id: 's1', name: 'Data', cellData: {} } } }
+  const r16 = await xlsxToSnapshot(await snapshotToXlsx(s16)), v16 = res(r16, 'SHEET_DATA_VALIDATION_PLUGIN')[r16.sheetOrder[0]]?.[0]
+  check('list items with quote marks (12", 24") keep them', J(JSON.parse(v16?.formula1 ?? 'null')) === J(['12"', '24"']), J(v16))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

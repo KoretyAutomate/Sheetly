@@ -51,7 +51,12 @@ export function createPivots(api, { dialogs, refs }) {
   const allPivots = () => wb().getSheets().flatMap((s) => listOf(s).map((p) => ({ sheet: s, p })))
   // The source and the report's place are hidden defined names (refs.js): Univer moves them with inserted and
   // deleted rows and columns, in the same undo step. Stored coordinates are the fallback.
-  const sourceAt = (p) => (p.sourceRef ? refs?.resolve(p.sourceRef) : { sheetId: p.source.sheetId, range: p.source.range })
+  // A table source is read from the table as it is at the time (rows added to it are included on Refresh).
+  const sourceAt = (p) => {
+    const t = p.sourceTable ? tableData(p.sourceTable) : null
+    if (t) return { sheetId: t.sheet.getSheetId(), range: t.range }
+    return p.sourceRef ? refs?.resolve(p.sourceRef) : { sheetId: p.source.sheetId, range: p.source.range }
+  }
   const anchorAt = (p) => { const a = p.anchorRef ? refs?.resolve(p.anchorRef) : null; return a ? { row: a.range.startRow, col: a.range.startColumn } : p.anchor }
   // Like Excel's PivotCache: the records a report was built from are kept with it (p.cache). Layout changes and
   // GETPIVOTDATA use them; only creating and refreshing read the source again.
@@ -177,17 +182,19 @@ export function createPivots(api, { dialogs, refs }) {
     return true
   }
   const sheetByName = (name) => wb().getSheets().find((s) => s.getSheetName().toLowerCase() === name.toLowerCase())
+  /** A table's data as it is now: its header row and records, without a totals row (read from its definition). */
+  function tableData(name) {
+    const t = wb().getTableInfoByName?.(name)
+    if (!t?.range) return null
+    const sheet = wb().getSheetBySheetId(t.subUnitId)
+    let footer = false
+    try { footer = !!JSON.parse(wb().save().resources?.find((r) => r.name === 'SHEET_TABLE_PLUGIN')?.data ?? '{}')?.[t.subUnitId]?.tables?.find((x) => x.id === t.id)?.options?.showFooter } catch { footer = false }
+    return sheet ? { sheet, range: { ...t.range, endRow: t.range.endRow - (footer ? 1 : 0) }, table: t.name } : null
+  }
   function refOf(text) {
     // A table's name stands for its data with the header row (as Excel takes it), without a totals row.
-    const t = /^\s*[\p{L}_][\p{L}\p{N}_.]*\s*$/u.test(text) && !parseRange(text) ? wb().getTableInfoByName?.(text.trim()) : null
-    if (t?.range) {
-      const sheet = wb().getSheetBySheetId(t.subUnitId)
-      // The table's totals row (from its saved definition) is not data.
-      let footer = false
-      try { footer = !!JSON.parse(wb().save().resources?.find((r) => r.name === 'SHEET_TABLE_PLUGIN')?.data ?? '{}')?.[t.subUnitId]?.tables?.find((x) => x.id === t.id)?.options?.showFooter } catch { footer = false }
-      const g = { ...t.range, endRow: t.range.endRow - (footer ? 1 : 0) }
-      if (sheet) return { sheet, range: g }
-    }
+    const t = /^\s*[\p{L}_][\p{L}\p{N}_.]*\s*$/u.test(text) && !parseRange(text) ? tableData(text.trim()) : null
+    if (t) return t
     const m = /^\s*(?:'((?:[^']|'')+)'|([^!]+))!(.+)$/.exec(text)
     const sheet = m ? sheetByName((m[1] ?? m[2]).replace(/''/g, "'")) : ws()
     const g = parseRange(m ? m[3] : text)
@@ -219,7 +226,7 @@ export function createPivots(api, { dialogs, refs }) {
     while (used.has(`PivotTable${k}`)) k++
     const p = { id: `pt${Date.now().toString(36)}${k}`, name: `PivotTable${k}`, source: { sheetId: src.sheet.getSheetId(), range: src.range },
       anchor, rows: [], cols: [], values: [], filters: [],
-      sourceRef: refs?.track(src.sheet.getSheetId(), src.range) ?? undefined,
+      sourceRef: refs?.track(src.sheet.getSheetId(), src.range) ?? undefined, ...(src.table ? { sourceTable: src.table } : {}),
       anchorRef: refs?.track(target.getSheetId(), { startRow: anchor.row, endRow: anchor.row, startColumn: anchor.col, endColumn: anchor.col }) ?? undefined }
     wb().setActiveSheet(target)
     render(target, p, { refresh: true, force: true })

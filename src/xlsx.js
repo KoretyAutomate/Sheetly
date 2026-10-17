@@ -235,7 +235,8 @@ function xlpm(f) {
     const holdsFunction = new Set()
     if (isLet) for (let k = 0; k < args.length - 1; k += 2) {
       const value = (args[k + 1] ?? '').trim()
-      if (/LAMBDA\(/i.test(value) || holdsFunction.has(value.toLowerCase())) holdsFunction.add(args[k].toLowerCase())
+      // the value is itself a LAMBDA (not one passed into another call), or an alias of a binding that holds one
+      if (/^(_xlfn\.)?LAMBDA\(/i.test(value) || holdsFunction.has(value.toLowerCase())) holdsFunction.add(args[k].toLowerCase())
     }
     const callable = (x) => !builtin(x) || holdsFunction.has(x.toLowerCase())
     // Whole names only: letters of any script count as part of a name (税x is not x).
@@ -421,7 +422,7 @@ export async function xlsxToSnapshot(buf) {
     // back so; so are tables Univer refuses when the workbook is opened (main.js).
     for (const t of tablesIn(ws)) {
       if (t.showHeader) tables.push({ sheetId: id, ...t })
-      else (sheet.custom.sheetlyTablesKept ??= []).push({ name: t.name, range: t.range, showHeader: false, showFooter: t.showFooter, columns: t.columns })
+      else (sheet.custom.sheetlyTablesKept ??= []).push({ name: t.name, range: t.range, showHeader: false, showFooter: t.showFooter, columns: t.columns, keptSheet: ws.name })
     }
     const pics = imagesIn(wb, ws, sheet, 'wb')
     if (pics.length) drawings[id] = { data: Object.fromEntries(pics.map((d) => [d.drawingId, d])), order: pics.map((d) => d.drawingId) }
@@ -436,6 +437,8 @@ export async function xlsxToSnapshot(buf) {
     refNames[name] = { id: name, name, formulaOrRefString: `${q}!${rangeA1(range).replace(/([A-Z]+)(\d+)/g, '$$$1$$$2')}`, hidden: true, localSheetId: ALL_SHEETS }
     return name
   }
+  // Kept tables follow structural edits through a hidden name too.
+  for (const id of order) for (const t of sheets[id].custom.sheetlyTablesKept ?? []) { t.rangeRef = track(t.keptSheet ?? sheets[id].name, t.range); delete t.keptSheet }
   // Sparklines (x14 extension of the sheet).
   for (const { sheetIndex, groups } of await readSparklines(buf)) {
     const id = idByIndex[sheetIndex]
@@ -597,7 +600,7 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
     if (sg.length) sparklines.push({ sheetIndex, groups: sg })
     cfOut(ws, cfs[id])
     dvOut(ws, dvs[id])
-    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesKept ?? []).map((t) => ({ name: t.name, range: t.range,
+    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...(s.custom?.sheetlyTablesKept ?? []).map((t) => ({ name: t.name, range: (t.rangeRef ? resolveName(t.rangeRef)?.range : null) ?? t.range,
       options: { showHeader: t.showHeader !== false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
     const list = Object.values(allDrawings[id]?.data ?? {})
     imagesOut(wb, ws, list)

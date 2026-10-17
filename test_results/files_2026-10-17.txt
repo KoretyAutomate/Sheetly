@@ -1,4 +1,4 @@
-files (open / save objects in the app)  2026-10-17T06:51:19.591Z
+files (open / save objects in the app)  2026-10-17T07:22:31.628Z
 PASS  a new workbook has Excel's sizes: columns 64 px, rows 20 px
 PASS  Calibri (bundled Carlito metrics) is the sheet font and is loaded
 PASS  a new, untouched Book1 may be replaced by File > Open
@@ -22,7 +22,8 @@ PASS  legacy array formulas: a single result fills C1:C3 (6, with the formula); 
 PASS  opening the file left nothing to undo
 PASS  opening a workbook with tables leaves nothing to undo
 PASS  a table named like its sheet ("Sales") is kept on save, next to the other table
+PASS  the kept table moves with rows inserted above it (A1:B3 -> A3:B5)
 PASS  Ctrl+; in a 1904 workbook writes the 1904 serial for today
 PASS  no page errors
 
-25/25 passed
+26/26 passed
