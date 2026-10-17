@@ -260,7 +260,8 @@ export function createPivots(api, { dialogs, refs }) {
   function place(fieldName, area, at) {
     const c = current(); if (!c) return false
     const { sheet, p } = c, src = sourceOf(p)
-    for (const [a] of AREAS) p[a] = p[a].filter((x) => (a === 'values' ? true : (a === 'filters' ? x.field : x) !== fieldName))
+    // A field is in one of Filters, Columns and Rows at a time; it can be in Values as well (Count of Region by Region).
+    if (area !== 'values') for (const [a] of AREAS) p[a] = p[a].filter((x) => (a === 'values' ? true : (a === 'filters' ? x.field : x) !== fieldName))
     if (area === 'values') p.values.splice(at ?? p.values.length, 0, { field: fieldName, fn: defaultFn(src, fieldName) })
     else if (area === 'filters') p.filters.splice(at ?? p.filters.length, 0, { field: fieldName, items: null })
     else p[area].splice(at ?? p[area].length, 0, fieldName)

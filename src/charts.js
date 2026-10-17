@@ -78,8 +78,9 @@ export function chartConfig(spec, d) {
   const base = { line: 'line', lineMarkers: 'line', area: 'line', areaStacked: 'line', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' }[type] ?? 'bar'
   let datasets
   if (pie) {
-    const s = d.series[0] ?? { name: '', values: [] }
-    datasets = [{ label: s.name, data: s.values, backgroundColor: d.labels.map((_, i) => seriesColor(i)), borderColor: '#fff', borderWidth: 1 }]
+    // A pie shows the first series; a doughnut has a ring per series.
+    const list = type === 'doughnut' && d.series.length ? d.series : [d.series[0] ?? { name: '', values: [] }]
+    datasets = list.map((s) => ({ label: s.name, data: s.values, backgroundColor: d.labels.map((_, i) => seriesColor(i)), borderColor: '#fff', borderWidth: 1 }))
   } else if (type === 'scatter') {
     // X values come from the first series (Excel uses the first column as X when there is no label column).
     // Series picked one by one carry their X values as categories.

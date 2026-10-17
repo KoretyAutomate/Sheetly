@@ -2,7 +2,7 @@
 import { keyTipState, setKeyTipTree } from './keytips.js'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
-import './values.js'
+import { spillValue } from './values.js'
 import enUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
 import './fonts/fonts.css'
@@ -211,7 +211,8 @@ const arrayRangeOf = (wb) => {
   const model = univerAPI._injector.get(FormulaDataModel).getArrayFormulaRange?.() ?? {}
   return (sheetId, r, c) => model[wb.getId()]?.[sheetId]?.[r]?.[c] ?? null
 }
-const workbookToXlsx = (wb) => snapshotToXlsx(wb.save(), { formulaOf: formulaResolver(wb), arrayRangeOf: arrayRangeOf(wb) })
+const workbookToXlsx = (wb) => snapshotToXlsx(wb.save(), { formulaOf: formulaResolver(wb), arrayRangeOf: arrayRangeOf(wb),
+  spillValueOf: (sheetId, r, c) => spillValue(univerAPI._injector, wb.getId(), sheetId, r, c) })
 async function saveFile(saveAs) {
   const wb = univerAPI.getActiveWorkbook()
   const data = await workbookToXlsx(wb)

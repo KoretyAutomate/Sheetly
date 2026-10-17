@@ -67,6 +67,13 @@ check('Max / Min over 150,000 values do not overflow the stack', aggregate('max'
   const c5 = getPivotData({ ...d5, values: [{ field: 'Sales', fn: 'count' }] }, src5, 'Count of Sales', [['Region', 'E']])
   check('an error in the source is the Sum of its group (#DIV/0!), other groups unaffected, Count still counts it', g5.error === '#DIV/0!' && gw.value === 5 && c5.value === 2 && show(layout(d5, src5)).includes('#DIV/0!'), JSON.stringify([g5, gw, c5]))
 }
+{
+  const rows6 = [['K', 'N'], ['a', 5], ['b', 1], ['b', 3]]
+  const src6 = readSource((r, c) => rows6[r]?.[c] ?? null, { startRow: 0, endRow: 3, startColumn: 0, endColumn: 1 })
+  const d6 = { rows: ['K'], cols: [], values: [{ field: 'N', fn: 'stdDev' }], filters: [] }
+  const a6 = getPivotData(d6, src6, 'StdDev of N', [['K', 'a']]), b6 = getPivotData(d6, src6, 'StdDev of N', [['K', 'b']])
+  check('StdDev of a group with one number is #DIV/0! (also in GETPIVOTDATA); with two it is computed', a6.error === '#DIV/0!' && Math.abs(b6.value - Math.SQRT2) < 1e-12, JSON.stringify([a6, b6]))
+}
 const def = { rows: ['Region'], cols: ['Product'], values: sum, filters: [] }
 const g = (df, pairs) => { const x = getPivotData(def, src, df, pairs); return x.error ?? x.value }
 check('GETPIVOTDATA("Sales", pt) = grand total 45', g('Sales', []) === 45)

@@ -53,8 +53,9 @@ export function chartXml(spec, sheetName, get) {
   const pie = t === 'pie' || t === 'doughnut', labels = !!spec.dataLabels
   let plot
   if (pie) {
-    const s = d.series[0]
-    const ser = s ? `<c:ser><c:idx val="0"/><c:order val="0"/>${tx(s)}${d.labels.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>`).join('')}${dLbls(labels, true)}${cat()}<c:val>${numRef(lineRef(s, 0), s.values)}</c:val></c:ser>` : ''
+    // A pie has its first series; a doughnut a ring per series.
+    const list = t === 'doughnut' ? d.series : d.series.slice(0, 1)
+    const ser = list.map((s, k) => `<c:ser><c:idx val="${k}"/><c:order val="${k}"/>${tx(s)}${d.labels.map((_, i) => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${color(i)}"/></a:solidFill><a:ln><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>`).join('')}${dLbls(labels, true)}${cat()}<c:val>${numRef(lineRef(s, k), s.values)}</c:val></c:ser>`).join('')
     plot = t === 'pie' ? `<c:pieChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/></c:pieChart>`
       : `<c:doughnutChart><c:varyColors val="1"/>${ser}<c:firstSliceAng val="0"/><c:holeSize val="75"/></c:doughnutChart>`
   } else if (t === 'scatter') {

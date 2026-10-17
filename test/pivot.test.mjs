@@ -228,6 +228,12 @@ await key('Escape'); await settle(300)
 const kept1 = await ev(`return JSON.stringify(S().getRange('H10:H13').getValues().flat())`)
 check('Refresh with a cleared source header keeps the report and says the reference is not valid', /^Reference isn't valid/.test(said) && kept1 === kept0 && kept0.includes('"a"'), `${said} | ${kept0} | ${kept1}`)
 
+// ---- a field on Rows can be added to Values too (Count of K by K)
+await ev(`W().setActiveSheet(W().getSheetByName('R17')); S().getRange('A1').setValue('K'); S().getRange('H11').activate(); P.refresh(false)`); await settle(800)
+await ev(`P.place('K', 'values')`); await settle(800)
+const both = await ev(`const p=P.active(); return JSON.stringify([p?.rows, p?.values?.map(v=>v.fn+':'+v.field), S().getRange('H10:I13').getValues()])`)
+check('dragging a Rows field into Values keeps it on Rows (Count of K per K)', both.startsWith('[["K"],["count:K"]') && both.includes('["a",1]'), both)
+
 // ---- invalid source
 await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValues([['X',null],[1,2],[3,4]]); S().getRange('E1:F3').activate()`); await settle()
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()

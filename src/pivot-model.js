@@ -76,7 +76,8 @@ export function aggregate(fn, values) {
   if (fn !== 'count') { const e = values.find(isErrorValue); if (e !== undefined) return e }
   const nums = values.filter((x) => typeof x === 'number')
   const n = nums.length, sum = nums.reduce((a, b) => a + b, 0)
-  const varOf = (pop) => { if (n < (pop ? 1 : 2)) return null; const m = sum / n; return nums.reduce((a, b) => a + (b - m) ** 2, 0) / (pop ? n : n - 1) }
+  // A sample statistic of one number cannot be computed: #DIV/0!, as Excel shows it (no numbers at all: empty).
+  const varOf = (pop) => { if (!n) return null; if (!pop && n < 2) return '#DIV/0!'; const m = sum / n; return nums.reduce((a, b) => a + (b - m) ** 2, 0) / (pop ? n : n - 1) }
   switch (fn) {
     case 'count': { const k = values.filter((x) => !isBlank(x)).length; return k || null }
     case 'countNums': return n || null
@@ -84,7 +85,7 @@ export function aggregate(fn, values) {
     case 'max': return n ? maxOf(nums) : null
     case 'min': return n ? minOf(nums) : null
     case 'product': return n ? nums.reduce((a, b) => a * b, 1) : null
-    case 'stdDev': { const v = varOf(false); return v == null ? null : Math.sqrt(v) }
+    case 'stdDev': { const v = varOf(false); return typeof v === 'number' ? Math.sqrt(v) : v }
     case 'stdDevp': { const v = varOf(true); return v == null ? null : Math.sqrt(v) }
     case 'var': return varOf(false)
     case 'varp': return varOf(true)

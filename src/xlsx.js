@@ -514,7 +514,7 @@ export async function xlsxToSnapshot(buf) {
  * ({si} without f, e.g. after fill-down) need their formula text: pass resolveFormulas(snap, api) first, or a
  * formulaOf(sheetId, row, col) callback here.
  */
-export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
+export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValueOf } = {}) {
   const wb = new ExcelJS.Workbook()
   const styleOf = (s) => (typeof s === 'string' ? snap.styles?.[s] : s) ?? null
   const notes = resource(snap, NOTE), cfs = resource(snap, CF), dvs = resource(snap, DV), allDrawings = resource(snap, DRAWINGS), allTables = resource(snap, TABLES)
@@ -565,9 +565,17 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf } = {}) {
       // reopening) would recalculate it to #REF!, so such a cell keeps its result as a value.
       // (a real call: quoted text and sheet names are masked first)
       const pivotRead = f && /(^|[^A-Za-z0-9_.])GETPIVOTDATA\s*\(/i.test(mask(f)) && cell.v != null
-      const spill = f && !pivotRead ? arrayRangeOf?.(id, +r, +c) : null
+      const spill = f ? arrayRangeOf?.(id, +r, +c) : null
       const result = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.v ?? undefined
-      if (f && spill && (spill.endRow > spill.startRow || spill.endColumn > spill.startColumn)) {
+      if (pivotRead && spill) {
+        // saved as values: the whole spill, from the calculated array (its other cells are not in the snapshot)
+        x.value = typeof cell.v === 'string' && ERRORS.has(cell.v) ? { error: cell.v } : cell.t === 3 ? !!cell.v : cell.v
+        for (let rr = spill.startRow; rr <= spill.endRow; rr++) for (let cc = spill.startColumn; cc <= spill.endColumn; cc++) {
+          if (rr === +r && cc === +c) continue
+          const v = spillValueOf?.(id, rr, cc)
+          if (v != null) ws.getCell(rr + 1, cc + 1).value = typeof v === 'string' && ERRORS.has(v) ? { error: v } : v
+        }
+      } else if (f && spill && (spill.endRow > spill.startRow || spill.endColumn > spill.startColumn)) {
         // A formula that spills: Excel's dynamic array (t="array" over the spill range, cm="1" added by finishPackage).
         x.value = { formula: formulaOut(f.replace(/^=/, '')), result, shareType: 'array', ref: `${a1(spill.startRow, spill.startColumn)}:${a1(spill.endRow, spill.endColumn)}` }
         spills.add(`${sheetIndex}!${a1(+r, +c)}`)

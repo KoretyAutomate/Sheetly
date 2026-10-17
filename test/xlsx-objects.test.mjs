@@ -377,6 +377,17 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('scatter with years in the first column: written with them as X values', /<c:xVal><c:numRef><c:f>Data!\$A\$2:\$A\$4<\/c:f>[\s\S]*?<c:v>2020<\/c:v>/.test(x), (x.match(/<c:xVal>[\s\S]{0,140}/) ?? ['none'])[0])
 }
 
+// ---- review round 20: doughnut rings; a spilling formula with GETPIVOTDATA saved as all its values
+{
+  const g = [['', 'A', 'B'], ['x', 1, 2], ['y', 3, 4]]
+  const x = writeChartXml({ type: 'doughnut', title: null, source: { sheetId: 's1', range: R(0, 0, 2, 2) } }, 'Data', (r, c) => g[r]?.[c] ?? null)
+  const xp = writeChartXml({ type: 'pie', title: null, source: { sheetId: 's1', range: R(0, 0, 2, 2) } }, 'Data', (r, c) => g[r]?.[c] ?? null)
+  check('a doughnut writes a ring per series (2); a pie its first series', (x.match(/<c:ser>/g) ?? []).length === 2 && (xp.match(/<c:ser>/g) ?? []).length === 1, `${(x.match(/<c:ser>/g) ?? []).length} ${(xp.match(/<c:ser>/g) ?? []).length}`)
+  const s20 = { sheetOrder: ['s1'], sheets: { s1: { id: 's1', name: 'Data', cellData: { 0: { 0: { f: '=HSTACK(GETPIVOTDATA("Sales",D3),99)', v: 45, t: 2 } } } } } }
+  const w20 = new ExcelJS.Workbook(); await w20.xlsx.load(await snapshotToXlsx(s20, { arrayRangeOf: (id, r, c) => (r === 0 && c === 0 ? R(0, 0, 0, 1) : null), spillValueOf: (id, r, c) => (r === 0 && c === 1 ? 99 : null) }))
+  check('a spilling formula with GETPIVOTDATA is saved as all its values (45, 99)', w20.getWorksheet('Data').getCell('A1').value === 45 && w20.getWorksheet('Data').getCell('B1').value === 99, J([w20.getWorksheet('Data').getCell('A1').value, w20.getWorksheet('Data').getCell('B1').value]))
+}
+
 // ---- 1904 date system
 {
   const w = new ExcelJS.Workbook(); w.properties.date1904 = true

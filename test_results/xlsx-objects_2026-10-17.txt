@@ -1,4 +1,4 @@
-xlsx objects  2026-10-17T09:50:37.385Z
+xlsx objects  2026-10-17T10:21:08.213Z
 PASS  every XML part in the package is well formed
 PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
 PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
@@ -68,8 +68,10 @@ PASS  a table with only its header keeps its range and leaves the cell below alo
 PASS  lowercase references parse (a1:b3)
 PASS  column sparklines are written with negative="1" (their negative points are coloured); a group with it off keeps it off
 PASS  scatter with years in the first column: written with them as X values
+PASS  a doughnut writes a ring per series (2); a pie its first series
+PASS  a spilling formula with GETPIVOTDATA is saved as all its values (45, 99)
 PASS  1904 workbook: serials kept in the 1904 system and Univer told so
 PASS  and written back as a 1904 workbook
 PASS  whole-column validation loads as one rule, quickly
 
-72/72 passed
+74/74 passed
