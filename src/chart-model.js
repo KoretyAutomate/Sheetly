@@ -44,15 +44,35 @@ export const chartTitle = (spec, d) => (spec?.title != null ? spec.title : d.ser
 
 /**
  * Data of a chart whose series were picked one by one (not one block): source.series = [{ name: [r, c] | null,
- * nameText, values: IRange }], source.categories: IRange | null. Values are read along each range.
+ * nameText, values: IRange }], source.categories: IRange | null. Values run along each range; points in hidden rows
+ * or columns are left out (Excel's default), together with their categories. A category range that is several
+ * columns wide (vertical series) or rows high (horizontal series) is a multi-level axis: the last column / row is
+ * the inner level, the others outer levels shown once per group.
  */
-export function explicitSeries(get, src) {
-  const cells = (g) => { const out = []; for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) out.push([r, c]); return out }
+export function explicitSeries(get, src, { hiddenRow = () => false, hiddenCol = () => false } = {}) {
   const val = (x) => (isNum(x) ? x : filled(x) && !isNaN(Number(x)) ? Number(x) : null)
-  const series = src.series.map((s, i) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`, values: cells(s.values).map(([r, c]) => val(get(r, c))), nameCell: s.name }))
+  const first = src.series[0]?.values
+  const vertical = !first || first.startColumn === first.endColumn
+  const along = (g) => { const out = []; if (vertical) for (let r = g.startRow; r <= g.endRow; r++) out.push([r, g.startColumn]); else for (let c = g.startColumn; c <= g.endColumn; c++) out.push([g.startRow, c]); return out }
+  const shown = (r, c) => !hiddenRow(r) && !hiddenCol(c)
+  const keep = first ? along(first).map(([r, c]) => shown(r, c)) : []
+  const series = src.series.map((s, i) => ({ name: s.name ? String(get(s.name[0], s.name[1]) ?? '') : s.nameText ?? `Series${i + 1}`,
+    values: along(s.values).filter((_, k) => keep[k] !== false).map(([r, c]) => val(get(r, c))), nameCell: s.name }))
   const n = Math.max(0, ...series.map((s) => s.values.length))
-  const labels = src.categories ? cells(src.categories).map(([r, c]) => String(get(r, c) ?? '')) : Array.from({ length: n }, (_, i) => String(i + 1))
-  return { labels, levels: [], series, byCols: true, headerRow: false, labelCol: !!src.categories, labelCount: src.categories ? 1 : 0, explicit: true }
+  let labels = Array.from({ length: n }, (_, i) => String(i + 1)), levels = []
+  const cat = src.categories
+  if (cat) {
+    // inner level: the last column (vertical) or row (horizontal); outer levels before it
+    const lines = vertical ? Array.from({ length: cat.endColumn - cat.startColumn + 1 }, (_, i) => cat.startColumn + i) : Array.from({ length: cat.endRow - cat.startRow + 1 }, (_, i) => cat.startRow + i)
+    const cellsOf = (line) => (vertical ? along({ startRow: cat.startRow, endRow: cat.endRow, startColumn: line, endColumn: line }) : along({ startRow: line, endRow: line, startColumn: cat.startColumn, endColumn: cat.endColumn }))
+    const pick = (line) => cellsOf(line).filter((_, k) => keep[k] !== false)
+    labels = pick(lines[lines.length - 1]).map(([r, c]) => String(get(r, c) ?? ''))
+    for (let k = lines.length - 2; k >= 0; k--) {
+      let prev = null
+      levels.push(pick(lines[k]).map(([r, c]) => { const x = get(r, c); if (!filled(x)) return ''; const t = String(x); const show = t !== prev; prev = t; return show ? t : '' }))
+    }
+  }
+  return { labels, levels, series, byCols: vertical, headerRow: false, labelCol: !!cat, labelCount: cat ? (vertical ? cat.endColumn - cat.startColumn + 1 : cat.endRow - cat.startRow + 1) : 0, explicit: true }
 }
 
 /**

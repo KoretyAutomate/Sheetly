@@ -52,7 +52,10 @@ function dataOf(spec0) {
   const sheet = apiRef?.getActiveWorkbook()?.getSheetBySheetId(spec.source.sheetId)
   if (!sheet) return { labels: [], series: [], title: spec.title ?? '' }
   const w = sheet.getSheet()
-  if (spec.source.series) { const d = explicitSeries((r, c) => sheet.getRange(r, c).getRawValue(), spec.source); return { ...d, title: chartTitle(spec, d), pattern: null } }
+  if (spec.source.series) {
+    const d = explicitSeries((r, c) => sheet.getRange(r, c).getRawValue(), spec.source, { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
+    return { ...d, title: chartTitle(spec, d), pattern: null }
+  }
   const d = seriesFrom((r, c) => sheet.getRange(r, c).getRawValue(), spec.source.range, spec.plotBy,
     { hiddenRow: (r) => w.getRowVisible?.(r) === false, hiddenCol: (c) => w.getColVisible?.(c) === false })
   // The value axis shows numbers in the source's number format (sourceLinked, as in Excel).
@@ -74,7 +77,8 @@ export function chartConfig(spec, d) {
   } else if (type === 'scatter') {
     // X values come from the first series (Excel uses the first column as X when there is no label column).
     // Series picked one by one carry their X values as categories.
-    const xs = d.explicit ? d.labels.map((l, i) => num(l) || i + 1) : d.series.length > 1 ? d.series[0].values : d.labels.map((l, i) => num(l) || i + 1)
+    const xNum = (l, i) => (l !== '' && Number.isFinite(Number(l)) ? Number(l) : i + 1)
+    const xs = d.explicit ? d.labels.map(xNum) : d.series.length > 1 ? d.series[0].values : d.labels.map(xNum)
     const ys = d.explicit || d.series.length <= 1 ? d.series : d.series.slice(1)
     datasets = ys.map((s, i) => ({ label: s.name, data: s.values.map((y, k) => ({ x: xs[k], y })), backgroundColor: seriesColor(i), borderColor: seriesColor(i), pointRadius: 4 }))
   } else {

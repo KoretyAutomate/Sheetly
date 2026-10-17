@@ -44,7 +44,8 @@ export function chartXml(spec, sheetName, get) {
   const catRef = ex ? (spec.source.categories ? span(spec.source.categories) : null) : d.byCols ? (d.labelCol ? `${sn}!${abs(d.r0, g.startColumn)}:${abs(g.endRow, d.c0 - 1)}` : null)
     : (d.headerRow ? `${sn}!${abs(g.startRow, d.c0)}:${abs(g.startRow, g.endColumn)}` : null)
   const nameRef = (s) => (s.nameCell ? `${sn}!${abs(s.nameCell[0], s.nameCell[1])}` : null)
-  const tx = (s) => (nameRef(s) ? `<c:tx>${strRef(nameRef(s), [s.name])}</c:tx>` : '')
+  // A series name from a cell, or a typed one (<c:v>).
+  const tx = (s) => (nameRef(s) ? `<c:tx>${strRef(nameRef(s), [s.name])}</c:tx>` : ex && s.name ? `<c:tx><c:v>${esc(s.name)}</c:v></c:tx>` : '')
   // Several label columns: a multi-level category axis (innermost level first, outer labels once per group).
   const multi = () => `<c:multiLvlStrRef><c:f>${esc(catRef)}</c:f><c:multiLvlStrCache><c:ptCount val="${d.labels.length}"/>`
     + [d.labels, ...(d.levels ?? [])].map((lv) => `<c:lvl>${lv.map((x, i) => (x === '' ? '' : `<c:pt idx="${i}"><c:v>${esc(x)}</c:v></c:pt>`)).join('')}</c:lvl>`).join('') + '</c:multiLvlStrCache></c:multiLvlStrRef>'
@@ -308,8 +309,12 @@ export function specFromXml(xml) {
   const ax = /<c:catAx>/.test(plot) ? axisTitle('catAx') : axisTitle('valAx'), ay = axisTitle('valAx')
   const axisTitles = ax || (ay && /<c:catAx>/.test(plot)) ? { x: ax || '', y: /<c:catAx>/.test(plot) ? ay : '' } : null
   const serXml = [...plot.matchAll(/<c:ser>([\s\S]*?)<\/c:ser>/g)].map((m) => m[1])
-  const refIn = (x, tag) => { const f = new RegExp(`<c:${tag}>[\\s\\S]*?<c:f>([^<]*)<\\/c:f>`).exec(x)?.[1]; return f ? parseRange(unesc(f).replace(/^.*!/, '')) : null }
-  const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), nameText: texts(/<c:tx>([\s\S]*?)<\/c:tx>/.exec(x)?.[1]) || null }))
+  // A reference inside one element only (<c:tx>, <c:cat>, <c:val>, ...), never one from the next element.
+  const inner = (x, tag) => new RegExp(`<c:${tag}>([\\s\\S]*?)<\\/c:${tag}>`).exec(x)?.[1] ?? null
+  const refIn = (x, tag) => { const f = /<c:f>([^<]*)<\/c:f>/.exec(inner(x, tag) ?? '')?.[1]; return f ? parseRange(unesc(f).replace(/^.*!/, '')) : null }
+  // A literal series name: <c:tx><c:v>Revenue</c:v></c:tx> or rich text.
+  const literalName = (x) => { const t = inner(x, 'tx'); if (!t || /<c:f>/.test(t)) return null; const v = /<c:v>([^<]*)<\/c:v>/.exec(t)?.[1]; return v != null ? unesc(v) : texts(t) || null }
+  const series = serXml.map((x) => ({ name: refIn(x, 'tx'), values: refIn(x, 'val') ?? refIn(x, 'yVal'), nameText: literalName(x) }))
   const categories = serXml.length ? refIn(serXml[0], 'cat') ?? refIn(serXml[0], 'xVal') : null
   const source = { sheetName: parsed[0].sheet, range: box }
   // A chart from a file keeps its series exactly as referenced: re-reading the block by cell types could, for

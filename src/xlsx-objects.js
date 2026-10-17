@@ -251,10 +251,17 @@ export function tablesOut(ws, tables = [], used = new Set()) {
     if (!rows.length) rows.push(columns.map(() => null))
     const styles = []
     for (let r = g.startRow; r <= g.endRow; r++) for (let c = g.startColumn; c <= g.endColumn; c++) styles.push([r, c, ws.getCell(r + 1, c + 1).style])
+    // The totals row as it is (labels, SUBTOTAL formulas and their results): ExcelJS would write its defaults.
+    const footerCells = footer ? Array.from({ length: g.endColumn - g.startColumn + 1 }, (_, i) => [g.endRow, g.startColumn + i, ws.getCell(g.endRow + 1, g.startColumn + i + 1).value]) : []
+    footerCells.forEach(([, , v], i) => {
+      if (typeof v === 'string') columns[i].totalsRowLabel = v
+      else if (v && typeof v === 'object' && v.formula) { columns[i].totalsRowFunction = 'custom'; columns[i].totalsRowFormula = v.formula; columns[i].totalsRowResult = v.result }
+    })
     ws.addTable({ name: tableName(t.name, used), ref: `${colName(g.startColumn)}${g.startRow + 1}`, headerRow: header, totalsRow: footer,
       style: { theme: 'TableStyleMedium2', showRowStripes: true }, columns, rows })
-    // addTable rewrites the cells; their own formatting is put back.
+    // addTable rewrites the cells; their own formatting and the totals row are put back.
     for (const [r, c, st] of styles) ws.getCell(r + 1, c + 1).style = st
+    for (const [r, c, v] of footerCells) ws.getCell(r + 1, c + 1).value = v
   }
 }
 /** ExcelJS tables -> [{name, range, showHeader, showFooter}] for FWorksheet.addTable after the workbook loads. */

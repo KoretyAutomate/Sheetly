@@ -1,4 +1,4 @@
-pivot tables  2026-10-17T01:02:47.244Z
+pivot tables  2026-10-17T01:31:57.608Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields

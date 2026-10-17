@@ -23,6 +23,10 @@ const cmpItems = (a, b) => {
   if (typeof b === 'number') return 1
   return String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
 }
+// Items as Excel groups them: a number and a text that look alike are different items; text ignores case.
+const sameItem = (a, b) => (typeof a === 'number' || typeof b === 'number' ? typeof a === typeof b && a === b : String(a).toLowerCase() === String(b).toLowerCase())
+const itemKey = (x) => (typeof x === 'number' ? `n:${x}` : `s:${String(x).toLowerCase()}`)
+// Matching what a user typed (GETPIVOTDATA items, filter choices): "2024" finds the number 2024.
 const same = (a, b) => (typeof a === 'number' || typeof b === 'number' ? Number(a) === Number(b) : String(a).toLowerCase() === String(b).toLowerCase())
 
 /** Source list: the first row holds the field names. Returns null when a header is blank (Excel refuses those). */
@@ -78,13 +82,13 @@ export function filtered(def, src) {
 function tree(fields, records, src, path = []) {
   if (!fields.length) return []
   const i = src.fields.indexOf(fields[0])
-  const items = [...new Map(records.map((r) => [typeof label(r[i]) === 'string' ? String(label(r[i])).toLowerCase() : label(r[i]), label(r[i])])).values()].sort(cmpItems)
+  const items = [...new Map(records.map((r) => [itemKey(label(r[i])), label(r[i])])).values()].sort(cmpItems)
   return items.map((item) => {
-    const sub = records.filter((r) => same(label(r[i]), item))
+    const sub = records.filter((r) => sameItem(label(r[i]), item))
     return { item, path: [...path, item], children: tree(fields.slice(1), sub, src, [...path, item]) }
   })
 }
-const matches = (rec, src, fields, path) => path.every((it, k) => same(label(rec[src.fields.indexOf(fields[k])]), it))
+const matches = (rec, src, fields, path) => path.every((it, k) => sameItem(label(rec[src.fields.indexOf(fields[k])]), it))
 
 /**
  * The report as a grid of cells { v, kind, indent? } plus where things are:

@@ -4,6 +4,8 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { SaxesParser } from 'saxes'
 import { xlsxToSnapshot, snapshotToXlsx } from '../src/xlsx.js'
+import { specFromXml } from '../src/xlsx-zip.js'
+import { explicitSeries } from '../src/chart-model.js'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -196,6 +198,25 @@ for (const [type, test] of [['bar', /<c:barDir val="bar"\/>/], ['columnStacked10
   check('years as categories stay categories (one series, categories K2:K4)', spec7?.source?.series?.length === 1 && J(spec7.source.categories) === J(R(1, 10, 3, 10)), J(spec7?.source))
   const names7 = Object.values(res(back7, 'SHEET_DEFINED_NAME_PLUGIN'))
   check('read back with hidden reference names (not written to the file as names)', names7.some((n) => n.name.startsWith('SheetlyRef_') && n.hidden) && !J((await (async () => { const w = new ExcelJS.Workbook(); await w.xlsx.load(await snapshotToXlsx(back7)); return w.rawDefinedNames })())).includes('SheetlyRef_'))
+}
+
+// ---- review round 3: totals rows, literal series names, multi-level and hidden explicit categories
+{
+  const s8 = structuredClone(snap)
+  s8.sheets.s1.cellData[4] = { ...(s8.sheets.s1.cellData[4] ?? {}), 10: { v: 'My Total', t: 1 }, 11: { f: '=SUBTOTAL(109,L2:L4)', v: 60, t: 2 } }
+  const res8 = Object.fromEntries(s8.resources.map((r) => [r.name, JSON.parse(r.data)]))
+  res8.SHEET_TABLE_PLUGIN.s1.tables[0] = { ...res8.SHEET_TABLE_PLUGIN.s1.tables[0], range: R(0, 10, 4, 11), options: { showHeader: true, showFooter: true } }
+  s8.resources = Object.entries(res8).map(([name, d]) => ({ name, data: J(d) }))
+  const w8 = new ExcelJS.Workbook(); await w8.xlsx.load(await snapshotToXlsx(s8))
+  const ws8 = w8.getWorksheet('Data')
+  check('a table\'s totals row keeps its label and SUBTOTAL formula', ws8.getCell('K5').value === 'My Total' && ws8.getCell('L5').value?.formula === 'SUBTOTAL(109,L2:L4)' && ws8.getCell('L5').value?.result === 60, J([ws8.getCell('K5').value, ws8.getCell('L5').value]))
+  const lit = specFromXml('<c:chartSpace><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:idx val="0"/><c:tx><c:v>Revenue</c:v></c:tx><c:cat><c:strRef><c:f>Data!$K$2:$K$4</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>Data!$L$2:$L$4</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>')
+  check('a typed series name ("Revenue") is read as the name, not as a reference', lit?.source?.series?.[0]?.name === null && lit.source.series[0].nameText === 'Revenue' && J(lit.source.categories) === J(R(1, 10, 3, 10)), J(lit?.source))
+  const grid = [['East', 'A', 1], ['East', 'B', 2], ['West', 'C', 3]]
+  const ex = explicitSeries((r, c) => grid[r]?.[c] ?? null, { categories: R(0, 0, 2, 1), series: [{ name: null, nameText: 'S', values: R(0, 2, 2, 2) }] })
+  check('two-column categories stay two levels (inner A,B,C; outer East, , West)', J(ex.labels) === J(['A', 'B', 'C']) && J(ex.levels) === J([['East', '', 'West']]) && ex.series[0].values.length === 3, J(ex))
+  const hid = explicitSeries((r, c) => grid[r]?.[c] ?? null, { categories: R(0, 1, 2, 1), series: [{ name: null, nameText: 'S', values: R(0, 2, 2, 2) }] }, { hiddenRow: (r) => r === 1 })
+  check('a hidden row is left out of explicit series and their categories', J(hid.labels) === J(['A', 'C']) && J(hid.series[0].values) === J([1, 3]), J(hid))
 }
 
 // ---- 1904 date system

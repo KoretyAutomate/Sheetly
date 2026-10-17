@@ -130,6 +130,10 @@ await ev(`S().addFloatDomToPosition({ componentKey: 'sheetly-chart', allowTransf
       { name: [0, 3], nameRef: X.refs.track(S().getSheetId(), { startRow: 0, endRow: 0, startColumn: 3, endColumn: 3 }), values: { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 }, valuesRef: X.refs.track(S().getSheetId(), { startRow: 1, endRow: 3, startColumn: 3, endColumn: 3 }) }] } } })`); await settle(800)
 st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|') + '|' + c.data.labels.join(',')`)
 check('series picked one by one: only those columns are plotted', st === 'S1:1,2,3|S2:4,5,6|x,y,z', st)
+await ev(`S().hideRows(2, 1)`); await settle(700)
+st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|') + '|' + c.data.labels.join(',')`)
+check('a hidden row drops out of a chart with series picked one by one', st === 'S1:1,3|S2:4,6|x,z', st)
+await ev(`S().showRows(2, 1)`); await settle(500)
 await ev(`S().insertColumnsBefore(2, 1)`); await settle(700)
 st = await ev(`const c=cj(canv().length-1); return c.data.datasets.map(d=>d.label+':'+d.data.join(',')).join('|')`)
 check('and their references move with an inserted column', st === 'S1:1,2,3|S2:4,5,6', st)
@@ -142,6 +146,17 @@ check('internal reference names are not listed among the workbook\'s names', (aw
 await key('Control+F3'); await settle(800)
 check('Name Manager does not show the internal names', (await ev(`return document.body.innerText.includes('SheetlyRef_')`)) === false)
 await key('Escape'); await ev(`document.querySelector('[data-u-comp=right-sidebar] button[aria-label=Close], .univer-sidebar button')?.click?.()`); await settle()
+// ---- a scatter point at X = 0 stays at 0
+await removeCharts(); await ev(`S().getRange('A1:H20').clear(); S().getRange('A1:B3').setValues([[0,5],[1,6],[2,7]])`); await settle()
+await ev(`S().addFloatDomToPosition({ componentKey: 'sheetly-chart', allowTransform: true, initPosition: { startX: 400, endX: 800, startY: 0, endY: 250 },
+  data: { v: 2, type: 'scatter', title: null, source: { sheetId: S().getSheetId(), range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 }, categories: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 0 },
+    series: [{ name: null, nameText: 'Y', values: { startRow: 0, endRow: 2, startColumn: 1, endColumn: 1 } }] } } })`); await settle(800)
+st = await ev(`return cj(canv().length-1).data.datasets[0].data.map(p=>p.x+':'+p.y).join(',')`)
+check('scatter points keep X = 0', st === '0:5,1:6,2:7', st)
+await removeCharts(); await ev(`S().getRange('A1:B3').clear()`)
+await ev(`S().getRange('A1:C6').setValues([['Region','Product','Sales'],['East','A',10],['East','B',20],['West','A',5],['West','B',7],['North','B',3]]); S().getRange('A1').activate()`); await settle()
+await key('Control+q'); await key('c'); await key('ArrowRight', 3); await key('Enter'); await settle(800)
+
 // ---- saved with the workbook
 const snap = await ev(`const s=api.getActiveWorkbook().save(); const d=JSON.parse(s.resources.find(r=>r.name==='SHEET_DRAWING_PLUGIN').data); const k=Object.keys(d)[0]; return Object.values(d[k].data).map(x=>x.data).find(x=>x.type==='pie')`)
 check('the chart definition is saved (type + source range)', snap?.type === 'pie' && snap?.source?.range?.endRow === 5, JSON.stringify(snap))

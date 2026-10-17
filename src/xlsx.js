@@ -189,6 +189,8 @@ export const formulaIn = (f) => outsideStrings(f, (p) => p.replace(/_xlfn\.(_xlw
 // LET / LAMBDA parameter names are stored as _xlpm.name inside their call (Excel reads a bare name as a defined name).
 // The formula is scanned with its string literals and structured references ([...]) masked, so text such as
 // "LET(x,1,x)" in quotes or Table1[x] is never taken for a call or a parameter.
+// Common worksheet functions a LAMBDA parameter could be spelled like (a call then means the function).
+const BUILTIN_CALLS = new Set('SUM AVERAGE COUNT COUNTA MAX MIN IF IFS AND OR NOT INDEX MATCH VLOOKUP HLOOKUP LOOKUP ROUND ABS LEN LEFT RIGHT MID TEXT VALUE ROW ROWS COLUMN COLUMNS DATE YEAR MONTH DAY NOW TODAY PRODUCT POWER SQRT EXP LN LOG MOD INT TRIM UPPER LOWER CONCATENATE CHOOSE OFFSET INDIRECT SUMIF SUMIFS COUNTIF COUNTIFS AVERAGEIF ISNUMBER ISTEXT ISBLANK ISERROR IFERROR N T TYPE RAND'.split(' '))
 function mask(f) {
   let out = '', inStr = false, depth = 0
   for (let i = 0; i < f.length; i++) {
@@ -220,12 +222,18 @@ function xlpm(f) {
     const bounds = [open, ...commas, close]
     const args = bounds.slice(0, -1).map((b, k) => m0.slice(b + 1, bounds[k + 1]).trim())
     const isLet = m[2].toUpperCase() === 'LET'
-    const names = args.slice(0, -1).filter((_, k) => !isLet || k % 2 === 0).filter((x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x))
+    const valid = (x) => /^[A-Za-z_][A-Za-z0-9_.]*$/.test(x) && !/^_xlpm\./i.test(x)
+    const names = args.slice(0, -1).filter((_, k) => !isLet || k % 2 === 0).filter(valid)
     if (!names.length) continue
-    const re = new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${names.map((x) => x.replace(/\./g, '\\.')).join('|')})(?![A-Za-z0-9_.(!\u0000])`, 'gi')
+    // Names that can be called: LET names bound to a LAMBDA, and LAMBDA parameters (a function passed in) unless
+    // they are spelled like a built-in function, which a call then means.
+    const callable = isLet ? names.filter((x) => { const k = args.indexOf(x); return /^(_xlfn\.)?LAMBDA\(/i.test(args[k + 1] ?? '') })
+      : names.filter((x) => !BUILTIN_CALLS.has(x.toUpperCase()) && !XLFN.has(x.toUpperCase()) && !XLWS.has(x.toUpperCase()))
+    const alt = (list) => list.map((x) => x.replace(/\./g, '\\.')).join('|')
     const span = m0.slice(open, close + 1)
-    let t
-    while ((t = re.exec(span))) edits.push(open + t.index + t[1].length)
+    const add = (re) => { let t; while ((t = re.exec(span))) edits.push(open + t.index + t[1].length) }
+    add(new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${alt(names)})(?![A-Za-z0-9_.(!\u0000])`, 'gi'))
+    if (callable.length) add(new RegExp(`(^|[^A-Za-z0-9_.!$'\u0000])(${alt(callable)})(?=\\()`, 'gi'))
   }
   // Apply from the end so earlier positions stay valid; a position is prefixed once.
   for (const pos of [...new Set(edits)].sort((x, y) => y - x)) f = f.slice(0, pos) + '_xlpm.' + f.slice(pos)
