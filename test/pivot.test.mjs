@@ -13,7 +13,7 @@ win.on('pageerror', (e) => errors.push(e.message))
 await win.waitForFunction(() => window.univerAPI?.getActiveWorkbook?.(), null, { timeout: 60000 })
 await win.waitForTimeout(1500)
 await win.mouse.click(700, 500)
-const ev = (code) => win.evaluate(`(async()=>{const api=window.univerAPI,W=()=>api.getActiveWorkbook(),S=()=>W().getActiveSheet(),X=window.__sheetly,P=X.pivots;${code}})()`)
+const ev = (code, arg) => win.evaluate(new Function('arg', `return (async()=>{const api=window.univerAPI,W=()=>api.getActiveWorkbook(),S=()=>W().getActiveSheet(),X=window.__sheetly,P=X.pivots;${code}})()`), arg)
 const settle = (ms = 400) => win.waitForTimeout(ms)
 const key = async (k, n = 1) => { for (let i = 0; i < n; i++) await win.keyboard.press(k); await settle(150) }
 const grid = (a1) => ev(`const r=S().getRange('${a1}'); return r.getValues().map(row=>row.map(v=>v==null?'':v).join('|')).join('\\n')`)
@@ -239,6 +239,30 @@ await ev(`W().setActiveSheet(W().getSheets()[1]); S().getRange('E1:F3').setValue
 await ev(`P.createDialog()`); await settle(); await key('Enter'); await settle()
 check('a source with a blank header is refused with Excel\'s message', (await ev(`return [...document.querySelectorAll('.sx-dialog p')].some(p=>p.textContent.startsWith('The PivotTable field name is not valid'))`)) === true)
 await key('Escape'); await key('Escape')
+
+// ---- saved as Excel PivotTables: cache and table parts, GETPIVOTDATA kept as a formula; opened again as a live report
+{
+  const wb0 = new ExcelJS.Workbook(), d0 = wb0.addWorksheet('Data')
+  ;[['Region', 'Product', 'Sales'], ['East', 'A', 10], ['East', 'B', 20], ['West', 'A', 5], ['West', 'A', 7], ['North', 'B', 3]].forEach((r) => d0.addRow(r))
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'pc.xlsx')`, Array.from(new Uint8Array(await wb0.xlsx.writeBuffer()))); await settle(1500)
+  await ev(`P.create('Data!A1:C6', 'existing', 'Data!E3')`); await settle(500)
+  await ev(`P.place('Region', 'rows')`); await settle(400)
+  await ev(`P.place('Sales', 'values')`); await settle(800)
+  await ev(`S().getRange('I1').setFormula('=GETPIVOTDATA("Sales",$E$3,"Region","West")')`); await settle(600)
+  const bytes = await ev(`return Array.from(await X.xlsx.save())`)
+  const z = await (await import('jszip')).default.loadAsync(Buffer.from(bytes))
+  const tableXml = await z.file('xl/pivotTables/pivotTable1.xml')?.async('string') ?? '', cacheXml = await z.file('xl/pivotCache/pivotCacheDefinition1.xml')?.async('string') ?? ''
+  check('a PivotTable is saved as Excel\'s own: table on E3:F7, cache of Data!A1:C6 refreshed on open', /<location ref="E3:F7"/.test(tableXml) && /<worksheetSource ref="A1:C6" sheet="Data"\/>/.test(cacheXml) && /refreshOnLoad="1"/.test(cacheXml), tableXml.slice(0, 300) + cacheXml.slice(0, 300))
+  const w0 = new ExcelJS.Workbook(); await w0.xlsx.load(Buffer.from(bytes))
+  check('GETPIVOTDATA stays a formula once its PivotTable is saved with it', w0.getWorksheet('Data').getCell('I1').value?.formula === 'GETPIVOTDATA("Sales",$E$3,"Region","West")', J(w0.getWorksheet('Data').getCell('I1').value))
+  await ev(`await X.xlsx.load(new Uint8Array(arg), 'pc2.xlsx')`, bytes); await settle(1500)
+  const reopened = await ev(`const p=P.list()[0]; return JSON.stringify([P.list().length, p?.name, p?.rows, p?.values?.map(v=>v.fn+':'+v.field), S().getRange('I1').getCalculatedValue()])`)
+  check('opened again: the PivotTable is live (Region on Rows, Sum of Sales) and GETPIVOTDATA reads it (12)', reopened === J([1, 'PivotTable1', ['Region'], ['sum:Sales'], 12]), reopened)
+  await ev(`S().getRange('C5').setValue(50); S().getRange('E5').activate()`); await settle(400)
+  await ev(`P.refresh(false)`); await settle(800)
+  const refreshed = await ev(`return JSON.stringify([S().getRange('E3:F7').getValues(), S().getRange('I1').getCalculatedValue()])`)
+  check('Refresh after opening reads the source again (West 5 + 50 = 55)', refreshed === J([[['Row Labels', 'Sum of Sales'], ['East', 30], ['North', 3], ['West', 55], ['Grand Total', 88]], 55]), refreshed)
+}
 
 check('no page errors', errors.length === 0, errors.join(' | '))
 await app.close()

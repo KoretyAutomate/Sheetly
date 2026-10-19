@@ -213,6 +213,12 @@ Follow-ups (known, not done):
   than the range spills to its own size (Excel cuts it, or pads with #N/A). Needs fixed-size arrays in Univer.
 - "N standard deviations above / below average" rules are shown as an equivalent formula rule using STDEV.P (Excel's
   choice of sample vs population deviation still to be confirmed against a live Excel); the file keeps stdDev.
-- PivotTables are still written as values (no pivot cache); formulas that read them (GETPIVOTDATA, or names that
-  use it) are saved as their results for that reason.
+  2026-10-19: no documentation says which; Apache POI's evaluator uses its STDEV (sample) for this rule, which is a
+  hint, not proof. Left as STDEV.P until checked in Excel (5 values, a "1 std dev above" rule, compare with
+  AVERAGE+STDEV.S and AVERAGE+STDEV.P).
+- DONE 2026-10-19 (branch pivot-caches): PivotTables are written as Excel PivotTables (src/xlsx-pivots.js: cache
+  definition with refreshOnLoad, records, table part) and read back as live reports; GETPIVOTDATA stays a formula
+  when every report is saved so. Checked by reading the files back and by LibreOffice, which builds real DataPilots
+  from them (rows, columns, filters with hidden items, several values, table sources). Not yet opened in a real
+  Excel: the first check to make when one is available. Not written: rowItems/colItems (Excel rebuilds them on open).
 - Run the gate's Codex review on main after the merge and work through what it finds.

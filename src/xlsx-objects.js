@@ -263,7 +263,9 @@ const tableName = (s, used) => {
   return n
 }
 /** Univer tables of one sheet -> ExcelJS tables (call after the cells are written; values are kept). */
+// Returns the names written, by the table's own name (a name already taken is changed).
 export function tablesOut(ws, tables = [], used = new Set()) {
+  const written = new Map()
   for (const t of tables) {
     const g = t.range
     if (!g) continue
@@ -292,12 +294,15 @@ export function tablesOut(ws, tables = [], used = new Set()) {
       if (typeof v === 'string') columns[i].totalsRowLabel = v
       else if (v && typeof v === 'object' && v.formula) { columns[i].totalsRowFunction = 'custom'; columns[i].totalsRowFormula = v.formula; columns[i].totalsRowResult = v.result }
     })
-    ws.addTable({ name: tableName(t.name, used), ref: `${colName(g.startColumn)}${g.startRow + 1}`, headerRow: header, totalsRow: footer,
+    const name = tableName(t.name, used)
+    written.set(t.name, name)
+    ws.addTable({ name, ref: `${colName(g.startColumn)}${g.startRow + 1}`, headerRow: header, totalsRow: footer,
       style: { theme: 'TableStyleMedium2', showRowStripes: true }, columns, rows })
     // addTable rewrites the cells; their own formatting and the totals row are put back.
     for (const [r, c, st] of styles) ws.getCell(r + 1, c + 1).style = st
     for (const [r, c, v] of [...headerCells, ...footerCells]) ws.getCell(r + 1, c + 1).value = v
   }
+  return written
 }
 /** ExcelJS tables -> [{name, range, showHeader, showFooter}] for FWorksheet.addTable after the workbook loads. */
 export function tablesIn(ws) {

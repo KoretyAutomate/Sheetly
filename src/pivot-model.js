@@ -118,6 +118,15 @@ function tree(fields, records, src, path = []) {
   return [...groups.values()].sort((a, b) => cmpItems(a.item, b.item))
     .map(({ item, recs }) => ({ item, path: [...path, item], children: tree(fields.slice(1), recs, src, [...path, item]) }))
 }
+/** A field's distinct items in report order (blank last, as null), and the index of a value among them: what an
+ *  .xlsx PivotCache lists as the field's shared items. */
+export function cacheItems(src, field) {
+  const i = src.fields.indexOf(field), seen = new Map()
+  for (const r of src.records) { const k = itemKey(label(r[i])); if (!seen.has(k)) seen.set(k, isBlank(r[i]) ? null : r[i]) }
+  const items = [...seen.values()].sort((a, b) => cmpItems(label(a), label(b)))
+  const at = new Map(items.map((x, k) => [itemKey(label(x)), k]))
+  return { items, indexOf: (x) => at.get(itemKey(label(x))) }
+}
 const pathKey = (path) => path.map(itemKey).join('\u0001')
 
 /**

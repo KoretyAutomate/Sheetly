@@ -1,0 +1,23 @@
+sparklines  2026-10-19T11:25:38.584Z
+PASS  Alt N S L opens Create Sparklines with the selection as the Data Range
+PASS  one line sparkline per row in F2:F4
+PASS  the sparkline is drawn in F2 (its cell looks different from before)
+PASS  changing the data redraws it (a flat line looks different, and is still drawn)
+PASS  a location that is not one row or column is refused
+PASS  one sparkline over a block of data (A1:B2) is refused
+PASS  column and win/loss sparklines replace the line ones in their cells
+PASS  win/loss is drawn
+PASS  Quick Analysis > Sparklines > Line puts them in the column to the right (D7:D8)
+PASS  saved as x14 sparkline groups
+PASS  opened again: the sparklines are back and drawn
+PASS  a row inserted above moves sparklines and their data down; a column inserted left moves them right
+PASS  a deleted sparkline row is gone, and Undo brings the sparkline back
+PASS  adding sparklines is one undo step (undo removes, redo puts back)
+PASS  Clear can be undone
+PASS  a copied sheet keeps its sparklines, reading its own data
+PASS  after Copy Sheet, Undo and Redo the copy keeps its own sparklines
+PASS  hiding a source column changes the sparkline (its value is left out), showing it again restores it
+PASS  Clear removes the selected sparklines
+PASS  no page errors
+
+20/20 passed
