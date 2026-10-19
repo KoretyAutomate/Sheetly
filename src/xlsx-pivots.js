@@ -121,9 +121,9 @@ const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
 /**
  * A report Sheetly can show, from its parts' XML, or null: { name, location, filterCount, rows, cols, values, filters,
  * cache, source: { ref, sheet } | { table } }. Sources other than a worksheet range or table, grouped or calculated
- * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, renamed fields or items,
- * grand totals or subtotals turned off, report filters laid out across, caches saved without their records and sources in other workbooks are
- * not supported.
+ * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, renamed fields or
+ * items, label or value filters, grand totals or subtotals turned off, report filters laid out across, caches saved
+ * without their records and sources in other workbooks are not supported.
  */
 export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } = {}) {
   const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)
@@ -156,6 +156,8 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   // Each pivot field's items: the shared item each shows, and whether it is hidden.
   const pf = [...(/<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(tableXml)?.[1] ?? '').matchAll(/<pivotField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/pivotField>)/g)]
     .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && (!x.t || x.t === 'data')) }))
+  // Label and value filters (begins with, top 10 ...) are not supported, whether or not they hide anything now.
+  if (/<filters\b/.test(tableXml)) return null
   // Fields and items renamed in the report (Region shown as Market) are not supported: GETPIVOTDATA uses those names.
   if (pf.some((f) => f.a.name != null || f.items.some((x) => x.n != null))) return null
   const list = (tag, inner) => [...(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`).exec(tableXml)?.[1] ?? '').matchAll(new RegExp(`<${inner}\\b([^>]*?)/?>`, 'g'))].map((m) => attrs(m[1]))
