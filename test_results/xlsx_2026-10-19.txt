@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-19T12:47:36.257Z
+xlsx fidelity  2026-10-19T12:56:06.609Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
@@ -71,6 +71,7 @@ PASS  items typed t="data" are items (the filter item is found)
 PASS  cache dates become serials of the workbook's date system (46312 / 44850)
 PASS  control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space
 PASS  a missing value and the text "(blank)" stay apart in the cache; the report's (blank) filter shows both
+PASS  XML booleans "true"/"false" count like "1"/"0"; renamed fields and items are not read
 PASS  reports with grand totals or subtotals turned off are not read
 PASS  sources in other workbooks and calculated items are not read
 PASS  values shown as %, grouped fields and external sources are not read (the cells keep the values)
@@ -82,4 +83,4 @@ PASS  a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered
 PASS  an unreadable report is counted on its sheet; with one there, GETPIVOTDATA is saved as its value
 PASS  numeric character references in cache text are decoded (E&#97;s&#x74; is East)
 
-82/82 passed
+83/83 passed

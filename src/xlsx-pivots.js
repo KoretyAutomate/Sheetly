@@ -114,13 +114,15 @@ function valueIn(tag, a, epoch) {
   if (tag === 'd') { const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(a.v) ? a.v : `${a.v}Z`); return Number.isNaN(t) ? null : (t - epoch) / DAY }
   return a.v ?? ''
 }
+// XML booleans are "1" / "true" and "0" / "false".
+const isTrue = (v) => v === '1' || v === 'true', isFalse = (v) => v === '0' || v === 'false'
 const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
 
 /**
  * A report Sheetly can show, from its parts' XML, or null: { name, location, filterCount, rows, cols, values, filters,
  * cache, source: { ref, sheet } | { table } }. Sources other than a worksheet range or table, grouped or calculated
- * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, grand totals or subtotals
- * turned off, report filters laid out across, caches saved without their records and sources in other workbooks are
+ * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, renamed fields or items,
+ * grand totals or subtotals turned off, report filters laid out across, caches saved without their records and sources in other workbooks are
  * not supported.
  */
 export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } = {}) {
@@ -128,7 +130,7 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   const src = /<cacheSource\b([^>]*)>([\s\S]*?)<\/cacheSource>/.exec(cacheXml)
   if (!src || (attrs(src[1]).type ?? 'worksheet') !== 'worksheet') return null
   // Without its records (saveData="0") the cache is not the data the report shows.
-  if (recordsXml == null || attrs(/<pivotCacheDefinition\b([^>]*)>/.exec(cacheXml)?.[1]).saveData === '0') return null
+  if (recordsXml == null || isFalse(attrs(/<pivotCacheDefinition\b([^>]*)>/.exec(cacheXml)?.[1]).saveData)) return null
   const ws = attrs(/<worksheetSource\b([^>]*)\/?>/.exec(src[2])?.[1])
   // (a source in another workbook is linked through r:id)
   if (ws['r:id'] != null) return null
@@ -148,16 +150,18 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   const location = parseRange(loc.ref ?? '')
   if (!location) return null
   // Report filters one per row above the report (Excel's default "Down, Then Over"), else not read.
-  if (t.pageOverThenDown === '1' || Number(t.pageWrap ?? 0) > 0 || Number(loc.colPageCount ?? 1) > 1) return null
+  if (isTrue(t.pageOverThenDown) || Number(t.pageWrap ?? 0) > 0 || Number(loc.colPageCount ?? 1) > 1) return null
   // Grand totals and subtotals are always shown in Sheetly: reports with them turned off are not read.
-  if (t.rowGrandTotals === '0' || t.colGrandTotals === '0' || /<pivotField\b[^>]*\bdefaultSubtotal="(0|false)"/.test(tableXml)) return null
+  if (isFalse(t.rowGrandTotals) || isFalse(t.colGrandTotals) || /<pivotField\b[^>]*\bdefaultSubtotal="(0|false)"/.test(tableXml)) return null
   // Each pivot field's items: the shared item each shows, and whether it is hidden.
   const pf = [...(/<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(tableXml)?.[1] ?? '').matchAll(/<pivotField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/pivotField>)/g)]
     .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && (!x.t || x.t === 'data')) }))
+  // Fields and items renamed in the report (Region shown as Market) are not supported: GETPIVOTDATA uses those names.
+  if (pf.some((f) => f.a.name != null || f.items.some((x) => x.n != null))) return null
   const list = (tag, inner) => [...(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`).exec(tableXml)?.[1] ?? '').matchAll(new RegExp(`<${inner}\\b([^>]*?)/?>`, 'g'))].map((m) => attrs(m[1]))
   const rows = list('rowFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)
   const cols = list('colFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)
-  if ([...rows, ...cols].some((x) => !fields[x] || pf[x]?.items.some((i) => i.h === '1' || i.h === 'true'))) return null
+  if ([...rows, ...cols].some((x) => !fields[x] || pf[x]?.items.some((i) => isTrue(i.h)))) return null
   const itemOf = (fi, k) => { const x = pf[fi]?.items[k]?.x; const v = x != null ? shared[fi]?.[Number(x)] : undefined; return v === undefined ? undefined : isBlank(v) ? '(blank)' : v }
   const filters = []
   for (const p of list('pageFields', 'pageField')) {
@@ -165,7 +169,7 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
     if (!fields[fi]) return null
     let items = null
     if (p.item != null) items = [itemOf(fi, Number(p.item))]
-    else if (pf[fi]?.items.some((i) => i.h === '1' || i.h === 'true')) items = pf[fi].items.map((i, k) => (i.h === '1' || i.h === 'true' ? undefined : itemOf(fi, k)))
+    else if (pf[fi]?.items.some((i) => isTrue(i.h))) items = pf[fi].items.map((i, k) => (isTrue(i.h) ? undefined : itemOf(fi, k)))
     if (items?.some((x) => x === undefined && p.item != null)) return null
     filters.push({ field: fields[fi], items: items ? items.filter((x) => x !== undefined) : null })
   }

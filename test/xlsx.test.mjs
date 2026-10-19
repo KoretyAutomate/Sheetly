@@ -250,6 +250,12 @@ const J = JSON.stringify
     J(readPivot(bx.table, bx.cache, bx.records)?.cache.records) === J(bl.records) && /<item x="0" h="1"\/><item x="1"\/><item x="2"\/>/.test(bx.table) && !/item="/.test(bx.table), bx.cache + bx.table)
   const noGrand = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition rowGrandTotals="0" ')
   const noSub = x.table.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" defaultSubtotal="0"')
+  const falsy = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition colGrandTotals="false" ')
+  const across2 = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition pageOverThenDown="true" ')
+  const renamed = x.table.replace('<pivotField axis="axisRow"', '<pivotField name="Item" axis="axisRow"')
+  const renamedItem = x.table.replace('<item x="0"/>', '<item n="Seven" x="0"/>')
+  check('XML booleans "true"/"false" count like "1"/"0"; renamed fields and items are not read',
+    readPivot(falsy, x.cache, x.records) === null && readPivot(across2, x.cache, x.records) === null && readPivot(renamed, x.cache, x.records) === null && readPivot(renamedItem, x.cache, x.records) === null && readPivot(x.table, x.cache, x.records) !== null)
   check('reports with grand totals or subtotals turned off are not read', readPivot(noGrand, x.cache, x.records) === null && readPivot(noSub, x.cache, x.records) === null)
   check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
