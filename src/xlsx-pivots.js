@@ -3,13 +3,13 @@
 // asks Excel to refresh on open, so Excel lays the report out itself. Reading takes back the reports Sheetly can show
 // (worksheet sources, compact layouts of plain fields; anything else stays values).
 import { FUNCS, cacheItems, isErrorValue, resolveItem, valueName } from './pivot-model.js'
-import { colName, parseRange } from './xlsx-objects.js'
+import { colName, parseRange, unescXml } from './xlsx-objects.js'
 
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const unesc = (s) => String(s ?? '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+const unesc = unescXml
 const ref = (g) => `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`
 const isBlank = (x) => x == null || x === ''
 

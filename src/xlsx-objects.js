@@ -262,6 +262,13 @@ const tableName = (s, used) => {
   used.add(n.toLowerCase())
   return n
 }
+// XML text: the five named entities and numeric character references (&#97; &#x61;), in one pass.
+const NAMED = { lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' }
+export const unescXml = (s) => String(s ?? '').replace(/&(lt|gt|quot|apos|amp|#\d+|#x[0-9a-fA-F]+);/g, (m, e) => {
+  if (e[0] !== '#') return NAMED[e]
+  const n = e[1] === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1))
+  return n <= 0x10ffff ? String.fromCodePoint(n) : m
+})
 /** Univer tables of one sheet -> ExcelJS tables (call after the cells are written; values are kept). */
 // Returns the names written, by the table's own name (a name already taken is changed).
 export function tablesOut(ws, tables = [], used = new Set()) {

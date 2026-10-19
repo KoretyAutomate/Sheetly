@@ -6,7 +6,7 @@
 //  - PivotTables: cache and table parts (xlsx-pivots.js).
 import JSZip from 'jszip'
 import { chartTitle, explicitSeries, seriesFrom } from './chart-model.js'
-import { colName, parseRange } from './xlsx-objects.js'
+import { colName, parseRange, unescXml } from './xlsx-objects.js'
 import { pivotXml, readPivot } from './xlsx-pivots.js'
 
 const NS = {
@@ -30,7 +30,7 @@ const CT = { chart: 'application/vnd.openxmlformats-officedocument.drawingml.cha
 const EMU = 9525
 const ACCENTS = ['4472C4', 'ED7D31', 'A5A5A5', 'FFC000', '5B9BD5', '70AD47']
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const unesc = (s) => String(s ?? '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+const unesc = unescXml
 const sheetRef = (name) => (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) ? name : `'${name.replace(/'/g, "''")}'`)
 const abs = (r, c) => `$${colName(c)}$${r + 1}`
 const color = (i) => ACCENTS[i % 6]
@@ -242,7 +242,8 @@ export async function finishPackage(buf, { charts = [], spills = new Set(), spar
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
 }
 
-/** PivotTables Sheetly can show (readPivot), with the sheet each is on: [{ sheetIndex, ...report }]. */
+/** PivotTables Sheetly can show (readPivot), with the sheet each is on: [{ sheetIndex, ...report }]; the others are
+ *  listed as { sheetIndex, unread: true } (their cells are values). */
 export async function readPivots(buf, opts = {}) {
   const zip = await JSZip.loadAsync(buf), out = []
   const text = async (part) => (part ? (await zip.file(part)?.async('string')) ?? null : null)
@@ -251,9 +252,8 @@ export async function readPivots(buf, opts = {}) {
     for (const r of relList(await text(relsPath(sheet.part))).filter((x) => x.Type === REL.pivotTable)) {
       const tablePart = resolve(sheet.part, r.Target), cachePart = await related(tablePart, REL.pivotCache)
       const tableXml = await text(tablePart), cacheXml = await text(cachePart)
-      if (!tableXml || !cacheXml) continue
-      const p = readPivot(tableXml, cacheXml, await text(await related(cachePart, REL.pivotRecords)), opts)
-      if (p) out.push({ sheetIndex, sheetName: sheet.name, ...p })
+      const p = !tableXml || !cacheXml ? null : readPivot(tableXml, cacheXml, await text(await related(cachePart, REL.pivotRecords)), opts)
+      out.push(p ? { sheetIndex, sheetName: sheet.name, ...p } : { sheetIndex, sheetName: sheet.name, unread: true })
     }
   }
   return out

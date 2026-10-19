@@ -1,4 +1,4 @@
-pivot tables  2026-10-19T11:47:00.929Z
+pivot tables  2026-10-19T11:55:19.713Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -34,10 +34,11 @@ PASS  a PivotTable whose rows were deleted is not drawn again by Refresh All, no
 PASS  Refresh with a cleared source header keeps the report and says the reference is not valid
 PASS  dragging a Rows field into Values keeps it on Rows (Count of K per K)
 PASS  a source with a blank header is refused with Excel's message
-PASS  a PivotTable is saved as Excel's own: table on E3:F7, cache of Data!A1:C6 refreshed on open
+PASS  a PivotTable is saved as Excel's own: table on E3:F7, cache of the table Sales refreshed on open
 PASS  GETPIVOTDATA stays a formula once its PivotTable is saved with it
 PASS  opened again: the PivotTable is live (Region on Rows, Sum of Sales) and GETPIVOTDATA reads it (12)
+PASS  opened again: the report follows its table by id (a renamed table stays its source)
 PASS  Refresh after opening reads the source again (West 5 + 50 = 55)
 PASS  no page errors
 
-40/40 passed
+41/41 passed

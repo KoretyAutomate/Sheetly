@@ -219,6 +219,12 @@ async function loadWorkbook(f) {
       w.setCustomMetadata(custom)
     }
   }
+  // PivotTables on a table follow it by id from here (a renamed table stays their source).
+  for (const sheet of book.getSheets()) {
+    const w = sheet.getSheet(), custom = w.getCustomMetadata?.()
+    if (!custom?.sheetlyPivots?.some((p) => p.sourceTable && !p.sourceTableId)) continue
+    w.setCustomMetadata({ ...custom, sheetlyPivots: custom.sheetlyPivots.map((p) => (p.sourceTable && !p.sourceTableId ? { ...p, sourceTableId: book.getTableInfoByName?.(p.sourceTable)?.id } : p)) })
+  }
   // Opening a file is not something to undo.
   univerAPI._injector.get(IUndoRedoService).clearUndoRedo(book.getId())
 }

@@ -482,9 +482,11 @@ export async function xlsxToSnapshot(buf) {
   }
   // PivotTables: live reports again, on the records saved with them (the cells hold the report as the file has it).
   let pivotSeq = 0
+  // Reports Sheetly cannot show are counted (sheetlyPivotValues): GETPIVOTDATA may read them, so it is saved as values.
   for (const x of await readPivots(buf, { date1904 })) {
     const id = idByIndex[x.sheetIndex]
     if (!id) continue
+    if (x.unread) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
     let source = null
     if (x.source.table) {
       const t = tables.find((t2) => t2.name.toLowerCase() === x.source.table.toLowerCase())
@@ -493,9 +495,9 @@ export async function xlsxToSnapshot(buf) {
       const sheetId = x.source.sheet ? idByName[x.source.sheet] : id
       if (sheetId) source = { sheetId, range: x.source.range }
     }
-    if (!source) continue
+    if (!source) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
     const filterRows = x.filterCount ? x.filterCount + 1 : 0, g = x.location
-    if (g.startRow < filterRows) continue
+    if (g.startRow < filterRows) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
     const width = Math.max(g.endColumn - g.startColumn + 1, filterRows ? 2 : 0)
     const written = { startRow: g.startRow - filterRows, endRow: g.endRow, startColumn: g.startColumn, endColumn: g.startColumn + width - 1 }
     const anchor = { row: g.startRow, col: g.startColumn }
@@ -574,7 +576,7 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
   // (a report whose cells were deleted is gone, kept only for Undo)
   const pivots = snap.sheetOrder.flatMap((id, sheetIndex) => (snap.sheets[id].custom?.sheetlyPivots ?? []).filter((p) => !p.anchorRef || resolveName(p.anchorRef))
     .map((p) => ({ sheetIndex, sheetId: id, p, spec: pivotSpec(p, id) })))
-  const allPivotsSaved = pivots.length > 0 && pivots.every((x) => x.spec)
+  const allPivotsSaved = pivots.length > 0 && pivots.every((x) => x.spec) && !snap.sheetOrder.some((id) => snap.sheets[id].custom?.sheetlyPivotValues)
   const readsPivot = (f) => { if (allPivotsSaved) return false; const m = mask(f); return PIVOT_CALL.test(m) || [...pivotNames].some((n) => usesName(m, n)) }
   function pivotSpec(p, sheetId) {
     const fields = p.cache?.fields

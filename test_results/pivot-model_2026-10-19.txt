@@ -1,4 +1,4 @@
-pivot model  2026-10-19T11:45:09.976Z
+pivot model  2026-10-19T11:51:52.885Z
 PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
 PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
 PASS  two row fields: compact form, subtotals on the group row, inner items indented

@@ -257,6 +257,18 @@ const J = JSON.stringify
   const wide = await parts(book(def([]), 'Rep!$A$4:$C$7'))
   check('a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values',
     ok[0] && ok[1]?.formula && !gone[0] && gone[1] === 15 && !wide[0] && wide[1] === 15, J([ok, gone, wide]))
+  // a file with a report Sheetly cannot show: that one is counted, and GETPIVOTDATA is saved as its value
+  const z = await JSZip.loadAsync(await snapshotToXlsx(book(def([]), 'Rep!$A$4:$B$7')))
+  z.file('xl/pivotTables/pivotTable1.xml', (await z.file('xl/pivotTables/pivotTable1.xml').async('string')).replace('<dataField name="Sum of Sales" fld="1"', '<dataField name="Sum of Sales" fld="1" showDataAs="percentOfTotal"'))
+  const r = await xlsxToSnapshot(await z.generateAsync({ type: 'uint8array' })), rep = r.sheets[r.sheetOrder[0]]
+  const mixed = book(def([]), 'Rep!$A$4:$B$7')
+  mixed.sheets.p.custom.sheetlyPivotValues = 1
+  const kept = await parts(mixed)
+  check('an unreadable report is counted on its sheet; with one there, GETPIVOTDATA is saved as its value', rep.custom.sheetlyPivotValues === 1 && !rep.custom.sheetlyPivots && kept[0] && kept[1] === 15, J([rep.custom, kept]))
+  // numeric character references in cache text
+  const cx = pivotXml({ name: 'PT', cache, rows: ['Region'], cols: [], values: [{ field: 'Sales', fn: 'sum' }], filters: [], source: { sheetName: 'Data', range: R(0, 0, 2, 1) }, location: R(3, 0, 6, 1), firstDataRow: 1, firstDataCol: 1 }, 1)
+  const refs = readPivot(cx.table, cx.cache.replace('<s v="East"/>', '<s v="E&#97;s&#x74;"/>').replace('name="Sales"', 'name="Sa&#108;es"'), cx.records)
+  check('numeric character references in cache text are decoded (E&#97;s&#x74; is East)', J(refs?.cache.records[0]) === J(['East', 10]) && refs?.values[0].field === 'Sales', J(refs?.cache))
 }
 
 const pass = out.filter((l) => l.startsWith('PASS')).length
