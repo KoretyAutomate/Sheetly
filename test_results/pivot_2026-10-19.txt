@@ -1,4 +1,4 @@
-pivot tables  2026-10-19T12:40:37.103Z
+pivot tables  2026-10-19T12:50:29.738Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -37,8 +37,10 @@ PASS  a source with a blank header is refused with Excel's message
 PASS  a PivotTable is saved as Excel's own: table on E3:F7, cache of the table Sales refreshed on open
 PASS  GETPIVOTDATA stays a formula once its PivotTable is saved with it
 PASS  opened again: the PivotTable is live (Region on Rows, Sum of Sales) and GETPIVOTDATA reads it (12)
+PASS  Sales added to Values twice: the second is "Sum of Sales2", as Excel numbers it
+PASS  Value Field Settings refuses a caption another value field has
 PASS  opened again: the report follows its table by id (a renamed table stays its source)
 PASS  Refresh after opening reads the source again (West 5 + 50 = 55)
 PASS  no page errors
 
-41/41 passed
+43/43 passed

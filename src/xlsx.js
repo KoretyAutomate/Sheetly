@@ -589,6 +589,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     if (area.range.endRow - area.range.startRow + 1 !== filterRows + rows || area.range.endColumn - area.range.startColumn + 1 !== Math.max(cols, filterRows ? 2 : 0)) return null
     // So is one with a value caption that is a field's name (Excel refuses those; GETPIVOTDATA may use it).
     if (L.values.some((v) => fields.some((f) => String(f).toLowerCase() === valueName(v).toLowerCase()))) return null
+    // So is one with two value fields captioned alike (definitions made before captions were kept unique).
+    if (new Set(L.values.map((v) => valueName(v).toLowerCase())).size < L.values.length) return null
     // So is one filtered on an item its records no longer have (it shows nothing; Excel's file cannot say so).
     if ((p.filters ?? []).some((f) => fields.includes(f.field) && f.items && !f.items.some((it) => resolveItem(p.cache, p.cache.records, f.field, it) != null))) return null
     const location = { startRow: area.range.startRow + filterRows, endRow: area.range.startRow + filterRows + rows - 1, startColumn: area.range.startColumn, endColumn: area.range.startColumn + cols - 1 }

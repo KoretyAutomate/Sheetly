@@ -2,7 +2,7 @@
 // the report was built from) plus a PivotTable part on its sheet; the cells keep the report's values too. The cache
 // asks Excel to refresh on open, so Excel lays the report out itself. Reading takes back the reports Sheetly can show
 // (worksheet sources, compact layouts of plain fields; anything else stays values).
-import { FUNCS, cacheItems, isErrorValue, resolveItem, valueName } from './pivot-model.js'
+import { BLANK, FUNCS, cacheItems, isErrorValue, resolveItem, valueName } from './pivot-model.js'
 import { colName, parseRange, unescXml } from './xlsx-objects.js'
 
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
@@ -61,8 +61,13 @@ export function pivotXml(spec, cacheId) {
     + records.map((r) => `<r>${r.map((x, i) => (items[i] ? `<x v="${items[i].indexOf(x)}"/>` : valueXml(x))).join('')}</r>`).join('')
     + '</pivotCacheRecords>'
   const at = (f) => fields.indexOf(f)
-  // A chosen filter item as the report matches it (the number 2024 for "2024"), as an index into the field's items.
-  const itemIndex = (f, x) => { const it = resolveItem(spec.cache, records, f, x); return it == null ? null : items[at(f)].indexOf(it) ?? null }
+  // A chosen filter item as the report matches it (the number 2024 for "2024"), as indexes into the field's items: the
+  // report's "(blank)" is both missing values and the text "(blank)", which the cache keeps apart.
+  const itemIndexes = (f, x) => {
+    const it = resolveItem(spec.cache, records, f, x), list = items[at(f)]
+    if (it == null) return []
+    return (it === BLANK ? [null, BLANK] : [it]).map((y) => list.indexOf(y)).filter((k) => k != null)
+  }
   const filterOf = new Map(spec.filters.map((f) => [f.field, f]))
   const valueFields = new Set(spec.values.map((v) => v.field))
   const pivotFields = fields.map((f, i) => {
@@ -71,16 +76,18 @@ export function pivotXml(spec, cacheId) {
     if (!kind) return `<pivotField${data} showAll="0"/>`
     // A report filter showing some items hides the others.
     const chosen = filterOf.get(f)?.items
-    const shown = chosen ? new Set(chosen.map((x) => itemIndex(f, x)).filter((k) => k != null)) : null
-    const multi = chosen && chosen.length > 1 ? ' multipleItemSelectionAllowed="1"' : ''
-    const list = items[i].items.map((_, k) => `<item x="${k}"${shown && chosen.length > 1 && !shown.has(k) ? ' h="1"' : ''}/>`).join('')
+    const shown = chosen ? new Set(chosen.flatMap((x) => itemIndexes(f, x))) : null
+    const several = shown && shown.size > 1
+    const multi = several ? ' multipleItemSelectionAllowed="1"' : ''
+    const list = items[i].items.map((_, k) => `<item x="${k}"${several && !shown.has(k) ? ' h="1"' : ''}/>`).join('')
     return `<pivotField axis="${kind}"${data}${multi} showAll="0"><items count="${items[i].items.length + 1}">${list}<item t="default"/></items></pivotField>`
   }).join('')
   const fieldList = (tag, list) => (list.length ? `<${tag} count="${list.length}">${list.map((x) => `<field x="${x}"/>`).join('')}</${tag}>` : '')
   // Several value fields make a "Values" column field (-2), innermost.
   const colFields = [...spec.cols.map(at), ...(spec.values.length > 1 ? [-2] : [])]
   const pages = spec.filters.map((f) => {
-    const one = f.items?.length === 1 ? itemIndex(f.field, f.items[0]) : null
+    const shown = f.items ? [...new Set(f.items.flatMap((x) => itemIndexes(f.field, x)))] : []
+    const one = shown.length === 1 ? shown[0] : null
     return `<pageField fld="${at(f.field)}"${one != null ? ` item="${one}"` : ''} hier="-1"/>`
   })
   const dataFields = spec.values.map((v) => `<dataField name="${esc(valueName(v))}" fld="${at(v.field)}"${v.fn && v.fn !== 'sum' ? ` subtotal="${v.fn}"` : ''} baseField="0" baseItem="0"/>`)
@@ -112,8 +119,9 @@ const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
 /**
  * A report Sheetly can show, from its parts' XML, or null: { name, location, filterCount, rows, cols, values, filters,
  * cache, source: { ref, sheet } | { table } }. Sources other than a worksheet range or table, grouped or calculated
- * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, report filters laid out
- * across, caches saved without their records and sources in other workbooks are not supported.
+ * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, grand totals or subtotals
+ * turned off, report filters laid out across, caches saved without their records and sources in other workbooks are
+ * not supported.
  */
 export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } = {}) {
   const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)
@@ -141,6 +149,8 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   if (!location) return null
   // Report filters one per row above the report (Excel's default "Down, Then Over"), else not read.
   if (t.pageOverThenDown === '1' || Number(t.pageWrap ?? 0) > 0 || Number(loc.colPageCount ?? 1) > 1) return null
+  // Grand totals and subtotals are always shown in Sheetly: reports with them turned off are not read.
+  if (t.rowGrandTotals === '0' || t.colGrandTotals === '0' || /<pivotField\b[^>]*\bdefaultSubtotal="(0|false)"/.test(tableXml)) return null
   // Each pivot field's items: the shared item each shows, and whether it is hidden.
   const pf = [...(/<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(tableXml)?.[1] ?? '').matchAll(/<pivotField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/pivotField>)/g)]
     .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && (!x.t || x.t === 'data')) }))

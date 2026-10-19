@@ -1,4 +1,4 @@
-files (open / save objects in the app)  2026-10-19T12:39:15.031Z
+files (open / save objects in the app)  2026-10-19T12:50:57.116Z
 PASS  a new workbook has Excel's sizes: columns 64 px, rows 20 px
 PASS  Calibri (bundled Carlito metrics) is the sheet font and is loaded
 PASS  a new, untouched Book1 may be replaced by File > Open

@@ -244,6 +244,13 @@ const J = JSON.stringify
   const cback = readPivot(cxml.table, cxml.cache, cxml.records)
   check('control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space',
     /<s v="a_x0001_b"\/>/.test(cxml.cache) && /<s v="_x005F_x0041_"\/>/.test(cxml.cache) && !/[\u0001]/.test(cxml.cache) && J(cback?.cache) === J(ctl) && cback?.values[0].name === 'Sum of Sales ', cxml.cache)
+  const bl = { fields: ['K', 'N'], records: [[null, 1], ['(blank)', 2], ['x', 3]] }
+  const bx = pivotXml({ ...spec, cache: bl, rows: [], filters: [{ field: 'K', items: ['(blank)'] }], values: [{ field: 'N', fn: 'sum' }] }, 5)
+  check('a missing value and the text "(blank)" stay apart in the cache; the report\'s (blank) filter shows both',
+    J(readPivot(bx.table, bx.cache, bx.records)?.cache.records) === J(bl.records) && /<item x="0" h="1"\/><item x="1"\/><item x="2"\/>/.test(bx.table) && !/item="/.test(bx.table), bx.cache + bx.table)
+  const noGrand = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition rowGrandTotals="0" ')
+  const noSub = x.table.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" defaultSubtotal="0"')
+  check('reports with grand totals or subtotals turned off are not read', readPivot(noGrand, x.cache, x.records) === null && readPivot(noSub, x.cache, x.records) === null)
   check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
 }
@@ -268,6 +275,8 @@ const J = JSON.stringify
   const wide = await parts(book(def([]), 'Rep!$A$4:$C$7'))
   const clash = await parts(book({ ...def([]), values: [{ field: 'Sales', fn: 'sum', name: 'Region' }] }, 'Rep!$A$4:$B$7'))
   check('a value caption that is a field\'s name (Excel refuses it) leaves the report as values', !clash[0] && clash[1] === 15, J(clash))
+  const twice = await parts(book({ ...def([]), values: [{ field: 'Sales', fn: 'sum' }, { field: 'Sales', fn: 'sum' }] }, 'Rep!$A$4:$C$7'))
+  check('two value fields captioned alike leave the report as values', !twice[0] && twice[1] === 15, J(twice))
   // a copied sheet's report has the same name: the copy is saved under the next free name
   const two = book(def([]), 'Rep!$A$4:$B$7')
   two.sheetOrder = ['p', 'p2', 'd']

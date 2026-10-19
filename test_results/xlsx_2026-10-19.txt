@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-19T12:38:53.756Z
+xlsx fidelity  2026-10-19T12:47:36.257Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
@@ -70,13 +70,16 @@ PASS  filters laid out across, or a cache saved without its records, are not rea
 PASS  items typed t="data" are items (the filter item is found)
 PASS  cache dates become serials of the workbook's date system (46312 / 44850)
 PASS  control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space
+PASS  a missing value and the text "(blank)" stay apart in the cache; the report's (blank) filter shows both
+PASS  reports with grand totals or subtotals turned off are not read
 PASS  sources in other workbooks and calculated items are not read
 PASS  values shown as %, grouped fields and external sources are not read (the cells keep the values)
 PASS  a value caption that is a field's name (Excel refuses it) leaves the report as values
+PASS  two value fields captioned alike leave the report as values
 PASS  two reports named alike (a copied sheet) are saved under different names
 PASS  a source table is found by id before name (the renamed table, not the one now called Old)
 PASS  a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values
 PASS  an unreadable report is counted on its sheet; with one there, GETPIVOTDATA is saved as its value
 PASS  numeric character references in cache text are decoded (E&#97;s&#x74; is East)
 
-79/79 passed
+82/82 passed
