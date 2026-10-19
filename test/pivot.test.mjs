@@ -9,7 +9,7 @@ const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${na
 const app = await electron.launch({ args: ['.', '--no-sandbox'], env: { ...process.env, SHEETLY_TEST_NO_DIALOGS: '1' } })
 const win = await app.firstWindow()
 const errors = []
-win.on('pageerror', (e) => errors.push(e.message))
+win.on('pageerror', (e) => errors.push(process.env.STACK ? e.stack : e.message))
 await win.waitForFunction(() => window.univerAPI?.getActiveWorkbook?.(), null, { timeout: 60000 })
 await win.waitForTimeout(1500)
 await win.mouse.click(700, 500)
