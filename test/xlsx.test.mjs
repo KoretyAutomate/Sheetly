@@ -239,6 +239,11 @@ const J = JSON.stringify
   const linked = x.cache.replace('<worksheetSource ref="A1:C8"', '<worksheetSource r:id="rId2" ref="A1:C8"')
   const calcItems = x.cache.replace('</cacheFields>', '</cacheFields><calculatedItems count="1"><calculatedItem formula="East+West"><pivotArea/></calculatedItem></calculatedItems>')
   const calcItem = x.table.replace('<item x="0"/>', '<item x="0"/><item f="1" x="3"/>')
+  const ctl = { fields: ['K', 'Sales'], records: [['a\u0001b', 1], ['_x0041_', 2]] }
+  const cxml = pivotXml({ ...spec, cache: ctl, rows: ['K'], values: [{ field: 'Sales', fn: 'sum', name: 'Sum of Sales ' }], filters: [] }, 4)
+  const cback = readPivot(cxml.table, cxml.cache, cxml.records)
+  check('control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space',
+    /<s v="a_x0001_b"\/>/.test(cxml.cache) && /<s v="_x005F_x0041_"\/>/.test(cxml.cache) && !/[\u0001]/.test(cxml.cache) && J(cback?.cache) === J(ctl) && cback?.values[0].name === 'Sum of Sales ', cxml.cache)
   check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
 }

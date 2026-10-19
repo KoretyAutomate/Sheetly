@@ -8,10 +8,13 @@ import { colName, parseRange, unescXml } from './xlsx-objects.js'
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-// (everything here is an attribute: line breaks and tabs are written as references, or XML readers make them spaces)
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+// (everything here is an attribute: line breaks and tabs are written as references, or XML readers make them spaces;
+// characters XML cannot hold are written as SpreadsheetML's _xHHHH_, and text that looks like one has its _ escaped)
+const esc = (s) => String(s ?? '').replace(/_(x[0-9A-Fa-f]{4}_)/g, '_x005F_$1')
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, (ch) => `_x${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}_`)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   .replace(/\n/g, '&#10;').replace(/\r/g, '&#13;').replace(/\t/g, '&#9;')
-const unesc = unescXml
+const unesc = (s) => unescXml(s).replace(/_x([0-9A-Fa-f]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16)))
 const ref = (g) => `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`
 const isBlank = (x) => x == null || x === ''
 
@@ -161,8 +164,8 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
     const fi = Number(d.fld), fn = d.subtotal ?? 'sum'
     if (!fields[fi] || !FUNCS.includes(fn) || (d.showDataAs && d.showDataAs !== 'normal')) return null
     const v = { field: fields[fi], fn }
-    // A caption Excel made (with the trailing space it adds when it would equal a field name) is the default one.
-    if (d.name && d.name.trimEnd() !== valueName(v)) v.name = d.name
+    // Any caption but the default is kept as it is (spaces included: GETPIVOTDATA names it so).
+    if (d.name && d.name !== valueName(v)) v.name = d.name
     values.push(v)
   }
   return { name: t.name ?? 'PivotTable1', location, filterCount: filters.length, rows: rows.map((x) => fields[x]), cols: cols.map((x) => fields[x]), values, filters,
