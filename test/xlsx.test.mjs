@@ -220,8 +220,10 @@ const J = JSON.stringify
     J([back?.rows, back?.values, back?.filters, back?.cache.records, back?.source]))
   const one = pivotXml({ ...spec, filters: [{ field: 'Region', items: ['North'] }], values: [{ field: 'Sales', fn: 'sum' }] }, 2)
   check('a filter on one item is the page field\'s item; one value field has no Values field', /<pageField fld="0" item="1" hier="-1"\/>/.test(one.table) && !/<colFields/.test(one.table) && J(readPivot(one.table, one.cache, one.records)?.filters) === J([{ field: 'Region', items: ['North'] }]), one.table)
-  const named = pivotXml({ ...spec, values: [{ field: 'Sales', fn: 'sum', name: 'Product' }] }, 3)
-  check('a value caption equal to a field name gets Excel\'s trailing space', /<dataField name="Product " fld="2"/.test(named.table), named.table)
+  const ws = { fields: ['Re\ngion', 'Sales'], records: [['A\nB', 1], ['A B', 2], ['C\tD\r', 3]] }
+  const wx = pivotXml({ ...spec, cache: ws, rows: ['Re\ngion'], values: [{ field: 'Sales', fn: 'sum' }], filters: [] }, 3)
+  check('line breaks and tabs in names and items are written as character references and read back', /name="Re&#10;gion"/.test(wx.cache) && /<s v="A&#10;B"\/>/.test(wx.cache) && /<s v="C&#9;D&#13;"\/>/.test(wx.cache)
+    && J(readPivot(wx.table, wx.cache, wx.records)?.cache) === J(ws), wx.cache)
   const shownAs = x.table.replace('<dataField name="Sum of Sales" fld="2"', '<dataField name="Sum of Sales" fld="2" showDataAs="percentOfTotal"')
   const grouped = x.cache.replace('<cacheField name="Sales" numFmtId="0">', '<cacheField name="Sales" numFmtId="0"><fieldGroup base="2"/>')
   const external = x.cache.replace('<cacheSource type="worksheet">', '<cacheSource type="external" connectionId="1">')
@@ -255,6 +257,16 @@ const J = JSON.stringify
   const ok = await parts(book(def([{ field: 'Region', items: ['East'] }]), 'Rep!$A$2:$B$6'))
   const gone = await parts(book(def([{ field: 'Region', items: ['South'] }]), 'Rep!$A$2:$B$6'))
   const wide = await parts(book(def([]), 'Rep!$A$4:$C$7'))
+  const clash = await parts(book({ ...def([]), values: [{ field: 'Sales', fn: 'sum', name: 'Region' }] }, 'Rep!$A$4:$B$7'))
+  check('a value caption that is a field\'s name (Excel refuses it) leaves the report as values', !clash[0] && clash[1] === 15, J(clash))
+  // a copied sheet's report has the same name: the copy is saved under the next free name
+  const two = book(def([]), 'Rep!$A$4:$B$7')
+  two.sheetOrder = ['p', 'p2', 'd']
+  two.sheets.p2 = { ...two.sheets.p, id: 'p2', name: 'Rep2', custom: { sheetlyPivots: [{ ...two.sheets.p.custom.sheetlyPivots[0], id: 'p2x', writtenRef: 'SheetlyRef_w2' }] } }
+  two.resources[0].data = J({ ...JSON.parse(two.resources[0].data), w2: { id: 'w2', name: 'SheetlyRef_w2', formulaOrRefString: 'Rep2!$A$4:$B$7', hidden: true } })
+  const z2 = await JSZip.loadAsync(await snapshotToXlsx(two))
+  const names2 = await Promise.all(['xl/pivotTables/pivotTable1.xml', 'xl/pivotTables/pivotTable2.xml'].map(async (f) => /name="([^"]*)"/.exec((await z2.file(f)?.async('string')) ?? '')?.[1]))
+  check('two reports named alike (a copied sheet) are saved under different names', J(names2) === J(['PT', 'PivotTable1']), J(names2))
   check('a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values',
     ok[0] && ok[1]?.formula && !gone[0] && gone[1] === 15 && !wide[0] && wide[1] === 15, J([ok, gone, wide]))
   // a file with a report Sheetly cannot show: that one is counted, and GETPIVOTDATA is saved as its value

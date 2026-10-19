@@ -11,7 +11,7 @@ import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
 import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
 import { finishPackage, readCharts, readDynamicArrays, readPivots, readSparklines } from './xlsx-zip.js'
-import { layout, resolveItem } from './pivot-model.js'
+import { layout, resolveItem, valueName } from './pivot-model.js'
 import { resolveSource } from './chart-model.js'
 import { EXCEL_FUNCTIONS } from './excel-function-names.js'
 
@@ -587,6 +587,8 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     const rows = L.grid.length, cols = L.grid.reduce((m, r) => Math.max(m, r.length), 0)
     // A report whose cells were changed by inserting or deleting rows or columns inside it is left as values.
     if (area.range.endRow - area.range.startRow + 1 !== filterRows + rows || area.range.endColumn - area.range.startColumn + 1 !== Math.max(cols, filterRows ? 2 : 0)) return null
+    // So is one with a value caption that is a field's name (Excel refuses those; GETPIVOTDATA may use it).
+    if (L.values.some((v) => fields.some((f) => String(f).toLowerCase() === valueName(v).toLowerCase()))) return null
     // So is one filtered on an item its records no longer have (it shows nothing; Excel's file cannot say so).
     if ((p.filters ?? []).some((f) => fields.includes(f.field) && f.items && !f.items.some((it) => resolveItem(p.cache, p.cache.records, f.field, it) != null))) return null
     const location = { startRow: area.range.startRow + filterRows, endRow: area.range.startRow + filterRows + rows - 1, startColumn: area.range.startColumn, endColumn: area.range.startColumn + cols - 1 }
@@ -728,9 +730,17 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
   const buf = new Uint8Array(await wb.xlsx.writeBuffer())
   // Charts are written into the sheet named by their own source; chartXml uses that sheet's name in the refs.
   // A table source is named as the table was written (a taken name is changed); without one, its range.
+  // PivotTable names are unique in a workbook: a copied sheet's report gets the next free PivotTableN.
+  const taken = new Set()
+  const pivotName = (n) => {
+    let name = n
+    for (let k = 1; taken.has(name.toLowerCase()); k++) name = `PivotTable${k}`
+    taken.add(name.toLowerCase())
+    return name
+  }
   const pivotsOut = pivots.filter((x) => x.spec).map(({ sheetIndex, spec }) => {
     const name = spec.source.tableId ? tableNames.get(spec.source.tableId) : null
-    return { sheetIndex, spec: { ...spec, source: name ? { table: name } : { sheetName: spec.source.sheetName, range: spec.source.range } } }
+    return { sheetIndex, spec: { ...spec, name: pivotName(spec.name), source: name ? { table: name } : { sheetName: spec.source.sheetName, range: spec.source.range } } }
   })
   return finishPackage(buf, { charts: charts.map((c) => ({ ...c, sheetName: c.sourceName })), spills, sparklines, pivots: pivotsOut })
 }

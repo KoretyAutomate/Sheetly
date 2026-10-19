@@ -8,7 +8,9 @@ import { colName, parseRange, unescXml } from './xlsx-objects.js'
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+// (everything here is an attribute: line breaks and tabs are written as references, or XML readers make them spaces)
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  .replace(/\n/g, '&#10;').replace(/\r/g, '&#13;').replace(/\t/g, '&#9;')
 const unesc = unescXml
 const ref = (g) => `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`
 const isBlank = (x) => x == null || x === ''
@@ -78,9 +80,7 @@ export function pivotXml(spec, cacheId) {
     const one = f.items?.length === 1 ? itemIndex(f.field, f.items[0]) : null
     return `<pageField fld="${at(f.field)}"${one != null ? ` item="${one}"` : ''} hier="-1"/>`
   })
-  // A value field's caption cannot be a field's name (Excel adds a space).
-  const caption = (v) => { const n = valueName(v); return fields.some((f) => f.toLowerCase() === n.toLowerCase()) ? `${n} ` : n }
-  const dataFields = spec.values.map((v) => `<dataField name="${esc(caption(v))}" fld="${at(v.field)}"${v.fn && v.fn !== 'sum' ? ` subtotal="${v.fn}"` : ''} baseField="0" baseItem="0"/>`)
+  const dataFields = spec.values.map((v) => `<dataField name="${esc(valueName(v))}" fld="${at(v.field)}"${v.fn && v.fn !== 'sum' ? ` subtotal="${v.fn}"` : ''} baseField="0" baseItem="0"/>`)
   const pageCount = spec.filters.length ? ` rowPageCount="${spec.filters.length}" colPageCount="1"` : ''
   const table = `${HEAD}<pivotTableDefinition xmlns="${MAIN}" name="${esc(spec.name)}" cacheId="${cacheId}" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0"`
     + ' applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values" updatedVersion="8" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="8" indent="0" outline="1" outlineData="1" multipleFieldFilters="0">'

@@ -1,4 +1,4 @@
-pivot tables  2026-10-19T11:55:19.713Z
+pivot tables  2026-10-19T12:00:04.315Z
 PASS  Alt N V T opens Create PivotTable with the current region
 PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
 PASS  the pane lists the source fields
@@ -39,6 +39,6 @@ PASS  GETPIVOTDATA stays a formula once its PivotTable is saved with it
 PASS  opened again: the PivotTable is live (Region on Rows, Sum of Sales) and GETPIVOTDATA reads it (12)
 PASS  opened again: the report follows its table by id (a renamed table stays its source)
 PASS  Refresh after opening reads the source again (West 5 + 50 = 55)
-PASS  no page errors
+FAIL  no page errors  -> Cannot destructure property 'rowData' of 'this._worksheetData' as it is null.
 
-41/41 passed
+40/41 passed
