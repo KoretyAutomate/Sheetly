@@ -109,8 +109,8 @@ const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
 /**
  * A report Sheetly can show, from its parts' XML, or null: { name, location, filterCount, rows, cols, values, filters,
  * cache, source: { ref, sheet } | { table } }. Sources other than a worksheet range or table, grouped or calculated
- * fields, values shown as (% of, running total ...), items hidden on rows or columns, report filters laid out across
- * and caches saved without their records are not supported.
+ * fields or items, values shown as (% of, running total ...), items hidden on rows or columns, report filters laid out
+ * across, caches saved without their records and sources in other workbooks are not supported.
  */
 export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } = {}) {
   const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)
@@ -119,10 +119,14 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   // Without its records (saveData="0") the cache is not the data the report shows.
   if (recordsXml == null || attrs(/<pivotCacheDefinition\b([^>]*)>/.exec(cacheXml)?.[1]).saveData === '0') return null
   const ws = attrs(/<worksheetSource\b([^>]*)\/?>/.exec(src[2])?.[1])
+  // (a source in another workbook is linked through r:id)
+  if (ws['r:id'] != null) return null
   const source = ws.name ? { table: ws.name } : ws.ref && parseRange(ws.ref) ? { range: parseRange(ws.ref), sheet: ws.sheet ?? null } : null
   if (!source) return null
   const fieldsXml = [...cacheXml.matchAll(/<cacheField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/cacheField>)/g)]
   if (fieldsXml.some((m) => attrs(m[1]).formula != null || /<fieldGroup\b/.test(m[2] ?? ''))) return null
+  // Calculated items (East + West) and OLAP calculated members are not supported either.
+  if (/<(calculatedItems|calculatedMembers)\b/.test(cacheXml) || /<item\b[^>]*\bf="(1|true)"/.test(tableXml)) return null
   const fields = fieldsXml.map((m) => attrs(m[1]).name ?? '')
   const shared = fieldsXml.map((m) => [...(/<sharedItems\b[^>]*>([\s\S]*?)<\/sharedItems>/.exec(m[2] ?? '')?.[1] ?? '').matchAll(VALUE_TAGS)].map((x) => valueIn(x[1], attrs(x[2]), epoch)))
   const records = [...(recordsXml ?? '').matchAll(/<r>([\s\S]*?)<\/r>|<r\/>/g)].map((m) => [...(m[1] ?? '').matchAll(VALUE_TAGS)]

@@ -236,6 +236,10 @@ const J = JSON.stringify
   const dated = x.cache.replace('<s v="East"/>', '<d v="2026-10-17T00:00:00"/>')
   const d1900 = readPivot(x.table, dated, x.records)?.cache.records[0][0], d1904 = readPivot(x.table, dated, x.records, { date1904: true })?.cache.records[0][0]
   check('cache dates become serials of the workbook\'s date system (46312 / 44850)', d1900 === 46312 && d1904 === 44850, `${d1900} ${d1904}`)
+  const linked = x.cache.replace('<worksheetSource ref="A1:C8"', '<worksheetSource r:id="rId2" ref="A1:C8"')
+  const calcItems = x.cache.replace('</cacheFields>', '</cacheFields><calculatedItems count="1"><calculatedItem formula="East+West"><pivotArea/></calculatedItem></calculatedItems>')
+  const calcItem = x.table.replace('<item x="0"/>', '<item x="0"/><item f="1" x="3"/>')
+  check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
 }
 
@@ -267,6 +271,12 @@ const J = JSON.stringify
   const z2 = await JSZip.loadAsync(await snapshotToXlsx(two))
   const names2 = await Promise.all(['xl/pivotTables/pivotTable1.xml', 'xl/pivotTables/pivotTable2.xml'].map(async (f) => /name="([^"]*)"/.exec((await z2.file(f)?.async('string')) ?? '')?.[1]))
   check('two reports named alike (a copied sheet) are saved under different names', J(names2) === J(['PT', 'PivotTable1']), J(names2))
+  // a renamed source table whose old name another table now has: found by id
+  const tb = book({ ...def([]), sourceTable: 'Old', sourceTableId: 'tA' }, 'Rep!$A$4:$B$7')
+  tb.resources.push({ name: 'SHEET_TABLE_PLUGIN', data: J({ p: { tables: [{ id: 'tB', name: 'Old', range: R(10, 5, 12, 6), options: { showHeader: true } }] }, d: { tables: [{ id: 'tA', name: 'Renamed', range: R(0, 0, 2, 1), options: { showHeader: true } }] } }) })
+  const zt = await JSZip.loadAsync(await snapshotToXlsx(tb))
+  const srcXml = (await zt.file('xl/pivotCache/pivotCacheDefinition1.xml')?.async('string')) ?? ''
+  check('a source table is found by id before name (the renamed table, not the one now called Old)', /<worksheetSource name="Renamed"\/>/.test(srcXml), srcXml.slice(0, 400))
   check('a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values',
     ok[0] && ok[1]?.formula && !gone[0] && gone[1] === 15 && !wide[0] && wide[1] === 15, J([ok, gone, wide]))
   // a file with a report Sheetly cannot show: that one is counted, and GETPIVOTDATA is saved as its value

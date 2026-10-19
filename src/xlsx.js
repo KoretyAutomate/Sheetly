@@ -595,11 +595,12 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     const firstDataRow = L.grid.findIndex((r) => r.some((c) => !['corner', 'colHeader', 'rowHeader'].includes(c.kind)))
     // The source: a table (its data and header, no totals row) or a range.
     let source = null
+    // By id in every sheet first (a renamed table whose old name is now another's), then by name.
     if (p.sourceTable) {
-      for (const [sid, entry] of Object.entries(allTables)) {
-        const t = (entry?.tables ?? []).find((x) => (p.sourceTableId && x.id === p.sourceTableId)) ?? (entry?.tables ?? []).find((x) => x.name?.toLowerCase() === p.sourceTable.toLowerCase())
-        if (t?.range && snap.sheets[sid]) { source = { tableId: t.id, table: t.name, sheetName: snap.sheets[sid].name, range: { ...t.range, endRow: t.range.endRow - (t.options?.showFooter ? 1 : 0) } }; break }
-      }
+      const all = Object.entries(allTables).flatMap(([sid, entry]) => (entry?.tables ?? []).map((t) => ({ sid, t })))
+      const hit = (p.sourceTableId ? all.find(({ t }) => t.id === p.sourceTableId) : null) ?? all.find(({ t }) => t.name?.toLowerCase() === p.sourceTable.toLowerCase())
+      const t = hit?.t
+      if (t?.range && snap.sheets[hit.sid]) source = { tableId: t.id, table: t.name, sheetName: snap.sheets[hit.sid].name, range: { ...t.range, endRow: t.range.endRow - (t.options?.showFooter ? 1 : 0) } }
     }
     if (!source) {
       const at = p.sourceRef ? resolveName(p.sourceRef) : p.source
