@@ -1,4 +1,4 @@
-xlsx fidelity  2026-10-19T11:21:08.006Z
+xlsx fidelity  2026-10-19T11:45:09.386Z
 PASS  write: style id resolved (bold + fill)
 PASS  write: font italic/underline/strike/size/name/colour
 PASS  write: borders
@@ -66,6 +66,10 @@ PASS  pivot table: several values make a Values column field; a filter of two it
 PASS  pivot parts read back: fields, values, filter items, records
 PASS  a filter on one item is the page field's item; one value field has no Values field
 PASS  a value caption equal to a field name gets Excel's trailing space
+PASS  filters laid out across, or a cache saved without its records, are not read
+PASS  items typed t="data" are items (the filter item is found)
+PASS  cache dates become serials of the workbook's date system (46312 / 44850)
 PASS  values shown as %, grouped fields and external sources are not read (the cells keep the values)
+PASS  a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values
 
-68/68 passed
+72/72 passed

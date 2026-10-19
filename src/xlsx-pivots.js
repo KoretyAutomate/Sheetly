@@ -95,13 +95,13 @@ export function pivotXml(spec, cacheId) {
 
 // ---- reading
 const attrs = (s) => Object.fromEntries([...String(s ?? '').matchAll(/([\w:]+)="([^"]*)"/g)].map((m) => [m[1], unesc(m[2])]))
-const DAY = 86400000, EPOCH = Date.UTC(1899, 11, 30)
-// One cache value; dates (d) become serial numbers.
-function valueIn(tag, a) {
+const DAY = 86400000
+// One cache value; dates (d) become serial numbers of the workbook's date system.
+function valueIn(tag, a, epoch) {
   if (tag === 'm') return null
   if (tag === 'n') return Number(a.v)
   if (tag === 'b') return a.v === '1' || a.v === 'true'
-  if (tag === 'd') { const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(a.v) ? a.v : `${a.v}Z`); return Number.isNaN(t) ? null : (t - EPOCH) / DAY }
+  if (tag === 'd') { const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(a.v) ? a.v : `${a.v}Z`); return Number.isNaN(t) ? null : (t - epoch) / DAY }
   return a.v ?? ''
 }
 const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
@@ -109,28 +109,34 @@ const VALUE_TAGS = /<(m|n|b|e|s|d|x)\b([^>]*?)\/?>(?:<\/\1>)?/g
 /**
  * A report Sheetly can show, from its parts' XML, or null: { name, location, filterCount, rows, cols, values, filters,
  * cache, source: { ref, sheet } | { table } }. Sources other than a worksheet range or table, grouped or calculated
- * fields, values shown as (% of, running total ...) and items hidden on rows or columns are not supported.
+ * fields, values shown as (% of, running total ...), items hidden on rows or columns, report filters laid out across
+ * and caches saved without their records are not supported.
  */
-export function readPivot(tableXml, cacheXml, recordsXml) {
+export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } = {}) {
+  const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)
   const src = /<cacheSource\b([^>]*)>([\s\S]*?)<\/cacheSource>/.exec(cacheXml)
   if (!src || (attrs(src[1]).type ?? 'worksheet') !== 'worksheet') return null
+  // Without its records (saveData="0") the cache is not the data the report shows.
+  if (recordsXml == null || attrs(/<pivotCacheDefinition\b([^>]*)>/.exec(cacheXml)?.[1]).saveData === '0') return null
   const ws = attrs(/<worksheetSource\b([^>]*)\/?>/.exec(src[2])?.[1])
   const source = ws.name ? { table: ws.name } : ws.ref && parseRange(ws.ref) ? { range: parseRange(ws.ref), sheet: ws.sheet ?? null } : null
   if (!source) return null
   const fieldsXml = [...cacheXml.matchAll(/<cacheField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/cacheField>)/g)]
   if (fieldsXml.some((m) => attrs(m[1]).formula != null || /<fieldGroup\b/.test(m[2] ?? ''))) return null
   const fields = fieldsXml.map((m) => attrs(m[1]).name ?? '')
-  const shared = fieldsXml.map((m) => [...(/<sharedItems\b[^>]*>([\s\S]*?)<\/sharedItems>/.exec(m[2] ?? '')?.[1] ?? '').matchAll(VALUE_TAGS)].map((x) => valueIn(x[1], attrs(x[2]))))
+  const shared = fieldsXml.map((m) => [...(/<sharedItems\b[^>]*>([\s\S]*?)<\/sharedItems>/.exec(m[2] ?? '')?.[1] ?? '').matchAll(VALUE_TAGS)].map((x) => valueIn(x[1], attrs(x[2]), epoch)))
   const records = [...(recordsXml ?? '').matchAll(/<r>([\s\S]*?)<\/r>|<r\/>/g)].map((m) => [...(m[1] ?? '').matchAll(VALUE_TAGS)]
-    .map((x, i) => (x[1] === 'x' ? shared[i]?.[Number(attrs(x[2]).v)] ?? null : valueIn(x[1], attrs(x[2])))))
+    .map((x, i) => (x[1] === 'x' ? shared[i]?.[Number(attrs(x[2]).v)] ?? null : valueIn(x[1], attrs(x[2]), epoch))))
   if (records.some((r) => r.length !== fields.length)) return null
   const t = attrs(/<pivotTableDefinition\b([^>]*)>/.exec(tableXml)?.[1])
   const loc = attrs(/<location\b([^>]*)\/?>/.exec(tableXml)?.[1])
   const location = parseRange(loc.ref ?? '')
   if (!location) return null
+  // Report filters one per row above the report (Excel's default "Down, Then Over"), else not read.
+  if (t.pageOverThenDown === '1' || Number(t.pageWrap ?? 0) > 0 || Number(loc.colPageCount ?? 1) > 1) return null
   // Each pivot field's items: the shared item each shows, and whether it is hidden.
   const pf = [...(/<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(tableXml)?.[1] ?? '').matchAll(/<pivotField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/pivotField>)/g)]
-    .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && !x.t) }))
+    .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && (!x.t || x.t === 'data')) }))
   const list = (tag, inner) => [...(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`).exec(tableXml)?.[1] ?? '').matchAll(new RegExp(`<${inner}\\b([^>]*?)/?>`, 'g'))].map((m) => attrs(m[1]))
   const rows = list('rowFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)
   const cols = list('colFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)

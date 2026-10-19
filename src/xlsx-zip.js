@@ -243,7 +243,7 @@ export async function finishPackage(buf, { charts = [], spills = new Set(), spar
 }
 
 /** PivotTables Sheetly can show (readPivot), with the sheet each is on: [{ sheetIndex, ...report }]. */
-export async function readPivots(buf) {
+export async function readPivots(buf, opts = {}) {
   const zip = await JSZip.loadAsync(buf), out = []
   const text = async (part) => (part ? (await zip.file(part)?.async('string')) ?? null : null)
   const related = async (part, type) => { const t = relList(await text(relsPath(part))).find((r) => r.Type === type)?.Target; return t ? resolve(part, t) : null }
@@ -252,7 +252,7 @@ export async function readPivots(buf) {
       const tablePart = resolve(sheet.part, r.Target), cachePart = await related(tablePart, REL.pivotCache)
       const tableXml = await text(tablePart), cacheXml = await text(cachePart)
       if (!tableXml || !cacheXml) continue
-      const p = readPivot(tableXml, cacheXml, await text(await related(cachePart, REL.pivotRecords)))
+      const p = readPivot(tableXml, cacheXml, await text(await related(cachePart, REL.pivotRecords)), opts)
       if (p) out.push({ sheetIndex, sheetName: sheet.name, ...p })
     }
   }

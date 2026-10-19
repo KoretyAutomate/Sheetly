@@ -11,7 +11,7 @@ import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
 import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
 import { finishPackage, readCharts, readDynamicArrays, readPivots, readSparklines } from './xlsx-zip.js'
-import { layout } from './pivot-model.js'
+import { layout, resolveItem } from './pivot-model.js'
 import { resolveSource } from './chart-model.js'
 import { EXCEL_FUNCTIONS } from './excel-function-names.js'
 
@@ -482,7 +482,7 @@ export async function xlsxToSnapshot(buf) {
   }
   // PivotTables: live reports again, on the records saved with them (the cells hold the report as the file has it).
   let pivotSeq = 0
-  for (const x of await readPivots(buf)) {
+  for (const x of await readPivots(buf, { date1904 })) {
     const id = idByIndex[x.sheetIndex]
     if (!id) continue
     let source = null
@@ -584,7 +584,9 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     const L = layout(p, p.cache), filterRows = p.extent.filterRows ?? 0
     const rows = L.grid.length, cols = L.grid.reduce((m, r) => Math.max(m, r.length), 0)
     // A report whose cells were changed by inserting or deleting rows or columns inside it is left as values.
-    if (area.range.endRow - area.range.startRow + 1 !== filterRows + rows || area.range.endColumn - area.range.startColumn + 1 < cols) return null
+    if (area.range.endRow - area.range.startRow + 1 !== filterRows + rows || area.range.endColumn - area.range.startColumn + 1 !== Math.max(cols, filterRows ? 2 : 0)) return null
+    // So is one filtered on an item its records no longer have (it shows nothing; Excel's file cannot say so).
+    if ((p.filters ?? []).some((f) => fields.includes(f.field) && f.items && !f.items.some((it) => resolveItem(p.cache, p.cache.records, f.field, it) != null))) return null
     const location = { startRow: area.range.startRow + filterRows, endRow: area.range.startRow + filterRows + rows - 1, startColumn: area.range.startColumn, endColumn: area.range.startColumn + cols - 1 }
     const firstDataRow = L.grid.findIndex((r) => r.some((c) => !['corner', 'colHeader', 'rowHeader'].includes(c.kind)))
     // The source: a table (its data and header, no totals row) or a range.

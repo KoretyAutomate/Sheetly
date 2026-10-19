@@ -4,6 +4,8 @@
 import ExcelJS from 'exceljs'
 import { xlsxToSnapshot, snapshotToXlsx, formulaOut, formulaIn } from '../src/xlsx.js'
 import { pivotXml, readPivot } from '../src/xlsx-pivots.js'
+import { layout, readSource } from '../src/pivot-model.js'
+import JSZip from 'jszip'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -223,7 +225,38 @@ const J = JSON.stringify
   const shownAs = x.table.replace('<dataField name="Sum of Sales" fld="2"', '<dataField name="Sum of Sales" fld="2" showDataAs="percentOfTotal"')
   const grouped = x.cache.replace('<cacheField name="Sales" numFmtId="0">', '<cacheField name="Sales" numFmtId="0"><fieldGroup base="2"/>')
   const external = x.cache.replace('<cacheSource type="worksheet">', '<cacheSource type="external" connectionId="1">')
+  // review: filters laid out across, caches without records, t="data" items, 1904 dates
+  const across = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition pageOverThenDown="1" ')
+  const noData = x.cache.replace('refreshOnLoad="1"', 'refreshOnLoad="1" saveData="0"')
+  check('filters laid out across, or a cache saved without its records, are not read', readPivot(across, x.cache, x.records) === null && readPivot(x.table, noData, x.records) === null && readPivot(x.table, x.cache, null) === null)
+  const typed = one.table.replace(/<item x="(\d+)"\/>/g, '<item x="$1" t="data"/>')
+  check('items typed t="data" are items (the filter item is found)', J(readPivot(typed, one.cache, one.records)?.filters) === J([{ field: 'Region', items: ['North'] }]), typed)
+  const dated = x.cache.replace('<s v="East"/>', '<d v="2026-10-17T00:00:00"/>')
+  const d1900 = readPivot(x.table, dated, x.records)?.cache.records[0][0], d1904 = readPivot(x.table, dated, x.records, { date1904: true })?.cache.records[0][0]
+  check('cache dates become serials of the workbook\'s date system (46312 / 44850)', d1900 === 46312 && d1904 === 44850, `${d1900} ${d1904}`)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
+}
+
+// ---- writing: reports that cannot be saved as PivotTables stay values (and GETPIVOTDATA with them)
+{
+  const R = (r0, c0, r1, c1) => ({ startRow: r0, startColumn: c0, endRow: r1, endColumn: c1 })
+  const data = [['Region', 'Sales'], ['East', 10], ['West', 5]]
+  const cache = readSource((r, c) => data[r]?.[c] ?? null, R(0, 0, 2, 1))
+  const book = (p, written) => {
+    const L = layout(p, cache), fr = p.filters.length ? p.filters.length + 1 : 0
+    const width = Math.max(...L.grid.map((r) => r.length), fr ? 2 : 0)
+    p.extent = { written: true, dRow: 0, rows: L.grid.length, cols: width, filterRows: fr }
+    return { sheetOrder: ['p', 'd'], resources: [{ name: 'SHEET_DEFINED_NAME_PLUGIN', data: J({ w: { id: 'w', name: 'SheetlyRef_w', formulaOrRefString: written, hidden: true }, s: { id: 's', name: 'SheetlyRef_s', formulaOrRefString: 'Data!$A$1:$B$3', hidden: true } }) }],
+      sheets: { p: { id: 'p', name: 'Rep', cellData: { 0: { 9: { f: '=GETPIVOTDATA("Sales",$A$4)', v: 15, t: 2 } } }, custom: { sheetlyPivots: [p] } },
+        d: { id: 'd', name: 'Data', cellData: Object.fromEntries(data.map((r, i) => [i, Object.fromEntries(r.map((v, c) => [c, { v, t: typeof v === 'number' ? 2 : 1 }]))])) } } }
+  }
+  const def = (filters) => ({ id: 'p1', name: 'PT', source: { sheetId: 'd', range: R(0, 0, 2, 1) }, anchor: { row: 3, col: 0 }, rows: ['Region'], cols: [], values: [{ field: 'Sales', fn: 'sum' }], filters, cache, sourceRef: 'SheetlyRef_s', writtenRef: 'SheetlyRef_w' })
+  const parts = async (snap) => { const b = await snapshotToXlsx(snap), z = await JSZip.loadAsync(b), w = new ExcelJS.Workbook(); await w.xlsx.load(b); return [!!z.file('xl/pivotTables/pivotTable1.xml'), w.getWorksheet('Rep').getCell('J1').value] }
+  const ok = await parts(book(def([{ field: 'Region', items: ['East'] }]), 'Rep!$A$2:$B$6'))
+  const gone = await parts(book(def([{ field: 'Region', items: ['South'] }]), 'Rep!$A$2:$B$6'))
+  const wide = await parts(book(def([]), 'Rep!$A$4:$C$7'))
+  check('a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values',
+    ok[0] && ok[1]?.formula && !gone[0] && gone[1] === 15 && !wide[0] && wide[1] === 15, J([ok, gone, wide]))
 }
 
 const pass = out.filter((l) => l.startsWith('PASS')).length
