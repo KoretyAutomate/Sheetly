@@ -1,0 +1,16 @@
+FUNCTION COVERAGE vs Excel list: 517/517
+Math: 82/82
+Statistical: 107/107
+Logical: 12/12
+Text: 44/44
+DateTime: 25/25
+Lookup: 35/35
+Financial: 55/55
+Information: 21/21
+Engineering: 54/54
+Database: 12/12
+Array/Modern: 8/8
+Compatibility: 42/42
+Cube: 7/7
+Web: 3/3
+New2024: 10/10

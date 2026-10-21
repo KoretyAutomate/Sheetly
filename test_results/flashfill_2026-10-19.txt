@@ -1,0 +1,13 @@
+FLASH FILL 2026-10-19T12:15:51.363Z
+pass 11/11
+PASS  first name from full name
+PASS  last name
+PASS  initials
+PASS  last, first
+PASS  email user
+PASS  email domain
+PASS  upper case
+PASS  proper case
+PASS  combine two columns
+PASS  area code
+PASS  date parts

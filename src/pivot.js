@@ -256,13 +256,24 @@ export function createPivots(api, { dialogs, refs }) {
   }
 
   // ---- changing the layout
+  // A value field's caption is unique in its report, and is not a field's name: a second Sum of Sales is "Sum of Sales2"
+  // (Excel's numbering).
+  const captionTaken = (p, src, text, except = -1) => p.values.some((x, k) => k !== except && valueName(x).toLowerCase() === text.toLowerCase())
+    || (src?.fields ?? []).some((f) => String(f).toLowerCase() === text.toLowerCase())
+  function newValue(p, src, field) {
+    const v = { field, fn: defaultFn(src, field) }, base = valueName(v)
+    if (!captionTaken(p, src, base)) return v
+    let k = 2
+    while (captionTaken(p, src, `${base}${k}`)) k++
+    return { ...v, name: `${base}${k}` }
+  }
   const current = () => { const p = active(); return p ? { sheet: ws(), p: structuredClone(p) } : null }
   function place(fieldName, area, at) {
     const c = current(); if (!c) return false
     const { sheet, p } = c, src = sourceOf(p)
     // A field is in one of Filters, Columns and Rows at a time; it can be in Values as well (Count of Region by Region).
     if (area !== 'values') for (const [a] of AREAS) p[a] = p[a].filter((x) => (a === 'values' ? true : (a === 'filters' ? x.field : x) !== fieldName))
-    if (area === 'values') p.values.splice(at ?? p.values.length, 0, { field: fieldName, fn: defaultFn(src, fieldName) })
+    if (area === 'values') p.values.splice(at ?? p.values.length, 0, newValue(p, src, fieldName))
     else if (area === 'filters') p.filters.splice(at ?? p.filters.length, 0, { field: fieldName, items: null })
     else p[area].splice(at ?? p[area].length, 0, fieldName)
     return update(sheet, p)
@@ -279,7 +290,7 @@ export function createPivots(api, { dialogs, refs }) {
     const c = current(); if (!c) return false
     const item = c.p[area][i], name = area === 'values' ? item.field : area === 'filters' ? item.field : item
     c.p[area].splice(i, 1)
-    if (to === 'values') c.p.values.push({ field: name, fn: defaultFn(sourceOf(c.p), name) })
+    if (to === 'values') c.p.values.push(newValue(c.p, sourceOf(c.p), name))
     else {
       for (const a of ['rows', 'cols']) c.p[a] = c.p[a].filter((x) => x !== name)
       c.p.filters = c.p.filters.filter((x) => x.field !== name)
@@ -301,7 +312,10 @@ export function createPivots(api, { dialogs, refs }) {
   function setFilter(i, items) { const c = current(); if (!c) return false; c.p.filters[i].items = items; return update(c.sheet, c.p) }
   function setValueField(i, fn, name) {
     const c = current(); if (!c) return false
-    const v = c.p.values[i]
+    const v = c.p.values[i], src = sourceOf(c.p)
+    const text = name || `${FN_LABEL[fn]} of ${v.field}`
+    // Excel refuses a caption another value field has, or a field's name.
+    if (captionTaken(c.p, src, text, i)) return message('PivotTable field name already exists.') && false
     v.fn = fn
     v.name = name && name !== `${FN_LABEL[fn]} of ${v.field}` ? name : undefined
     return update(c.sheet, c.p)

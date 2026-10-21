@@ -1,0 +1,31 @@
+pivot model  2026-10-19T12:50:36.245Z
+PASS  one row field: Row Labels / Sum of Sales, items A to Z, (blank) last, Grand Total
+PASS  row and column fields: Column Labels header, empty cells where no data, Grand Total row and column
+PASS  two row fields: compact form, subtotals on the group row, inner items indented
+PASS  two value fields side by side
+PASS  values only: caption and total
+PASS  report filter Product = A and Average of Sales
+PASS  filter cells: (All) / item / (Multiple Items)
+PASS  a new value field: Sum for numbers, Count for text
+PASS  aggregates: count counts non-blank, countNums numbers, stdDev / var
+PASS  blank header -> not a valid PivotTable source
+PASS  column field and two value fields: item row, then the value captions next to Row Labels
+PASS  the number 1 and the text "1" are separate items, each counted once
+PASS  GETPIVOTDATA tells them apart: 1 -> 10, "1" -> 20
+PASS  a report filter on the text "1" keeps only that item
+PASS  Max / Min over 150,000 values do not overflow the stack
+PASS  TRUE, 1 and "TRUE" are three items; logicals sort after text
+PASS  repeated headers are separate fields (Sales, Sales2): the second one sums its own column (300)
+PASS  10,000 row items lay out quickly (records grouped once)
+PASS  an error in the source is the Sum of its group (#DIV/0!), other groups unaffected, Count still counts it
+PASS  StdDev of a group with one number is #DIV/0! (also in GETPIVOTDATA); with two it is computed
+PASS  GETPIVOTDATA("Sales", pt) = grand total 45
+PASS  GETPIVOTDATA("Sum of Sales", pt, "Region", "East") = 30
+PASS  GETPIVOTDATA(..., "Region", "West", "Product", "A") = 12, names case-insensitive
+PASS  GETPIVOTDATA: item not in the report -> #REF!
+PASS  GETPIVOTDATA with a report-filter field: the selected item gives its total; another item is #REF!
+PASS  GETPIVOTDATA: field not on rows/columns -> #REF!
+PASS  GETPIVOTDATA: combination with no data -> #REF!
+PASS  GETPIVOTDATA: unknown data field -> #REF!
+
+28/28 passed

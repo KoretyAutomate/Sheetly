@@ -1,0 +1,87 @@
+xlsx fidelity  2026-10-19T13:03:53.196Z
+PASS  write: style id resolved (bold + fill)
+PASS  write: font italic/underline/strike/size/name/colour
+PASS  write: borders
+PASS  write: alignment (Univer angle-up -45 -> Excel 45)
+PASS  write: vertical text
+PASS  write: formula error result
+PASS  write: number format
+PASS  write: custom row height in points, auto height not written
+PASS  write: frozen panes
+PASS  write: showOutlineSymbols=0
+PASS  write: outlinePr summaryBelow=0
+PASS  write: tab colour
+PASS  write: hidden sheet
+PASS  write: defined name
+PASS  write: note
+PASS  round-trip: bold + fill
+PASS  round-trip: font
+PASS  round-trip: borders
+PASS  round-trip: alignment + rotation (Univer -45 = Excel 45 counterclockwise)
+PASS  round-trip: vertical text
+PASS  round-trip: date serial stays a number
+PASS  round-trip: error result
+PASS  round-trip: row height
+PASS  round-trip: freeze
+PASS  round-trip: tab colour
+PASS  round-trip: outline settings
+PASS  round-trip: hidden sheet
+PASS  round-trip: defined name
+PASS  round-trip: note
+PASS  read: date becomes an Excel serial
+PASS  read: shared formula clones translated
+PASS  read: error result kept
+PASS  read: boolean
+PASS  read: merged-away cell left empty
+PASS  read: summary above -> collapse bit on the row before the group
+PASS  read: summary direction
+PASS  write: #rgb and rgb() colours normalised
+PASS  write: shared-formula cell gets its formula from the resolver
+PASS  write: _xlfn. / _xlfn._xlws. prefixes added
+PASS  write: text "#N/A" stays text, an error value is written as an error
+PASS  write: row style (bold row) and its cells
+PASS  write: column style (italic column G)
+PASS  write: very hidden sheet
+PASS  write: freeze keeps the scrolled top-left cell
+PASS  round-trip: constant name
+PASS  round-trip: sheet-scoped and workbook names with the same name both kept
+PASS  round-trip: blank cell with a border kept
+PASS  round-trip: _xlfn. removed on load
+PASS  round-trip: row and column styles
+PASS  round-trip: very hidden
+PASS  round-trip: scrolled freeze
+PASS  read: theme colour (accent1 of the file's theme, Office 2007 here) resolved
+PASS  read: theme colour with tint (Accent 1, Lighter 40% = 95B3D7)
+PASS  read: indexed colour
+PASS  read: built-in format 14 shows as m/d/yyyy
+PASS  read: auto-fit row stays automatic, custom row fixed
+PASS  write: web hyperlink
+PASS  write: link into the workbook uses the sheet name
+PASS  round-trip: web hyperlink
+PASS  round-trip: in-workbook link back to #gid form
+PASS  round-trip: a link to a sheet named O'Brien
+PASS  write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare
+PASS  pivot cache: items listed for report fields (mixed, blank, logical) and fields with errors; plain numbers inline
+PASS  pivot table: several values make a Values column field; a filter of two items hides the third; captions and functions
+PASS  pivot parts read back: fields, values, filter items, records
+PASS  a filter on one item is the page field's item; one value field has no Values field
+PASS  line breaks and tabs in names and items are written as character references and read back
+PASS  filters laid out across, or a cache saved without its records, are not read
+PASS  items typed t="data" are items (the filter item is found)
+PASS  cache dates become serials of the workbook's date system (46312 / 44850)
+PASS  control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space
+PASS  a missing value and the text "(blank)" stay apart in the cache; the report's (blank) filter shows both
+PASS  label and value filters are not read (even when they hide nothing)
+PASS  XML booleans "true"/"false" count like "1"/"0"; renamed fields and items are not read
+PASS  reports with grand totals or subtotals turned off are not read
+PASS  sources in other workbooks and calculated items are not read
+PASS  values shown as %, grouped fields and external sources are not read (the cells keep the values)
+PASS  a value caption that is a field's name (Excel refuses it) leaves the report as values
+PASS  two value fields captioned alike leave the report as values
+PASS  two reports named alike (a copied sheet) are saved under different names
+PASS  a source table is found by id before name (the renamed table, not the one now called Old)
+PASS  a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values
+PASS  an unreadable report is counted on its sheet; with one there, GETPIVOTDATA is saved as its value
+PASS  numeric character references in cache text are decoded (E&#97;s&#x74; is East)
+
+84/84 passed

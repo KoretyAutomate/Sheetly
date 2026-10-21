@@ -1,0 +1,46 @@
+pivot tables  2026-10-19T13:05:40.292Z
+PASS  Alt N V T opens Create PivotTable with the current region
+PASS  the report goes on a new sheet to the left, at A3, and the fields pane opens
+PASS  the pane lists the source fields
+PASS  checking Region and Sales: Row Labels / Sum of Sales, sorted, Grand Total
+PASS  header row bold on the light blue band
+PASS  Move to Column Labels: Column Labels header, items A, B, Grand Total column
+PASS  GETPIVOTDATA reads the report (20, grand total 45, #REF! for an item not shown)
+PASS  Value Field Settings > Average: caption "Average of Sales", East 15, total 9
+PASS  GETPIVOTDATA after the change: "Sales" still finds the field (East/B = 20), the old caption "Sum of Sales" is #REF!
+PASS  report filter: Region / West above the report; only West is summarised
+PASS  the report does not follow the source until Alt+F5 refreshes it
+PASS  until then GETPIVOTDATA answers from the report as shown, not the changed source
+PASS  the PivotTable definition is saved with the sheet
+PASS  the fields pane closes outside the PivotTable and comes back inside it
+PASS  adding a field does not clear cells the PivotTable never wrote (H20 kept)
+PASS  growing over other data asks "There's already data in [...]. Do you want to replace it?"
+PASS  a formula returning "" in the way asks before it is replaced
+PASS  Cancel leaves the data and the report as they were
+PASS  after inserting rows above source and report, the report is found and Refresh reads the moved source
+PASS  after a row inside the report is deleted, Refresh asks before overwriting the cell that moved up
+PASS  a copied sheet's PivotTable is found on the copy
+PASS  Ctrl+Z undoes a field change in one step (cells and definition)
+PASS  data typed where an undone wider report was is kept by Refresh
+PASS  Create PivotTable accepts a table name ("Stock")
+PASS  a filter that would overwrite the cell beside it asks first
+PASS  GETPIVOTDATA: the logical TRUE finds 10, the text "TRUE" finds 20
+PASS  a table's totals row is left out (Grand Total 30, not 60); "001" stays the text 001
+PASS  a PivotTable over a table includes rows added to the table when refreshed (3 -> 10)
+PASS  after the table is renamed and grown, Refresh still reads all of it (30)
+PASS  an error from the source is written as an error value and saved as one (#DIV/0!)
+PASS  Refresh on a copied sheet reads the copy's own table (100), the original keeps 1
+PASS  a PivotTable whose rows were deleted is not drawn again by Refresh All, nor found there
+PASS  Refresh with a cleared source header keeps the report and says the reference is not valid
+PASS  dragging a Rows field into Values keeps it on Rows (Count of K per K)
+PASS  a source with a blank header is refused with Excel's message
+PASS  a PivotTable is saved as Excel's own: table on E3:F7, cache of the table Sales refreshed on open
+PASS  GETPIVOTDATA stays a formula once its PivotTable is saved with it
+PASS  opened again: the PivotTable is live (Region on Rows, Sum of Sales) and GETPIVOTDATA reads it (12)
+PASS  Sales added to Values twice: the second is "Sum of Sales2", as Excel numbers it
+PASS  Value Field Settings refuses a caption another value field has
+PASS  opened again: the report follows its table by id (a renamed table stays its source)
+PASS  Refresh after opening reads the source again (West 5 + 50 = 55)
+PASS  no page errors
+
+43/43 passed

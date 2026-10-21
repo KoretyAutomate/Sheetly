@@ -1,0 +1,10 @@
+open file from the command line  2026-10-19T12:12:42.034Z
+PASS  a workbook named on the command line opens at start
+PASS  its sheet name comes from the file
+PASS  the second launch exits (hands over to the running Sheetly)
+PASS  the handed-over workbook opens in a new window
+PASS  reopening an open workbook brings its window forward (no new window)
+PASS  a file that cannot be read: a message, and the window does not take it as its file
+PASS  INFO("directory") in an opened workbook is its folder
+
+7/7 passed

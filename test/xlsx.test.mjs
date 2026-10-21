@@ -3,6 +3,9 @@
 // freeze, tab colour, hidden sheets, defined names, notes and the outline settings.
 import ExcelJS from 'exceljs'
 import { xlsxToSnapshot, snapshotToXlsx, formulaOut, formulaIn } from '../src/xlsx.js'
+import { pivotXml, readPivot } from '../src/xlsx-pivots.js'
+import { layout, readSource } from '../src/pivot-model.js'
+import JSZip from 'jszip'
 
 const out = []
 const check = (name, ok, detail = '') => out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : '  -> ' + detail}`)
@@ -197,6 +200,141 @@ const J = JSON.stringify
     ['LET(sin,0,SIN(sin))', '_xlfn.LET(_xlpm.sin,0,SIN(_xlpm.sin))'], ['LET(sumproduct,2,SUMPRODUCT(sumproduct))', '_xlfn.LET(_xlpm.sumproduct,2,SUMPRODUCT(_xlpm.sumproduct))'], ['LET(x,1,税x+x)', '_xlfn.LET(_xlpm.x,1,税x+_xlpm.x)'], ['LET(x,2,X$1+x)', '_xlfn.LET(_xlpm.x,2,X$1+_xlpm.x)'], ['LET(sum,LAMBDA(x,x+1),LET(sum,5,SUM(sum,1)))', '_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x+1),_xlfn.LET(_xlpm.sum,5,SUM(_xlpm.sum,1)))'], ['LET(sum,REDUCE(0,{1,2},LAMBDA(a,b,a+b)),SUM(sum,4))', '_xlfn.LET(_xlpm.sum,_xlfn.REDUCE(0,{1,2},_xlfn.LAMBDA(_xlpm.a,_xlpm.b,_xlpm.a+_xlpm.b)),SUM(_xlpm.sum,4))'], ['LET(x,2,$X$1+x)', '_xlfn.LET(_xlpm.x,2,$X$1+_xlpm.x)']]
   const bad = cases.filter(([f, want]) => formulaOut(f) !== want || formulaIn(formulaOut(f)) !== f)
   check('write: LET / LAMBDA parameters as _xlpm. (strings, cell refs and other names untouched), read back bare', !bad.length, J(bad.map(([f]) => [f, formulaOut(f)])))
+}
+
+// ---- PivotTables: Excel's cache and table parts, read back into the same report; what Sheetly cannot show stays values
+{
+  const cache = { fields: ['Region', 'Product', 'Sales'], records: [['East', 'A', 10], ['East', 'B', 20], ['West', 'A', 5], ['North', 'B', 3], ['East', 7, 4], ['west', null, 6], ['North', true, '#N/A']] }
+  const spec = { name: 'PT', cache, rows: ['Product'], cols: [], values: [{ field: 'Sales', fn: 'sum' }, { field: 'Product', fn: 'count' }, { field: 'Sales', fn: 'stdDev', name: 'Spread' }],
+    filters: [{ field: 'Region', items: ['East', 'WEST'] }], source: { sheetName: "It's", range: { startRow: 0, endRow: 7, startColumn: 0, endColumn: 2 } },
+    location: { startRow: 3, endRow: 9, startColumn: 0, endColumn: 3 }, firstDataRow: 1, firstDataCol: 1 }
+  const x = pivotXml(spec, 1)
+  check('pivot cache: items listed for report fields (mixed, blank, logical) and fields with errors; plain numbers inline', /<cacheField name="Product" numFmtId="0"><sharedItems containsBlank="1" containsMixedTypes="1" containsNumber="1" containsInteger="1" minValue="7" maxValue="7" count="5"><n v="7"\/><s v="A"\/><s v="B"\/><b v="1"\/><m\/><\/sharedItems>/.test(x.cache)
+    && /<r><x v="0"\/><x v="1"\/><x v="4"\/><\/r>/.test(x.records) && /<e v="#N\/A"\/><\/sharedItems>/.test(x.cache) && /sheet="It's"/.test(x.cache)
+    && /<r><x v="0"\/><x v="1"\/><n v="10"\/><\/r>/.test(pivotXml({ ...spec, cache: { ...cache, records: cache.records.slice(0, 6) } }, 9).records), x.cache + x.records)
+  check('pivot table: several values make a Values column field; a filter of two items hides the third; captions and functions', /<colFields count="1"><field x="-2"\/><\/colFields>/.test(x.table)
+    && /<pivotField axis="axisPage" multipleItemSelectionAllowed="1" showAll="0"><items count="4"><item x="0"\/><item x="1" h="1"\/><item x="2"\/>/.test(x.table)
+    && /<dataField name="Spread" fld="2" subtotal="stdDev"/.test(x.table) && /<dataField name="Sum of Sales" fld="2" baseField/.test(x.table) && /rowPageCount="1"/.test(x.table), x.table)
+  const back = readPivot(x.table, x.cache, x.records)
+  check('pivot parts read back: fields, values, filter items, records', J([back?.rows, back?.values, back?.filters, back?.cache.records, back?.source]) === J([['Product'], spec.values, [{ field: 'Region', items: ['East', 'West'] }], cache.records.map((r) => r.map((v) => (v === 'west' ? 'West' : v))), { range: spec.source.range, sheet: "It's" }]),
+    J([back?.rows, back?.values, back?.filters, back?.cache.records, back?.source]))
+  const one = pivotXml({ ...spec, filters: [{ field: 'Region', items: ['North'] }], values: [{ field: 'Sales', fn: 'sum' }] }, 2)
+  check('a filter on one item is the page field\'s item; one value field has no Values field', /<pageField fld="0" item="1" hier="-1"\/>/.test(one.table) && !/<colFields/.test(one.table) && J(readPivot(one.table, one.cache, one.records)?.filters) === J([{ field: 'Region', items: ['North'] }]), one.table)
+  const ws = { fields: ['Re\ngion', 'Sales'], records: [['A\nB', 1], ['A B', 2], ['C\tD\r', 3]] }
+  const wx = pivotXml({ ...spec, cache: ws, rows: ['Re\ngion'], values: [{ field: 'Sales', fn: 'sum' }], filters: [] }, 3)
+  check('line breaks and tabs in names and items are written as character references and read back', /name="Re&#10;gion"/.test(wx.cache) && /<s v="A&#10;B"\/>/.test(wx.cache) && /<s v="C&#9;D&#13;"\/>/.test(wx.cache)
+    && J(readPivot(wx.table, wx.cache, wx.records)?.cache) === J(ws), wx.cache)
+  const shownAs = x.table.replace('<dataField name="Sum of Sales" fld="2"', '<dataField name="Sum of Sales" fld="2" showDataAs="percentOfTotal"')
+  const grouped = x.cache.replace('<cacheField name="Sales" numFmtId="0">', '<cacheField name="Sales" numFmtId="0"><fieldGroup base="2"/>')
+  const external = x.cache.replace('<cacheSource type="worksheet">', '<cacheSource type="external" connectionId="1">')
+  // review: filters laid out across, caches without records, t="data" items, 1904 dates
+  const across = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition pageOverThenDown="1" ')
+  const noData = x.cache.replace('refreshOnLoad="1"', 'refreshOnLoad="1" saveData="0"')
+  check('filters laid out across, or a cache saved without its records, are not read', readPivot(across, x.cache, x.records) === null && readPivot(x.table, noData, x.records) === null && readPivot(x.table, x.cache, null) === null)
+  const typed = one.table.replace(/<item x="(\d+)"\/>/g, '<item x="$1" t="data"/>')
+  check('items typed t="data" are items (the filter item is found)', J(readPivot(typed, one.cache, one.records)?.filters) === J([{ field: 'Region', items: ['North'] }]), typed)
+  const dated = x.cache.replace('<s v="East"/>', '<d v="2026-10-17T00:00:00"/>')
+  const d1900 = readPivot(x.table, dated, x.records)?.cache.records[0][0], d1904 = readPivot(x.table, dated, x.records, { date1904: true })?.cache.records[0][0]
+  check('cache dates become serials of the workbook\'s date system (46312 / 44850)', d1900 === 46312 && d1904 === 44850, `${d1900} ${d1904}`)
+  const linked = x.cache.replace('<worksheetSource ref="A1:C8"', '<worksheetSource r:id="rId2" ref="A1:C8"')
+  const calcItems = x.cache.replace('</cacheFields>', '</cacheFields><calculatedItems count="1"><calculatedItem formula="East+West"><pivotArea/></calculatedItem></calculatedItems>')
+  const calcItem = x.table.replace('<item x="0"/>', '<item x="0"/><item f="1" x="3"/>')
+  const ctl = { fields: ['K', 'Sales'], records: [['a\u0001b', 1], ['_x0041_', 2]] }
+  const cxml = pivotXml({ ...spec, cache: ctl, rows: ['K'], values: [{ field: 'Sales', fn: 'sum', name: 'Sum of Sales ' }], filters: [] }, 4)
+  const cback = readPivot(cxml.table, cxml.cache, cxml.records)
+  check('control characters are written as _xHHHH_ (text like _x0041_ escaped) and read back; a caption keeps its trailing space',
+    /<s v="a_x0001_b"\/>/.test(cxml.cache) && /<s v="_x005F_x0041_"\/>/.test(cxml.cache) && !/[\u0001]/.test(cxml.cache) && J(cback?.cache) === J(ctl) && cback?.values[0].name === 'Sum of Sales ', cxml.cache)
+  const bl = { fields: ['K', 'N'], records: [[null, 1], ['(blank)', 2], ['x', 3]] }
+  const bx = pivotXml({ ...spec, cache: bl, rows: [], filters: [{ field: 'K', items: ['(blank)'] }], values: [{ field: 'N', fn: 'sum' }] }, 5)
+  check('a missing value and the text "(blank)" stay apart in the cache; the report\'s (blank) filter shows both',
+    J(readPivot(bx.table, bx.cache, bx.records)?.cache.records) === J(bl.records) && /<item x="0" h="1"\/><item x="1"\/><item x="2"\/>/.test(bx.table) && !/item="/.test(bx.table), bx.cache + bx.table)
+  const noGrand = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition rowGrandTotals="0" ')
+  // (two row fields: Region's subtotals show, Product's, the innermost, never do)
+  const two = pivotXml({ ...spec, rows: ['Region', 'Product'], filters: [] }, 6).table
+  const noSub = two.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" defaultSubtotal="0"')
+  const avgSub = two.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" avgSubtotal="1"')
+  const innerNoSub = two.replace(/(<pivotField axis="axisRow"[\s\S]*?)<pivotField axis="axisRow"/, '$1<pivotField axis="axisRow" defaultSubtotal="0"')
+  const dataNoSub = two.replace('<pivotField dataField="1"', '<pivotField dataField="1" defaultSubtotal="0"')
+  const collapsed = two.replace('<item x="0"/>', '<item x="0" sd="0"/>')
+  const falsy = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition colGrandTotals="false" ')
+  const across2 = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition pageOverThenDown="true" ')
+  const renamed = x.table.replace('<pivotField axis="axisRow"', '<pivotField name="Item" axis="axisRow"')
+  const renamedItem = x.table.replace('<item x="0"/>', '<item n="Seven" x="0"/>')
+  const labelFilter = x.table.replace('<pivotTableStyleInfo', '<filters count="1"><filter fld="1" type="captionBeginsWith" evalOrder="-1" id="1" stringValue1="A"><autoFilter ref="A1"><filterColumn colId="0"><customFilters><customFilter val="A*"/></customFilters></filterColumn></autoFilter></filter></filters><pivotTableStyleInfo')
+  check('label and value filters are not read (even when they hide nothing)', readPivot(labelFilter, x.cache, x.records) === null)
+  check('XML booleans "true"/"false" count like "1"/"0"; renamed fields and items are not read',
+    readPivot(falsy, x.cache, x.records) === null && readPivot(across2, x.cache, x.records) === null && readPivot(renamed, x.cache, x.records) === null && readPivot(renamedItem, x.cache, x.records) === null && readPivot(x.table, x.cache, x.records) !== null)
+  check('reports with grand totals, or an outer field\'s subtotals, turned off or custom are not read', readPivot(noGrand, x.cache, x.records) === null && readPivot(noSub, x.cache, x.records) === null
+    && readPivot(avgSub, x.cache, x.records) === null && readPivot(two, x.cache, x.records) !== null, two)
+  check('subtotals turned off on the innermost row field or a data field change nothing: still read', innerNoSub !== two && readPivot(innerNoSub, x.cache, x.records) !== null && dataNoSub !== two && readPivot(dataNoSub, x.cache, x.records) !== null)
+  check('reports with a collapsed item (sd="0") are not read', collapsed !== two && readPivot(collapsed, x.cache, x.records) === null)
+  // a filter showing the missing value but not the text "(blank)" (or the other way) cannot be one Sheetly item
+  const onlyMissing = bx.table.replace('<item x="2"/>', '<item x="2" h="1"/>')
+  const oneMissing = bx.table.replace('<pageField fld="0" hier="-1"/>', '<pageField fld="0" item="1" hier="-1"/>')
+  const BL = { fields: ['K', 'N'], records: [[null, 1], ['(BLANK)', 2], ['x', 3]] }
+  const BX = pivotXml({ ...spec, cache: BL, rows: [], filters: [{ field: 'K', items: ['(blank)'] }], values: [{ field: 'N', fn: 'sum' }] }, 7)
+  const hidOf = (t) => [...t.matchAll(/<item x="(\d+)"( h="1")?\/>/g)].map((m) => [m[1], !!m[2]])
+  const BI = BX.cache.match(/<cacheField name="K"[\s\S]*?<\/cacheField>/)[0], xOf = (re) => String([...BI.matchAll(/<(s|m)\b[^>]*\/>/g)].findIndex((m) => re.test(m[0])))
+  check('the text "(BLANK)" in any case is the report\'s (blank): a (blank) filter selects it and the missing value',
+    J(hidOf(BX.table).filter(([, h]) => !h).map(([k]) => k).sort()) === J([xOf(/<m/), xOf(/BLANK/)].sort()), BX.cache + BX.table)
+  const BXonly = BX.table.replace(`<item x="${xOf(/BLANK/)}"/>`, `<item x="${xOf(/BLANK/)}" h="1"/>`)
+  check('a filter selecting a missing value without the text "(BLANK)" is not read', BXonly !== BX.table && readPivot(BXonly, BX.cache, BX.records) === null && readPivot(BX.table, BX.cache, BX.records) !== null)
+  check('a filter selecting a missing value without the text "(blank)" is not read', onlyMissing !== bx.table && readPivot(onlyMissing, bx.cache, bx.records) === null
+    && oneMissing !== bx.table && readPivot(oneMissing, bx.cache, bx.records) === null && readPivot(bx.table, bx.cache, bx.records) !== null, bx.table)
+  check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
+  check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
+}
+
+// ---- writing: reports that cannot be saved as PivotTables stay values (and GETPIVOTDATA with them)
+{
+  const R = (r0, c0, r1, c1) => ({ startRow: r0, startColumn: c0, endRow: r1, endColumn: c1 })
+  const data = [['Region', 'Sales'], ['East', 10], ['West', 5]]
+  const cache = readSource((r, c) => data[r]?.[c] ?? null, R(0, 0, 2, 1))
+  const book = (p, written) => {
+    const L = layout(p, cache), fr = p.filters.length ? p.filters.length + 1 : 0
+    const width = Math.max(...L.grid.map((r) => r.length), fr ? 2 : 0)
+    p.extent = { written: true, dRow: 0, rows: L.grid.length, cols: width, filterRows: fr }
+    return { sheetOrder: ['p', 'd'], resources: [{ name: 'SHEET_DEFINED_NAME_PLUGIN', data: J({ w: { id: 'w', name: 'SheetlyRef_w', formulaOrRefString: written, hidden: true }, s: { id: 's', name: 'SheetlyRef_s', formulaOrRefString: 'Data!$A$1:$B$3', hidden: true } }) }],
+      sheets: { p: { id: 'p', name: 'Rep', cellData: { 0: { 9: { f: '=GETPIVOTDATA("Sales",$A$4)', v: 15, t: 2 } } }, custom: { sheetlyPivots: [p] } },
+        d: { id: 'd', name: 'Data', cellData: Object.fromEntries(data.map((r, i) => [i, Object.fromEntries(r.map((v, c) => [c, { v, t: typeof v === 'number' ? 2 : 1 }]))])) } } }
+  }
+  const def = (filters) => ({ id: 'p1', name: 'PT', source: { sheetId: 'd', range: R(0, 0, 2, 1) }, anchor: { row: 3, col: 0 }, rows: ['Region'], cols: [], values: [{ field: 'Sales', fn: 'sum' }], filters, cache, sourceRef: 'SheetlyRef_s', writtenRef: 'SheetlyRef_w' })
+  const parts = async (snap) => { const b = await snapshotToXlsx(snap), z = await JSZip.loadAsync(b), w = new ExcelJS.Workbook(); await w.xlsx.load(b); return [!!z.file('xl/pivotTables/pivotTable1.xml'), w.getWorksheet('Rep').getCell('J1').value] }
+  const ok = await parts(book(def([{ field: 'Region', items: ['East'] }]), 'Rep!$A$2:$B$6'))
+  const gone = await parts(book(def([{ field: 'Region', items: ['South'] }]), 'Rep!$A$2:$B$6'))
+  const wide = await parts(book(def([]), 'Rep!$A$4:$C$7'))
+  const clash = await parts(book({ ...def([]), values: [{ field: 'Sales', fn: 'sum', name: 'Region' }] }, 'Rep!$A$4:$B$7'))
+  check('a value caption that is a field\'s name (Excel refuses it) leaves the report as values', !clash[0] && clash[1] === 15, J(clash))
+  const twice = await parts(book({ ...def([]), values: [{ field: 'Sales', fn: 'sum' }, { field: 'Sales', fn: 'sum' }] }, 'Rep!$A$4:$C$7'))
+  check('two value fields captioned alike leave the report as values', !twice[0] && twice[1] === 15, J(twice))
+  // a copied sheet's report has the same name: the copy is saved under the next free name
+  const two = book(def([]), 'Rep!$A$4:$B$7')
+  two.sheetOrder = ['p', 'p2', 'd']
+  two.sheets.p2 = { ...two.sheets.p, id: 'p2', name: 'Rep2', custom: { sheetlyPivots: [{ ...two.sheets.p.custom.sheetlyPivots[0], id: 'p2x', writtenRef: 'SheetlyRef_w2' }] } }
+  two.resources[0].data = J({ ...JSON.parse(two.resources[0].data), w2: { id: 'w2', name: 'SheetlyRef_w2', formulaOrRefString: 'Rep2!$A$4:$B$7', hidden: true } })
+  const z2 = await JSZip.loadAsync(await snapshotToXlsx(two))
+  const names2 = await Promise.all(['xl/pivotTables/pivotTable1.xml', 'xl/pivotTables/pivotTable2.xml'].map(async (f) => /name="([^"]*)"/.exec((await z2.file(f)?.async('string')) ?? '')?.[1]))
+  check('two reports named alike (a copied sheet) are saved under different names', J(names2) === J(['PT', 'PivotTable1']), J(names2))
+  // a renamed source table whose old name another table now has: found by id
+  const tb = book({ ...def([]), sourceTable: 'Old', sourceTableId: 'tA' }, 'Rep!$A$4:$B$7')
+  tb.resources.push({ name: 'SHEET_TABLE_PLUGIN', data: J({ p: { tables: [{ id: 'tB', name: 'Old', range: R(10, 5, 12, 6), options: { showHeader: true } }] }, d: { tables: [{ id: 'tA', name: 'Renamed', range: R(0, 0, 2, 1), options: { showHeader: true } }] } }) })
+  const zt = await JSZip.loadAsync(await snapshotToXlsx(tb))
+  const srcXml = (await zt.file('xl/pivotCache/pivotCacheDefinition1.xml')?.async('string')) ?? ''
+  check('a source table is found by id before name (the renamed table, not the one now called Old)', /<worksheetSource name="Renamed"\/>/.test(srcXml), srcXml.slice(0, 400))
+  check('a report is saved as a PivotTable with GETPIVOTDATA as a formula; filtered on a vanished item, or widened by an inserted column, it stays values',
+    ok[0] && ok[1]?.formula && !gone[0] && gone[1] === 15 && !wide[0] && wide[1] === 15, J([ok, gone, wide]))
+  // a file with a report Sheetly cannot show: that one is counted, and GETPIVOTDATA is saved as its value
+  const z = await JSZip.loadAsync(await snapshotToXlsx(book(def([]), 'Rep!$A$4:$B$7')))
+  z.file('xl/pivotTables/pivotTable1.xml', (await z.file('xl/pivotTables/pivotTable1.xml').async('string')).replace('<dataField name="Sum of Sales" fld="1"', '<dataField name="Sum of Sales" fld="1" showDataAs="percentOfTotal"'))
+  const r = await xlsxToSnapshot(await z.generateAsync({ type: 'uint8array' })), rep = r.sheets[r.sheetOrder[0]]
+  const mixed = book(def([]), 'Rep!$A$4:$B$7')
+  mixed.sheets.p.custom.sheetlyPivotValues = 1
+  const kept = await parts(mixed)
+  check('an unreadable report is counted on its sheet; with one there, GETPIVOTDATA is saved as its value', rep.custom.sheetlyPivotValues === 1 && !rep.custom.sheetlyPivots && kept[0] && kept[1] === 15, J([rep.custom, kept]))
+  // numeric character references in cache text
+  const cx = pivotXml({ name: 'PT', cache, rows: ['Region'], cols: [], values: [{ field: 'Sales', fn: 'sum' }], filters: [], source: { sheetName: 'Data', range: R(0, 0, 2, 1) }, location: R(3, 0, 6, 1), firstDataRow: 1, firstDataCol: 1 }, 1)
+  const refs = readPivot(cx.table, cx.cache.replace('<s v="East"/>', '<s v="E&#97;s&#x74;"/>').replace('name="Sales"', 'name="Sa&#108;es"'), cx.records)
+  check('numeric character references in cache text are decoded (E&#97;s&#x74; is East)', J(refs?.cache.records[0]) === J(['East', 10]) && refs?.values[0].field === 'Sales', J(refs?.cache))
 }
 
 const pass = out.filter((l) => l.startsWith('PASS')).length

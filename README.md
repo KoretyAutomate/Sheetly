@@ -86,7 +86,7 @@ python3 test/coverage.py test_results/coverage.txt   # function coverage vs Exce
 | `src/outline.js`, `src/outline-model.js` | Row and column grouping. |
 | `src/quick-analysis.js`, `src/panes.js` | Ctrl+Q; F6 and Ctrl+F1. |
 | `src/excel-functions.js`, `src/groupby.js` | Excel functions that are not in Univer. |
-| `src/xlsx.js`, `src/xlsx-objects.js`, `src/xlsx-zip.js` | Conversion between .xlsx files and Univer's workbook snapshots. |
+| `src/xlsx.js`, `src/xlsx-objects.js`, `src/xlsx-zip.js`, `src/xlsx-pivots.js` | Conversion between .xlsx files and Univer's workbook snapshots. |
 | `src/charts.js`, `src/chart-model.js` | Charts. |
 | `src/pivot.js`, `src/pivot-model.js` | PivotTables and GETPIVOTDATA. |
 | `src/sparklines.js` | Sparklines. |
@@ -97,9 +97,13 @@ python3 test/coverage.py test_results/coverage.txt   # function coverage vs Exce
 ## Known gaps
 
 - TRANSLATE, DETECTLANGUAGE and STOCKHISTORY return `#CONNECT!`, because they need Microsoft's online services.
-- CUBE functions return `#NAME?` (there is no Data Model), and GETPIVOTDATA returns `#REF!` (there are no PivotTables).
-- PivotTables are saved to .xlsx as their values; the PivotTable itself (its cache) is not written yet, so cells
-  with GETPIVOTDATA are saved as their results.
+- CUBE functions return `#NAME?` (there is no Data Model).
+- PivotTables are saved to .xlsx as Excel PivotTables (with their cache, refreshed when Excel opens the file) and
+  are opened again as live reports. Sheetly shows them in Compact Form only: a PivotTable from Excel in another
+  layout keeps its cells until it is changed or refreshed. PivotTables Sheetly cannot show (external or Data Model
+  sources, grouped or calculated fields, values shown as % or running totals, items hidden on rows or columns)
+  open as their values. A report whose cells were cut by inserting or deleting rows or columns inside it is saved
+  as values, and then GETPIVOTDATA cells are saved as their results.
 - Chart sheets (F11) are saved as a worksheet holding the chart.
 - Legacy array formulas (Ctrl+Shift+Enter) from a file are calculated as dynamic arrays: when the result is a
   different size from the range they were entered in, it spills to its own size instead of being cut or padded

@@ -10,7 +10,8 @@
 import ExcelJS from 'exceljs'
 import { outlineGroups, outlineSettings } from './outline-model.js'
 import { CF, CHART_COMPONENT, DRAWINGS, DV, REF_PREFIX, TABLES, rangeA1, cfIn, cfOut, dvIn, dvOut, endFrom, imagesIn, imagesOut, parseRange, placed, tablesIn, tablesOut } from './xlsx-objects.js'
-import { finishPackage, readCharts, readDynamicArrays, readSparklines } from './xlsx-zip.js'
+import { finishPackage, readCharts, readDynamicArrays, readPivots, readSparklines } from './xlsx-zip.js'
+import { layout, resolveItem, valueName } from './pivot-model.js'
 import { resolveSource } from './chart-model.js'
 import { EXCEL_FUNCTIONS } from './excel-function-names.js'
 
@@ -479,6 +480,33 @@ export async function xlsxToSnapshot(buf) {
     const entry = (drawings[id] ??= { data: {}, order: [] })
     entry.data[drawingId] = d; entry.order.push(drawingId)
   }
+  // PivotTables: live reports again, on the records saved with them (the cells hold the report as the file has it).
+  let pivotSeq = 0
+  // Reports Sheetly cannot show are counted (sheetlyPivotValues): GETPIVOTDATA may read them, so it is saved as values.
+  for (const x of await readPivots(buf, { date1904 })) {
+    const id = idByIndex[x.sheetIndex]
+    if (!id) continue
+    if (x.unread) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
+    let source = null
+    if (x.source.table) {
+      const t = tables.find((t2) => t2.name.toLowerCase() === x.source.table.toLowerCase())
+      if (t) source = { sheetId: t.sheetId, range: { ...t.range, endRow: t.range.endRow - (t.showFooter ? 1 : 0) }, table: t.name }
+    } else {
+      const sheetId = x.source.sheet ? idByName[x.source.sheet] : id
+      if (sheetId) source = { sheetId, range: x.source.range }
+    }
+    if (!source) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
+    const filterRows = x.filterCount ? x.filterCount + 1 : 0, g = x.location
+    if (g.startRow < filterRows) { sheets[id].custom.sheetlyPivotValues = (sheets[id].custom.sheetlyPivotValues ?? 0) + 1; continue }
+    const width = Math.max(g.endColumn - g.startColumn + 1, filterRows ? 2 : 0)
+    const written = { startRow: g.startRow - filterRows, endRow: g.endRow, startColumn: g.startColumn, endColumn: g.startColumn + width - 1 }
+    const anchor = { row: g.startRow, col: g.startColumn }
+    ;(sheets[id].custom.sheetlyPivots ??= []).push({ id: `ptf${++pivotSeq}`, name: x.name, source: { sheetId: source.sheetId, range: source.range }, anchor,
+      rows: x.rows, cols: x.cols, values: x.values, filters: x.filters, cache: x.cache,
+      sourceRef: track(sheets[source.sheetId].name, source.range), ...(source.table ? { sourceTable: source.table } : {}),
+      anchorRef: track(sheets[id].name, { startRow: anchor.row, endRow: anchor.row, startColumn: anchor.col, endColumn: anchor.col }),
+      extent: { written: true, dRow: 0, rows: g.endRow - g.startRow + 1, cols: width, filterRows }, writtenRef: track(sheets[id].name, written) })
+  }
   // Hyperlinks become Univer link text: a rich-text cell whose text carries the URL; links into the workbook
   // ("#Sheet2!A1") use Univer's "#gid=<sheet id>&range=A1" form.
   for (const [o, url] of links) {
@@ -534,7 +562,6 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     grew = false
     for (const [n, text] of Object.entries(nameMap)) if (!pivotNames.has(n) && [...pivotNames].some((p) => usesName(mask(String(text ?? '')), p))) { pivotNames.add(n); grew = true }
   }
-  const readsPivot = (f) => { const m = mask(f); return PIVOT_CALL.test(m) || [...pivotNames].some((n) => usesName(m, n)) }
   const sheetIdByName = Object.fromEntries(snap.sheetOrder.map((id) => [snap.sheets[id].name, id]))
   const resolveName = (name) => {
     const text = nameMap[name]
@@ -543,6 +570,49 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     const sheetId = m && sheetIdByName[(m[1] ?? m[2]).replace(/''/g, "'")], range = m && parseRange(m[3])
     return sheetId && range ? { sheetId, range } : null
   }
+  // PivotTables are saved as Excel's own (xlsx-pivots.js) when their records, place and source are known; formulas
+  // that read them (GETPIVOTDATA) then stay formulas. A report that cannot be saved so leaves values, and while any
+  // does (or there is none to read), formulas that read PivotTables are saved as their results.
+  // (a report whose cells were deleted is gone, kept only for Undo)
+  const pivots = snap.sheetOrder.flatMap((id, sheetIndex) => (snap.sheets[id].custom?.sheetlyPivots ?? []).filter((p) => !p.anchorRef || resolveName(p.anchorRef))
+    .map((p) => ({ sheetIndex, sheetId: id, p, spec: pivotSpec(p, id) })))
+  const allPivotsSaved = pivots.length > 0 && pivots.every((x) => x.spec) && !snap.sheetOrder.some((id) => snap.sheets[id].custom?.sheetlyPivotValues)
+  const readsPivot = (f) => { if (allPivotsSaved) return false; const m = mask(f); return PIVOT_CALL.test(m) || [...pivotNames].some((n) => usesName(m, n)) }
+  function pivotSpec(p, sheetId) {
+    const fields = p.cache?.fields
+    if (!fields || !p.extent?.written || !(p.rows?.length || p.cols?.length || p.values?.length)) return null
+    const area = p.writtenRef ? resolveName(p.writtenRef) : null
+    if (!area || area.sheetId !== sheetId) return null
+    const L = layout(p, p.cache), filterRows = p.extent.filterRows ?? 0
+    const rows = L.grid.length, cols = L.grid.reduce((m, r) => Math.max(m, r.length), 0)
+    // A report whose cells were changed by inserting or deleting rows or columns inside it is left as values.
+    if (area.range.endRow - area.range.startRow + 1 !== filterRows + rows || area.range.endColumn - area.range.startColumn + 1 !== Math.max(cols, filterRows ? 2 : 0)) return null
+    // So is one with a value caption that is a field's name (Excel refuses those; GETPIVOTDATA may use it).
+    if (L.values.some((v) => fields.some((f) => String(f).toLowerCase() === valueName(v).toLowerCase()))) return null
+    // So is one with two value fields captioned alike (definitions made before captions were kept unique).
+    if (new Set(L.values.map((v) => valueName(v).toLowerCase())).size < L.values.length) return null
+    // So is one filtered on an item its records no longer have (it shows nothing; Excel's file cannot say so).
+    if ((p.filters ?? []).some((f) => fields.includes(f.field) && f.items && !f.items.some((it) => resolveItem(p.cache, p.cache.records, f.field, it) != null))) return null
+    const location = { startRow: area.range.startRow + filterRows, endRow: area.range.startRow + filterRows + rows - 1, startColumn: area.range.startColumn, endColumn: area.range.startColumn + cols - 1 }
+    const firstDataRow = L.grid.findIndex((r) => r.some((c) => !['corner', 'colHeader', 'rowHeader'].includes(c.kind)))
+    // The source: a table (its data and header, no totals row) or a range.
+    let source = null
+    // By id in every sheet first (a renamed table whose old name is now another's), then by name.
+    if (p.sourceTable) {
+      const all = Object.entries(allTables).flatMap(([sid, entry]) => (entry?.tables ?? []).map((t) => ({ sid, t })))
+      const hit = (p.sourceTableId ? all.find(({ t }) => t.id === p.sourceTableId) : null) ?? all.find(({ t }) => t.name?.toLowerCase() === p.sourceTable.toLowerCase())
+      const t = hit?.t
+      if (t?.range && snap.sheets[hit.sid]) source = { tableId: t.id, table: t.name, sheetName: snap.sheets[hit.sid].name, range: { ...t.range, endRow: t.range.endRow - (t.options?.showFooter ? 1 : 0) } }
+    }
+    if (!source) {
+      const at = p.sourceRef ? resolveName(p.sourceRef) : p.source
+      if (!at || !snap.sheets[at.sheetId]) return null
+      source = { sheetName: snap.sheets[at.sheetId].name, range: at.range }
+    }
+    return { name: p.name, cache: p.cache, rows: L.rows, cols: L.cols, values: L.values, filters: (p.filters ?? []).filter((f) => fields.includes(f.field)),
+      source, location, firstDataRow: Math.max(1, firstDataRow), firstDataCol: L.rows.length || L.cols.length ? 1 : 0 }
+  }
+  const tableNames = new Map()
   for (const [sheetIndex, id] of snap.sheetOrder.entries()) {
     const s = snap.sheets[id], settings = outlineSettings(s.custom?.sheetlyOutline)
     // A PivotTable report is written as values; an error text in it is an error the report shows (from its source).
@@ -638,8 +708,10 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
     dvOut(ws, dvs[id])
     // A kept table whose tracked cells were deleted (#REF!) is dropped, not written over what moved into its place.
     const kept = (s.custom?.sheetlyTablesKept ?? []).map((t) => ({ t, range: t.rangeRef ? resolveName(t.rangeRef)?.range ?? null : t.range })).filter((x) => x.range)
-    tablesOut(ws, [...(allTables[id]?.tables ?? []), ...kept.map(({ t, range }) => ({ name: t.name, range,
+    const sheetTables = allTables[id]?.tables ?? []
+    const written = tablesOut(ws, [...sheetTables, ...kept.map(({ t, range }) => ({ name: t.name, range,
       options: { showHeader: t.showHeader !== false, showFooter: t.showFooter }, columns: (t.columns ?? []).map((n) => ({ displayName: n })) }))], usedTableNames)
+    for (const t of sheetTables) if (t.id && written.has(t.name)) tableNames.set(t.id, written.get(t.name))
     const list = Object.values(allDrawings[id]?.data ?? {})
     imagesOut(wb, ws, list)
     for (const d of list) {
@@ -660,7 +732,20 @@ export async function snapshotToXlsx(snap, { formulaOf, arrayRangeOf, spillValue
   })
   const buf = new Uint8Array(await wb.xlsx.writeBuffer())
   // Charts are written into the sheet named by their own source; chartXml uses that sheet's name in the refs.
-  return finishPackage(buf, { charts: charts.map((c) => ({ ...c, sheetName: c.sourceName })), spills, sparklines })
+  // A table source is named as the table was written (a taken name is changed); without one, its range.
+  // PivotTable names are unique in a workbook: a copied sheet's report gets the next free PivotTableN.
+  const taken = new Set()
+  const pivotName = (n) => {
+    let name = n
+    for (let k = 1; taken.has(name.toLowerCase()); k++) name = `PivotTable${k}`
+    taken.add(name.toLowerCase())
+    return name
+  }
+  const pivotsOut = pivots.filter((x) => x.spec).map(({ sheetIndex, spec }) => {
+    const name = spec.source.tableId ? tableNames.get(spec.source.tableId) : null
+    return { sheetIndex, spec: { ...spec, name: pivotName(spec.name), source: name ? { table: name } : { sheetName: spec.source.sheetName, range: spec.source.range } } }
+  })
+  return finishPackage(buf, { charts: charts.map((c) => ({ ...c, sheetName: c.sourceName })), spills, sparklines, pivots: pivotsOut })
 }
 
 /** Fills in the formula text of shared-formula cells ({si} only) from the live workbook (FWorkbook). */

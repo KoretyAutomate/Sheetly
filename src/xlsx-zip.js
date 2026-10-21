@@ -2,10 +2,12 @@
 //  - charts: DrawingML chart parts (xl/charts/chartN.xml) anchored in the sheet's drawing, written from Sheetly's
 //    chart specs and read back into them;
 //  - dynamic arrays: formulas that spill carry cm="1" pointing at xl/metadata.xml (XLDAPR), as Excel 365 writes
-//    them; without it Excel treats them as legacy array formulas.
+//    them; without it Excel treats them as legacy array formulas;
+//  - PivotTables: cache and table parts (xlsx-pivots.js).
 import JSZip from 'jszip'
 import { chartTitle, explicitSeries, seriesFrom } from './chart-model.js'
-import { colName, parseRange } from './xlsx-objects.js'
+import { colName, parseRange, unescXml } from './xlsx-objects.js'
+import { pivotXml, readPivot } from './xlsx-pivots.js'
 
 const NS = {
   c: 'http://schemas.openxmlformats.org/drawingml/2006/chart', a: 'http://schemas.openxmlformats.org/drawingml/2006/main',
@@ -16,13 +18,19 @@ const REL = {
   chart: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart',
   drawing: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing',
   metadata: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata',
+  pivotCache: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
+  pivotRecords: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords',
+  pivotTable: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
 }
 const CT = { chart: 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml', drawing: 'application/vnd.openxmlformats-officedocument.drawing+xml',
-  metadata: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml' }
+  metadata: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml',
+  pivotCache: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml',
+  pivotRecords: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml',
+  pivotTable: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml' }
 const EMU = 9525
 const ACCENTS = ['4472C4', 'ED7D31', 'A5A5A5', 'FFC000', '5B9BD5', '70AD47']
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const unesc = (s) => String(s ?? '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+const unesc = unescXml
 const sheetRef = (name) => (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) ? name : `'${name.replace(/'/g, "''")}'`)
 const abs = (r, c) => `$${colName(c)}$${r + 1}`
 const color = (i) => ACCENTS[i % 6]
@@ -122,10 +130,11 @@ const anchorXml = (a) => `<xdr:col>${a.column}</xdr:col><xdr:colOff>${Math.max(0
 
 /**
  * Adds chart parts and dynamic-array metadata to an ExcelJS-written package.
- * charts: [{sheetIndex, sheetName, spec, from, to, get}] ; spills: Set of `${sheetIndex}!A1` anchors that spill.
+ * charts: [{sheetIndex, sheetName, spec, from, to, get}] ; spills: Set of `${sheetIndex}!A1` anchors that spill;
+ * pivots: [{sheetIndex, spec}] (see pivotXml).
  */
-export async function finishPackage(buf, { charts = [], spills = new Set(), sparklines = [] } = {}) {
-  if (!charts.length && !spills.size && !sparklines.length) return buf
+export async function finishPackage(buf, { charts = [], spills = new Set(), sparklines = [], pivots = [] } = {}) {
+  if (!charts.length && !spills.size && !sparklines.length && !pivots.length) return buf
   const zip = await JSZip.loadAsync(buf)
   let types = await zip.file('[Content_Types].xml').async('string')
   const sheets = await sheetParts(zip)
@@ -201,8 +210,53 @@ export async function finishPackage(buf, { charts = [], spills = new Set(), spar
     zip.file('xl/_rels/workbook.xml.rels', wbRels)
     types = addOverride(types, 'xl/metadata.xml', CT.metadata)
   }
+  // PivotTables: a cache per report (listed in the workbook's pivotCaches, which come after calcPr), its records,
+  // and the table part related from its sheet.
+  if (pivots.length) {
+    let wbXml = await zip.file('xl/workbook.xml').async('string'), wbRels = await zip.file('xl/_rels/workbook.xml.rels').async('string')
+    const caches = []
+    for (const [k, { sheetIndex, spec }] of pivots.entries()) {
+      const sheet = sheets[sheetIndex]
+      if (!sheet) continue
+      const n = k + 1, cacheId = n, parts = pivotXml(spec, cacheId)
+      const cachePart = `xl/pivotCache/pivotCacheDefinition${n}.xml`, recordsPart = `xl/pivotCache/pivotCacheRecords${n}.xml`, tablePart = `xl/pivotTables/pivotTable${n}.xml`
+      zip.file(cachePart, parts.cache); zip.file(recordsPart, parts.records); zip.file(tablePart, parts.table)
+      zip.file(relsPath(cachePart), addRel(emptyRels, REL.pivotRecords, `pivotCacheRecords${n}.xml`)[0])
+      zip.file(relsPath(tablePart), addRel(emptyRels, REL.pivotCache, `../pivotCache/pivotCacheDefinition${n}.xml`)[0])
+      const sRels = relsPath(sheet.part)
+      zip.file(sRels, addRel((await zip.file(sRels)?.async('string')) ?? emptyRels, REL.pivotTable, `../pivotTables/pivotTable${n}.xml`)[0])
+      let rid
+      ;[wbRels, rid] = addRel(wbRels, REL.pivotCache, `pivotCache/pivotCacheDefinition${n}.xml`)
+      caches.push(`<pivotCache cacheId="${cacheId}" r:id="${rid}"/>`)
+      types = addOverride(addOverride(addOverride(types, cachePart, CT.pivotCache), recordsPart, CT.pivotRecords), tablePart, CT.pivotTable)
+    }
+    if (caches.length) {
+      if (!/xmlns:r=/.test(wbXml.slice(0, 800))) wbXml = wbXml.replace(/<workbook\b/, `<workbook xmlns:r="${NS.r}"`)
+      const after = /<(smartTagPr|smartTagTypes|webPublishing|fileRecoveryPr|webPublishObjects|extLst)\b/.exec(wbXml)
+      const block = `<pivotCaches>${caches.join('')}</pivotCaches>`
+      wbXml = after ? wbXml.slice(0, after.index) + block + wbXml.slice(after.index) : wbXml.replace('</workbook>', `${block}</workbook>`)
+      zip.file('xl/workbook.xml', wbXml); zip.file('xl/_rels/workbook.xml.rels', wbRels)
+    }
+  }
   zip.file('[Content_Types].xml', types)
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
+}
+
+/** PivotTables Sheetly can show (readPivot), with the sheet each is on: [{ sheetIndex, ...report }]; the others are
+ *  listed as { sheetIndex, unread: true } (their cells are values). */
+export async function readPivots(buf, opts = {}) {
+  const zip = await JSZip.loadAsync(buf), out = []
+  const text = async (part) => (part ? (await zip.file(part)?.async('string')) ?? null : null)
+  const related = async (part, type) => { const t = relList(await text(relsPath(part))).find((r) => r.Type === type)?.Target; return t ? resolve(part, t) : null }
+  for (const [sheetIndex, sheet] of (await sheetParts(zip)).entries()) {
+    for (const r of relList(await text(relsPath(sheet.part))).filter((x) => x.Type === REL.pivotTable)) {
+      const tablePart = resolve(sheet.part, r.Target), cachePart = await related(tablePart, REL.pivotCache)
+      const tableXml = await text(tablePart), cacheXml = await text(cachePart)
+      const p = !tableXml || !cacheXml ? null : readPivot(tableXml, cacheXml, await text(await related(cachePart, REL.pivotRecords)), opts)
+      out.push(p ? { sheetIndex, sheetName: sheet.name, ...p } : { sheetIndex, sheetName: sheet.name, unread: true })
+    }
+  }
+  return out
 }
 
 /** Formula cells marked as dynamic arrays (cm= on an array formula): Set of `${sheetIndex}!A1`. */

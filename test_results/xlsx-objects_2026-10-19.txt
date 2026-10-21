@@ -1,0 +1,81 @@
+xlsx objects  2026-10-19T12:56:08.515Z
+PASS  every XML part in the package is well formed
+PASS  CF written: cellIs, text rules, timePeriod, top10, aboveAverage, expression, duplicate, unique, dataBar, colorScale, iconSet
+PASS  Excel attributes: text="ab", notContains, equalAverage, gte="0", dxf fill
+PASS  DV written with Excel forms ("Yes,No" list, range without =, warning style)
+PASS  table written (name cleaned of spaces)
+PASS  picture written
+PASS  chart part written: clustered column over Data!$L$2:$L$4 with names and categories
+PASS  chart and picture share the sheet's one drawing; content types listed
+PASS  dynamic array: t="array" ref="A13:A15" with cm="1" and xl/metadata.xml
+PASS  Excel is asked to recalculate on open
+PASS  CF round trip keeps every rule
+PASS  CF values: >5, between [2,4], text "ab", rank bottom 10%, average <=, formula =B1>A1
+PASS  CF style: Light Red Fill with Dark Red Text
+PASS  icon set: bands, operators and icons back in Univer order
+PASS  color scale: 3 stops with percentile 50
+PASS  DV round trip: list literal / list range / whole between / decimal ref / date / custom on two ranges
+PASS  table read back for creation in the app
+PASS  picture read back as a Univer drawing at its cell anchor
+PASS  chart read back as a linked Sheetly chart (type, range, data labels, axis titles)
+PASS  spilled cells are not kept as constants
+PASS  chart type bar written and read back (title text)
+PASS  chart type columnStacked100 written and read back (title text)
+PASS  chart type line written and read back (title text)
+PASS  chart type lineMarkers written and read back (title text)
+PASS  chart type pie written and read back (no title)
+PASS  chart type doughnut written and read back (title text)
+PASS  chart type area written and read back (title text)
+PASS  chart type scatter written and read back (title text)
+PASS  sparklines written as x14:sparklineGroups in the sheet's extLst, next to the x14 conditional formats
+PASS  sparklines read back (types, cells, ranges, colour)
+PASS  a Japanese table name is kept (売上)
+PASS  Stop If True written and read back
+PASS  between with cell references becomes an equivalent formula rule (bounds kept)
+PASS  a one-cell-anchored picture keeps its size (480 x 288)
+PASS  non-adjacent series are written with their own references (no column M)
+PASS  and read back as two series (Sales, Cost), not three
+PASS  years as categories stay categories (one series, categories K2:K4)
+PASS  read back with hidden reference names (not written to the file as names)
+PASS  a table's totals row keeps its label and SUBTOTAL formula
+PASS  a typed series name ("Revenue") is read as the name, not as a reference
+PASS  two-column categories stay two levels (inner A,B,C; outer East, , West)
+PASS  hiding a series column drops only that series (C hidden -> B stays; B hidden -> C keeps all points)
+PASS  a hidden row is left out of explicit series and their categories
+PASS  a headerless table is not handed to Univer (which would name columns from the data)
+PASS  and it is written back with its names and no header row
+PASS  scatter: each series keeps its X range on read
+PASS  scatter: each series is written with its own X range
+PASS  legacy array formulas are listed for the app to settle by calculating (scalar vs array)
+PASS  a validation without allowBlank / showErrorMessage in the file has both off
+PASS  a conditional format filled with a theme colour keeps the colour
+PASS  a chart written with another namespace prefix (ch:) is still read
+PASS  scatter: both axis titles survive (x Time, y Distance)
+PASS  a table header that is a link keeps its text as the column name and stays a link
+PASS  two files read at the same time keep their own date systems (43830 / 45292)
+PASS  a quote inside a text rule is doubled in its formula
+PASS  a point hidden in one series only is a gap there (row 6 hides B6; A keeps all)
+PASS  values on other rows than their categories keep their categories when one is hidden (C still 300)
+PASS  a column series and a row series are each read along their own direction
+PASS  an input message that is switched off stays off (its text kept)
+PASS  text "GETPIVOTDATA(" inside quotes does not turn a formula into a value
+PASS  a GETPIVOTDATA cell is saved as its value; formulas using it stay formulas
+PASS  a sparkline group set to show hidden cells keeps that setting
+PASS  list items with quote marks (12", 24") keep them
+PASS  a kept table whose cells were deleted (#REF!) is not written
+PASS  two-column categories: a hidden row drops its category and point
+PASS  a table with only its header keeps its range and leaves the cell below alone
+PASS  lowercase references parse (a1:b3)
+PASS  column sparklines are written with negative="1" (their negative points are coloured); a group with it off keeps it off
+PASS  scatter with years in the first column: written with them as X values
+PASS  a doughnut writes a ring per series (2); a pie its first series
+PASS  a spilling formula with GETPIVOTDATA is saved as all its values (45, 99)
+PASS  a formula reading a PivotTable through a name (or a name using one) is saved as its value; others stay formulas
+PASS  a sheet-qualified name that reads a PivotTable (Data!PivotTotal) is saved as its value
+PASS  a chart over a spilled table is saved with the header as the series name (B1) and data from row 2
+PASS  a rule 2 standard deviations above average keeps its threshold (formula in Sheetly, stdDev="2" in the file)
+PASS  1904 workbook: serials kept in the 1904 system and Univer told so
+PASS  and written back as a 1904 workbook
+PASS  whole-column validation loads as one rule, quickly
+
+78/78 passed
