@@ -249,7 +249,13 @@ const J = JSON.stringify
   check('a missing value and the text "(blank)" stay apart in the cache; the report\'s (blank) filter shows both',
     J(readPivot(bx.table, bx.cache, bx.records)?.cache.records) === J(bl.records) && /<item x="0" h="1"\/><item x="1"\/><item x="2"\/>/.test(bx.table) && !/item="/.test(bx.table), bx.cache + bx.table)
   const noGrand = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition rowGrandTotals="0" ')
-  const noSub = x.table.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" defaultSubtotal="0"')
+  // (two row fields: Region's subtotals show, Product's, the innermost, never do)
+  const two = pivotXml({ ...spec, rows: ['Region', 'Product'], filters: [] }, 6).table
+  const noSub = two.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" defaultSubtotal="0"')
+  const avgSub = two.replace('<pivotField axis="axisRow"', '<pivotField axis="axisRow" avgSubtotal="1"')
+  const innerNoSub = two.replace(/(<pivotField axis="axisRow"[\s\S]*?)<pivotField axis="axisRow"/, '$1<pivotField axis="axisRow" defaultSubtotal="0"')
+  const dataNoSub = two.replace('<pivotField dataField="1"', '<pivotField dataField="1" defaultSubtotal="0"')
+  const collapsed = two.replace('<item x="0"/>', '<item x="0" sd="0"/>')
   const falsy = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition colGrandTotals="false" ')
   const across2 = x.table.replace('<pivotTableDefinition ', '<pivotTableDefinition pageOverThenDown="true" ')
   const renamed = x.table.replace('<pivotField axis="axisRow"', '<pivotField name="Item" axis="axisRow"')
@@ -258,7 +264,15 @@ const J = JSON.stringify
   check('label and value filters are not read (even when they hide nothing)', readPivot(labelFilter, x.cache, x.records) === null)
   check('XML booleans "true"/"false" count like "1"/"0"; renamed fields and items are not read',
     readPivot(falsy, x.cache, x.records) === null && readPivot(across2, x.cache, x.records) === null && readPivot(renamed, x.cache, x.records) === null && readPivot(renamedItem, x.cache, x.records) === null && readPivot(x.table, x.cache, x.records) !== null)
-  check('reports with grand totals or subtotals turned off are not read', readPivot(noGrand, x.cache, x.records) === null && readPivot(noSub, x.cache, x.records) === null)
+  check('reports with grand totals, or an outer field\'s subtotals, turned off or custom are not read', readPivot(noGrand, x.cache, x.records) === null && readPivot(noSub, x.cache, x.records) === null
+    && readPivot(avgSub, x.cache, x.records) === null && readPivot(two, x.cache, x.records) !== null, two)
+  check('subtotals turned off on the innermost row field or a data field change nothing: still read', innerNoSub !== two && readPivot(innerNoSub, x.cache, x.records) !== null && dataNoSub !== two && readPivot(dataNoSub, x.cache, x.records) !== null)
+  check('reports with a collapsed item (sd="0") are not read', collapsed !== two && readPivot(collapsed, x.cache, x.records) === null)
+  // a filter showing the missing value but not the text "(blank)" (or the other way) cannot be one Sheetly item
+  const onlyMissing = bx.table.replace('<item x="2"/>', '<item x="2" h="1"/>')
+  const oneMissing = bx.table.replace('<pageField fld="0" hier="-1"/>', '<pageField fld="0" item="1" hier="-1"/>')
+  check('a filter selecting a missing value without the text "(blank)" is not read', onlyMissing !== bx.table && readPivot(onlyMissing, bx.cache, bx.records) === null
+    && oneMissing !== bx.table && readPivot(oneMissing, bx.cache, bx.records) === null && readPivot(bx.table, bx.cache, bx.records) !== null, bx.table)
   check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
   check('values shown as %, grouped fields and external sources are not read (the cells keep the values)', readPivot(shownAs, x.cache, x.records) === null && readPivot(x.table, grouped, x.records) === null && readPivot(x.table, external, x.records) === null)
 }

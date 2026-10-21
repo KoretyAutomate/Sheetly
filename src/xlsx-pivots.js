@@ -151,8 +151,8 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   if (!location) return null
   // Report filters one per row above the report (Excel's default "Down, Then Over"), else not read.
   if (isTrue(t.pageOverThenDown) || Number(t.pageWrap ?? 0) > 0 || Number(loc.colPageCount ?? 1) > 1) return null
-  // Grand totals and subtotals are always shown in Sheetly: reports with them turned off are not read.
-  if (isFalse(t.rowGrandTotals) || isFalse(t.colGrandTotals) || /<pivotField\b[^>]*\bdefaultSubtotal="(0|false)"/.test(tableXml)) return null
+  // Grand totals are always shown in Sheetly: reports with them turned off are not read.
+  if (isFalse(t.rowGrandTotals) || isFalse(t.colGrandTotals)) return null
   // Each pivot field's items: the shared item each shows, and whether it is hidden.
   const pf = [...(/<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(tableXml)?.[1] ?? '').matchAll(/<pivotField\b([^>]*?)(?:\/>|>([\s\S]*?)<\/pivotField>)/g)]
     .map((m) => ({ a: attrs(m[1]), items: [...(m[2] ?? '').matchAll(/<item\b([^>]*?)\/?>/g)].map((x) => attrs(x[1])).filter((x) => x.x != null && (!x.t || x.t === 'data')) }))
@@ -163,7 +163,12 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
   const list = (tag, inner) => [...(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`).exec(tableXml)?.[1] ?? '').matchAll(new RegExp(`<${inner}\\b([^>]*?)/?>`, 'g'))].map((m) => attrs(m[1]))
   const rows = list('rowFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)
   const cols = list('colFields', 'field').map((f) => Number(f.x)).filter((x) => x >= 0)
-  if ([...rows, ...cols].some((x) => !fields[x] || pf[x]?.items.some((i) => isTrue(i.h)))) return null
+  // (collapsed items, sd="0", hide what is under them)
+  if ([...rows, ...cols].some((x) => !fields[x] || pf[x]?.items.some((i) => isTrue(i.h) || isFalse(i.sd)))) return null
+  // Sheetly shows the automatic subtotal of every outer row and column field: turned off or custom (Average, Max ...)
+  // there, not read. (The innermost field shows none, whatever its setting.)
+  const customSub = (a) => isFalse(a.defaultSubtotal) || Object.keys(a).some((k) => k !== 'defaultSubtotal' && /Subtotal$/.test(k) && isTrue(a[k]))
+  if ([...rows.slice(0, -1), ...cols.slice(0, -1)].some((x) => customSub(pf[x]?.a ?? {}))) return null
   const itemOf = (fi, k) => { const x = pf[fi]?.items[k]?.x; const v = x != null ? shared[fi]?.[Number(x)] : undefined; return v === undefined ? undefined : isBlank(v) ? '(blank)' : v }
   const filters = []
   for (const p of list('pageFields', 'pageField')) {
@@ -173,6 +178,11 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
     if (p.item != null) items = [itemOf(fi, Number(p.item))]
     else if (pf[fi]?.items.some((i) => isTrue(i.h))) items = pf[fi].items.map((i, k) => (isTrue(i.h) ? undefined : itemOf(fi, k)))
     if (items?.some((x) => x === undefined && p.item != null)) return null
+    // A missing value and the text "(blank)" are one item in Sheetly: a selection of one without the other is not read.
+    const chosen = (k) => (p.item != null ? k === Number(p.item) : !isTrue(pf[fi]?.items[k]?.h))
+    const kinds = new Map()
+    pf[fi]?.items.forEach((it, k) => { const v = shared[fi]?.[Number(it.x)]; if (isBlank(v) || v === '(blank)') { const was = kinds.get(isBlank(v)); kinds.set(isBlank(v), was === undefined ? chosen(k) : was && chosen(k)) } })
+    if (items && kinds.size === 2 && kinds.get(true) !== kinds.get(false)) return null
     filters.push({ field: fields[fi], items: items ? items.filter((x) => x !== undefined) : null })
   }
   const values = []
