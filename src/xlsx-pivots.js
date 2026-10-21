@@ -17,6 +17,8 @@ const esc = (s) => String(s ?? '').replace(/_(x[0-9A-Fa-f]{4}_)/g, '_x005F_$1')
 const unesc = (s) => unescXml(s).replace(/_x([0-9A-Fa-f]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16)))
 const ref = (g) => `${colName(g.startColumn)}${g.startRow + 1}:${colName(g.endColumn)}${g.endRow + 1}`
 const isBlank = (x) => x == null || x === ''
+// The text "(blank)", in any case: the same report item as a missing value.
+const isBlankText = (x) => typeof x === 'string' && x.toLowerCase() === BLANK
 
 // A cache value as Excel writes it: missing, number, logical, error or text.
 const valueXml = (x) => (isBlank(x) ? '<m/>' : typeof x === 'number' ? `<n v="${x}"/>` : typeof x === 'boolean' ? `<b v="${x ? 1 : 0}"/>`
@@ -66,7 +68,7 @@ export function pivotXml(spec, cacheId) {
   const itemIndexes = (f, x) => {
     const it = resolveItem(spec.cache, records, f, x), list = items[at(f)]
     if (it == null) return []
-    return (it === BLANK ? [null, BLANK] : [it]).map((y) => list.indexOf(y)).filter((k) => k != null)
+    return isBlankText(it) ? list.items.flatMap((y, k) => (isBlank(y) || isBlankText(y) ? [k] : [])) : [list.indexOf(it)].filter((k) => k != null)
   }
   const filterOf = new Map(spec.filters.map((f) => [f.field, f]))
   const valueFields = new Set(spec.values.map((v) => v.field))
@@ -181,7 +183,7 @@ export function readPivot(tableXml, cacheXml, recordsXml, { date1904 = false } =
     // A missing value and the text "(blank)" are one item in Sheetly: a selection of one without the other is not read.
     const chosen = (k) => (p.item != null ? k === Number(p.item) : !isTrue(pf[fi]?.items[k]?.h))
     const kinds = new Map()
-    pf[fi]?.items.forEach((it, k) => { const v = shared[fi]?.[Number(it.x)]; if (isBlank(v) || v === '(blank)') { const was = kinds.get(isBlank(v)); kinds.set(isBlank(v), was === undefined ? chosen(k) : was && chosen(k)) } })
+    pf[fi]?.items.forEach((it, k) => { const v = shared[fi]?.[Number(it.x)]; if (isBlank(v) || isBlankText(v)) { const was = kinds.get(isBlank(v)); kinds.set(isBlank(v), was === undefined ? chosen(k) : was && chosen(k)) } })
     if (items && kinds.size === 2 && kinds.get(true) !== kinds.get(false)) return null
     filters.push({ field: fields[fi], items: items ? items.filter((x) => x !== undefined) : null })
   }

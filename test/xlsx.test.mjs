@@ -271,6 +271,14 @@ const J = JSON.stringify
   // a filter showing the missing value but not the text "(blank)" (or the other way) cannot be one Sheetly item
   const onlyMissing = bx.table.replace('<item x="2"/>', '<item x="2" h="1"/>')
   const oneMissing = bx.table.replace('<pageField fld="0" hier="-1"/>', '<pageField fld="0" item="1" hier="-1"/>')
+  const BL = { fields: ['K', 'N'], records: [[null, 1], ['(BLANK)', 2], ['x', 3]] }
+  const BX = pivotXml({ ...spec, cache: BL, rows: [], filters: [{ field: 'K', items: ['(blank)'] }], values: [{ field: 'N', fn: 'sum' }] }, 7)
+  const hidOf = (t) => [...t.matchAll(/<item x="(\d+)"( h="1")?\/>/g)].map((m) => [m[1], !!m[2]])
+  const BI = BX.cache.match(/<cacheField name="K"[\s\S]*?<\/cacheField>/)[0], xOf = (re) => String([...BI.matchAll(/<(s|m)\b[^>]*\/>/g)].findIndex((m) => re.test(m[0])))
+  check('the text "(BLANK)" in any case is the report\'s (blank): a (blank) filter selects it and the missing value',
+    J(hidOf(BX.table).filter(([, h]) => !h).map(([k]) => k).sort()) === J([xOf(/<m/), xOf(/BLANK/)].sort()), BX.cache + BX.table)
+  const BXonly = BX.table.replace(`<item x="${xOf(/BLANK/)}"/>`, `<item x="${xOf(/BLANK/)}" h="1"/>`)
+  check('a filter selecting a missing value without the text "(BLANK)" is not read', BXonly !== BX.table && readPivot(BXonly, BX.cache, BX.records) === null && readPivot(BX.table, BX.cache, BX.records) !== null)
   check('a filter selecting a missing value without the text "(blank)" is not read', onlyMissing !== bx.table && readPivot(onlyMissing, bx.cache, bx.records) === null
     && oneMissing !== bx.table && readPivot(oneMissing, bx.cache, bx.records) === null && readPivot(bx.table, bx.cache, bx.records) !== null, bx.table)
   check('sources in other workbooks and calculated items are not read', readPivot(x.table, linked, x.records) === null && readPivot(x.table, calcItems, x.records) === null && readPivot(calcItem, x.cache, x.records) === null)
